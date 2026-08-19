@@ -10,12 +10,56 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="styles.css">
+
+<!-- Filet de securite : attrape les erreurs AVANT que le reste ne soit chargé,
+     pour ne jamais laisser une page blanche sans explication. -->
+<script>
+window.__erreursDemarrage = [];
+function __noterErreur(texte) {
+  window.__erreursDemarrage.push(texte);
+  if (window.__signalerPanne) window.__signalerPanne();
+}
+window.addEventListener("error", function (e) {
+  if (e.target && e.target.tagName === "SCRIPT") {
+    __noterErreur("Fichier manquant ou illisible : " + (e.target.src || "").split("/").pop());
+    return;
+  }
+  __noterErreur(e.message + (e.filename ? " (" + e.filename.split("/").pop() + ", ligne " + e.lineno + ")" : ""));
+}, true);
+window.addEventListener("unhandledrejection", function (e) {
+  var r = e.reason || {};
+  __noterErreur([r.code, r.message || String(e.reason)].filter(Boolean).join(" — "));
+});
+/* Si au bout de 8 secondes rien ne s'affiche, on explique au lieu de rester blanc. */
+setTimeout(function () {
+  var app = document.getElementById("ecran-app");
+  var chargement = document.getElementById("chargement");
+  if (!chargement || !app || !app.hidden) return;
+  if (window.__signalerPanne) { window.__signalerPanne(); return; }
+  chargement.innerHTML =
+    '<div class="logo-tribu">🏡</div><h1>Ça coince</h1>' +
+    '<p class="intro">L\'application n\'a pas réussi à démarrer.</p>' +
+    '<div class="carte"><div class="carte-titre">Détail technique</div>' +
+    '<p style="font-size:.78rem;line-height:1.5;word-break:break-word;margin:0">' +
+    (window.__erreursDemarrage.join(" | ") || "Aucun message. Fichier app.js absent ou bloqué ?") +
+    '</p></div>' +
+    '<button class="btn principal plein" onclick="location.reload()">Recharger la page</button>' +
+    '<p class="aide centre" style="margin-top:1rem">Faites une capture d\'écran de ce message.</p>';
+}, 8000);
+</script>
+
 <script src="firebase-config.js"></script>
 </head>
 <body>
 
 <!-- ============ Ecran de connexion (rempli par app.js) ============ -->
-<div class="connexion" id="ecran-connexion" hidden></div>
+<div class="connexion" id="ecran-connexion">
+  <div id="chargement">
+    <div class="logo-tribu">🏡</div>
+    <h1>Tribu</h1>
+    <p class="intro">Chargement…</p>
+  </div>
+</div>
 
 <!-- ============ Application ============ -->
 <div class="app" id="ecran-app" hidden>

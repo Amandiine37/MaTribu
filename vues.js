@@ -490,11 +490,19 @@ Vues.admin = function () {
       '<button class="btn mini" data-action="membre-editer" data-id="' + m.id + '">✏️</button></div>').join(""),
     "Ajouter", "membre-nouveau"));
 
-  h.push(bloc("🔑 Code de la famille",
-    '<div class="code-famille">' + esc(etat.famille.code) + "</div>" +
-    '<p class="aide">Donnez ce code aux membres de la famille : il leur permet de rejoindre ' +
-    "la tribu depuis leur téléphone. Gardez-le pour vous.</p>" +
-    '<button class="btn plein doux" data-action="copier-code" style="margin-top:.6rem">Copier le code</button>'));
+  h.push(bloc("✉️ Inviter quelqu'un",
+    '<p class="aide">Pour ajouter une personne — ou un nouveau téléphone pour quelqu\'un qui est ' +
+    "déjà dans la famille — créez une invitation. C'est un lien <b>à usage unique</b> qui expire " +
+    "au bout de quelques jours.</p>" +
+    '<p class="aide" style="margin-top:.5rem">Le code de la famille (<b>' + esc(etat.famille.code) +
+    "</b>) ne donne accès à rien : il ne sert qu'à reconnaître votre tribu.</p>" +
+    '<button class="btn plein principal" data-action="inviter" style="margin-top:.8rem">Créer une invitation</button>'));
+
+  h.push(bloc("📱 Appareils autorisés",
+    '<p class="aide">' + (etat.membresUid || []).length + " appareil(s) peuvent ouvrir cette famille. " +
+    "Un appareil perd son accès s'il efface les données du navigateur : il faudra alors une nouvelle invitation.</p>" +
+    '<p class="aide" style="margin-top:.5rem">💡 Prévoyez <b>deux administrateurs</b> : si le seul ' +
+    "administrateur perd son accès, plus personne ne peut valider les tâches.</p>"));
 
   h.push(bloc("🧹 Tâches (" + etat.taches.length + ")",
     etat.taches.length
@@ -527,16 +535,21 @@ Vues.admin = function () {
 
 /* =========================================================================
    ECRANS DE CONNEXION
+   =========================================================================
+   Deux portes d'entree seulement :
+     - creer une nouvelle famille (on devient administrateur) ;
+     - ouvrir une invitation a usage unique.
+   Un appareil deja autorise peut simplement changer de profil (avec le code
+   a 4 chiffres), sans nouvelle invitation.
    ========================================================================= */
 
 const Connexion = {
-  brouillon: {},
 
   aller(etape, donnees) {
     const el = document.getElementById("ecran-connexion");
-    el.innerHTML = this[etape](donnees);
+    el.innerHTML = this[etape](donnees || {});
     window.scrollTo({ top: 0 });
-    this.brancher(etape, donnees);
+    this.brancher(etape, donnees || {});
   },
 
   entete(sousTitre) {
@@ -546,26 +559,30 @@ const Connexion = {
 
   /* --- 1. Accueil --- */
   accueil() {
+    const derniere = localStorage.getItem("tribu:derniereFamille");
     const local = Store.mode === "local"
       ? '<div class="bandeau" style="margin-top:1.4rem">⚠️<div>Le partage familial n\'est pas encore configuré : ' +
       "l'application fonctionnera <b>uniquement sur cet appareil</b>. Voir le guide <b>GUIDE-FIREBASE.md</b>.</div></div>"
       : "";
     return this.entete("L'organisation de la maison, à partager en famille.") +
-      '<button class="btn principal plein" id="b-creer" style="margin-bottom:.6rem">Créer ma famille</button>' +
-      '<button class="btn plein" id="b-rejoindre">Rejoindre une famille</button>' + local;
+      (derniere
+        ? '<button class="btn principal plein" id="b-reprendre" style="margin-bottom:.6rem">Continuer sur cet appareil</button>'
+        : "") +
+      '<button class="btn ' + (derniere ? "" : "principal ") + 'plein" id="b-creer" style="margin-bottom:.6rem">Créer ma famille</button>' +
+      '<button class="btn plein" id="b-invitation">J\'ai reçu une invitation</button>' + local;
   },
 
-  /* --- 2. Creation --- */
+  /* --- 2. Creation d'une famille --- */
   creer() {
     const suggere = "MAISON-" + Math.random().toString(36).slice(2, 6).toUpperCase();
     return this.entete("Créons votre tribu. Vous en serez l'administrateur.") +
       '<form id="f-creer">' +
       '<label class="champ"><span>Nom de la famille</span>' +
       '<input type="text" name="nomFamille" placeholder="Famille Martin" required maxlength="40"></label>' +
-      '<label class="champ"><span>Code secret de la famille</span>' +
+      '<label class="champ"><span>Repère de la famille</span>' +
       '<input type="text" name="code" value="' + suggere + '" required maxlength="24"></label>' +
-      '<p class="aide" style="margin-top:-.4rem;margin-bottom:1rem">Ce code sert aux autres membres pour vous rejoindre. ' +
-      "Choisissez-en un facile à retenir mais pas devinable.</p>" +
+      '<p class="aide" style="margin-top:-.4rem;margin-bottom:1rem">Ce repère sert juste à nommer votre tribu. ' +
+      "Il ne donne aucun accès : les autres membres vous rejoindront par invitation.</p>" +
       "<hr class=\"sep\">" +
       '<label class="champ"><span>Votre prénom</span>' +
       '<input type="text" name="prenom" placeholder="Amandine" required maxlength="20"></label>' +
@@ -575,35 +592,43 @@ const Connexion = {
         '" data-emoji="' + e + '">' + e + "</button>").join("") + "</div>" +
       '<label class="champ"><span>Votre code à 4 chiffres</span>' +
       '<input type="tel" name="pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="1234" required></label>' +
+      '<p class="aide" style="margin:-.4rem 0 1rem">Il est enregistré chiffré : même vous ne pourrez plus le relire. ' +
+      "Un administrateur peut le réinitialiser si besoin.</p>" +
       '<button class="btn principal plein" type="submit" style="margin-top:.4rem">Créer la famille</button>' +
       '<button class="lien" type="button" id="b-retour" style="display:block;margin:1rem auto 0">Retour</button>' +
       "</form>";
   },
 
-  /* --- 3. Rejoindre --- */
-  rejoindre() {
-    return this.entete("Entrez le code que vous a donné l'administrateur de la famille.") +
-      '<form id="f-rejoindre">' +
-      '<label class="champ"><span>Code de la famille</span>' +
-      '<input type="text" name="code" placeholder="MAISON-AB12" required autocapitalize="characters"></label>' +
+  /* --- 3. Ouvrir une invitation --- */
+  invitation(d) {
+    return this.entete("Collez le lien d'invitation que vous avez reçu.") +
+      '<form id="f-invitation">' +
+      '<label class="champ"><span>Lien ou code d\'invitation</span>' +
+      '<input type="text" name="jeton" required autocomplete="off" placeholder="https://…?invitation=…" ' +
+      'value="' + esc(d.jetonPreRempli || "") + '"></label>' +
       '<button class="btn principal plein" type="submit">Continuer</button>' +
+      '<p class="aide centre" style="margin-top:1rem">Une invitation ne sert qu\'une fois et expire. ' +
+      "Demandez-en une nouvelle à l'administrateur de la famille si celle-ci ne marche plus.</p>" +
       '<button class="lien" type="button" id="b-retour" style="display:block;margin:1rem auto 0">Retour</button>' +
       "</form>";
   },
 
   /* --- 4. Choix du profil --- */
   profils(d) {
-    const membres = d.donnees.membres || [];
+    const membres = (d.donnees && d.donnees.membres) || [];
     return this.entete("Bienvenue chez <b>" + esc(d.donnees.famille.nom) + "</b>.<br>Qui êtes-vous ?") +
       '<div class="grille-profils">' + membres.map((m) =>
         '<button class="profil-carte" data-membre="' + m.id + '">' +
         '<span class="em">' + esc(m.emoji || "🙂") + "</span><b>" + esc(m.prenom) + "</b>" +
         "<small>" + (m.role === "admin" ? "admin" : "membre") + "</small></button>").join("") + "</div>" +
-      '<button class="btn plein doux" id="b-nouveau-profil" style="margin-top:1.2rem">Je ne suis pas dans la liste</button>' +
+      (d.jeton
+        ? '<button class="btn plein doux" id="b-nouveau-profil" style="margin-top:1.2rem">Je ne suis pas dans la liste</button>'
+        : '<p class="aide centre" style="margin-top:1.2rem">Pour ajouter une personne, un administrateur ' +
+        "doit créer une invitation depuis son téléphone.</p>") +
       '<button class="lien" type="button" id="b-retour" style="display:block;margin:1rem auto 0">Retour</button>';
   },
 
-  /* --- 5. Nouveau profil --- */
+  /* --- 5. Nouveau profil (uniquement via invitation) --- */
   nouveauProfil(d) {
     return this.entete("Créons votre profil dans <b>" + esc(d.donnees.famille.nom) + "</b>.") +
       '<form id="f-profil">' +
@@ -620,14 +645,14 @@ const Connexion = {
       "</form>";
   },
 
-  /* --- 6. Code PIN --- */
+  /* --- 6. Code a 4 chiffres --- */
   pin(d) {
     return this.entete("Bonjour <b>" + esc(d.membre.prenom) + "</b> " + esc(d.membre.emoji || "") +
       "<br>Entrez votre code à 4 chiffres.") +
       '<div class="pin-points" id="pin-points">' +
       "0123".split("").map(() => '<span class="pin-point"></span>').join("") + "</div>" +
       '<div class="clavier" id="clavier">' +
-      [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => "<button data-n=\"" + n + '">' + n + "</button>").join("") +
+      [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => '<button data-n="' + n + '">' + n + "</button>").join("") +
       '<button class="vide"></button><button data-n="0">0</button><button data-n="eff">⌫</button></div>' +
       '<button class="lien" type="button" id="b-retour" style="display:block;margin:1.6rem auto 0">Changer de profil</button>';
   },
@@ -635,16 +660,23 @@ const Connexion = {
   /* --- branchements --- */
   brancher(etape, d) {
     const el = document.getElementById("ecran-connexion");
+
     const retour = el.querySelector("#b-retour");
     if (retour) retour.onclick = () => {
-      if (etape === "pin") this.aller("profils", d);
-      else if (etape === "nouveauProfil") this.aller("profils", d);
+      if (etape === "pin" || etape === "nouveauProfil") this.aller("profils", d);
       else this.aller("accueil");
     };
 
     if (etape === "accueil") {
       el.querySelector("#b-creer").onclick = () => this.aller("creer");
-      el.querySelector("#b-rejoindre").onclick = () => this.aller("rejoindre");
+      el.querySelector("#b-invitation").onclick = () => this.aller("invitation", {});
+      const br = el.querySelector("#b-reprendre");
+      if (br) br.onclick = async () => {
+        const code = localStorage.getItem("tribu:derniereFamille");
+        const donnees = await Store.charger(code);
+        if (!donnees) { toast("Cet appareil n'a plus accès à cette famille"); return; }
+        this.aller("profils", { code: code, donnees: donnees, jeton: null });
+      };
     }
 
     const grilleEmoji = el.querySelector("#choix-emoji");
@@ -661,91 +693,163 @@ const Connexion = {
       return on ? on.dataset.emoji : "🙂";
     };
 
+    /* --- creation de la famille --- */
     if (etape === "creer") {
       el.querySelector("#f-creer").onsubmit = async (ev) => {
         ev.preventDefault();
+        const bouton = ev.target.querySelector('button[type="submit"]');
         const f = new FormData(ev.target);
         const code = String(f.get("code")).trim().toUpperCase();
         const pin = String(f.get("pin")).trim();
         if (!/^[0-9]{4}$/.test(pin)) { toast("Le code doit faire 4 chiffres"); return; }
-        const deja = await Store.charger(code);
-        if (deja) { toast("Ce code est déjà utilisé, changez-le"); return; }
+        bouton.disabled = true;
+
+        if (await Store.charger(code)) {
+          toast("Ce repère est déjà pris, changez-le");
+          bouton.disabled = false;
+          return;
+        }
 
         const moiId = id();
         const donnees = etatVide();
-        donnees.famille = { nom: String(f.get("nomFamille")).trim(), code: code, creeLe: new Date().toISOString() };
-        donnees.membres = [{
+        donnees.famille = {
+          nom: String(f.get("nomFamille")).trim(), code: code,
+          creeLe: new Date().toISOString(), version: 2
+        };
+        donnees.membres = [Object.assign({
           id: moiId, prenom: String(f.get("prenom")).trim(), emoji: emojiChoisi(),
-          pin: pin, role: "admin", creeLe: new Date().toISOString()
-        }];
+          role: "admin", uids: [Store.uid], creeLe: new Date().toISOString()
+        }, await champsPin(pin))];
         donnees.recettes = (window.RECETTES_DEPART || []).map((r) => Object.assign({ id: id() }, r));
         donnees.taches = tachesDeDepart(moiId);
         donnees.cadeaux = cadeauxDeDepart();
-        await Store.creer(code, donnees);
+
+        etat = donnees;
+        recalculerIndex();
+        const cree = await Store.creer(code, etat);
+        if (!cree) {
+          bouton.disabled = false;
+          const e = Store.derniereErreur;
+          if (e && e.code === "permission-denied") {
+            ecranPanne(e, "Création refusée",
+              "Firebase a refusé la création de la famille. Vérifiez que les règles publiées " +
+              "sont bien celles du fichier firestore.rules, et que la version de l'application " +
+              "en ligne est bien la dernière.");
+          } else {
+            toast("Création impossible : " + ((e && e.message) || "erreur inconnue"));
+          }
+          return;
+        }
         await entrerDansFamille(code, moiId);
         toast("Bienvenue dans votre tribu 🏡");
       };
     }
 
-    if (etape === "rejoindre") {
-      el.querySelector("#f-rejoindre").onsubmit = async (ev) => {
+    /* --- ouverture d'une invitation --- */
+    if (etape === "invitation") {
+      el.querySelector("#f-invitation").onsubmit = async (ev) => {
         ev.preventDefault();
-        const code = String(new FormData(ev.target).get("code")).trim().toUpperCase();
-        const donnees = await Store.charger(code);
-        if (!donnees) { toast("Aucune famille avec ce code"); return; }
-        this.aller("profils", { code: code, donnees: donnees });
+        const bouton = ev.target.querySelector('button[type="submit"]');
+        const brut = String(new FormData(ev.target).get("jeton"));
+        const jeton = Invitations.extraireJeton(brut);
+        if (!jeton) { toast("Lien d'invitation non reconnu"); return; }
+        bouton.disabled = true;
+        const r = await Invitations.valider(jeton);
+        bouton.disabled = false;
+        if (!r.ok) { toast(r.message); return; }
+        this.aller("profils", { code: r.invitation.famille, donnees: r.donnees, jeton: jeton });
       };
     }
 
+    /* --- choix du profil --- */
     if (etape === "profils") {
       el.querySelectorAll("[data-membre]").forEach((b) => {
         b.onclick = () => {
           const m = d.donnees.membres.find((x) => x.id === b.dataset.membre);
-          this.aller("pin", { code: d.code, donnees: d.donnees, membre: m });
+          this.aller("pin", Object.assign({}, d, { membre: m }));
         };
       });
-      el.querySelector("#b-nouveau-profil").onclick = () => this.aller("nouveauProfil", d);
+      const bn = el.querySelector("#b-nouveau-profil");
+      if (bn) bn.onclick = () => this.aller("nouveauProfil", d);
     }
 
+    /* --- creation d'un profil via invitation --- */
     if (etape === "nouveauProfil") {
       el.querySelector("#f-profil").onsubmit = async (ev) => {
         ev.preventDefault();
+        const bouton = ev.target.querySelector('button[type="submit"]');
         const f = new FormData(ev.target);
         const pin = String(f.get("pin")).trim();
         if (!/^[0-9]{4}$/.test(pin)) { toast("Le code doit faire 4 chiffres"); return; }
-        const frais = await Store.charger(d.code);      // on relit pour ne rien ecraser
-        const nouveau = {
+        bouton.disabled = true;
+
+        const r = await Invitations.valider(d.jeton);
+        if (!r.ok) { toast(r.message); bouton.disabled = false; return; }
+
+        const nouveau = Object.assign({
           id: id(), prenom: String(f.get("prenom")).trim(), emoji: emojiChoisi(),
-          pin: pin, role: "membre", creeLe: new Date().toISOString()
-        };
-        appliquerDonnees(frais);
+          role: "membre", uids: [Store.uid], creeLe: new Date().toISOString()
+        }, await champsPin(pin));
+
+        appliquerDonnees(r.donnees);
         etat.membres.push(nouveau);
+        recalculerIndex();
         Store.code = d.code;
-        await Store.ecrire(["membres"]);
+        const ok = await Store.rejoindre(d.code, d.jeton);
+        if (!ok) { toast("Invitation refusée par le serveur"); bouton.disabled = false; return; }
+        await Store.consommerInvitation(d.jeton);
         await entrerDansFamille(d.code, nouveau.id);
         toast("Bienvenue " + nouveau.prenom + " 👋");
       };
     }
 
+    /* --- saisie du code a 4 chiffres --- */
     if (etape === "pin") {
       let saisie = "";
+      let occupe = false;
       const points = el.querySelectorAll("#pin-points .pin-point");
       const maj = () => points.forEach((p, i) => p.classList.toggle("on", i < saisie.length));
+
       el.querySelector("#clavier").onclick = async (ev) => {
         const b = ev.target.closest("[data-n]");
-        if (!b) return;
+        if (!b || occupe) return;
         if (b.dataset.n === "eff") { saisie = saisie.slice(0, -1); maj(); return; }
         if (saisie.length >= 4) return;
         saisie += b.dataset.n;
         maj();
-        if (saisie.length === 4) {
-          if (saisie === d.membre.pin) {
-            await entrerDansFamille(d.code, d.membre.id);
-          } else {
-            toast("Code incorrect");
-            saisie = ""; maj();
-          }
+        if (saisie.length < 4) return;
+
+        occupe = true;
+        const bon = await verifiePin(saisie, d.membre);
+        if (!bon) {
+          toast("Code incorrect");
+          saisie = ""; maj(); occupe = false;
+          return;
         }
+        const pinSaisi = saisie;
+
+        /* Arrivee par invitation : on inscrit cet appareil dans la famille. */
+        if (d.jeton) {
+          const r = await Invitations.valider(d.jeton);
+          if (!r.ok) { toast(r.message); occupe = false; return; }
+          appliquerDonnees(r.donnees);
+          const m = membre(d.membre.id);
+          if (!m) { toast("Profil introuvable"); occupe = false; return; }
+          m.uids = (m.uids || []).concat(Store.uid).filter((u, i, t) => t.indexOf(u) === i);
+          recalculerIndex();
+          Store.code = d.code;
+          const ok = await Store.rejoindre(d.code, d.jeton);
+          if (!ok) { toast("Invitation refusée par le serveur"); occupe = false; return; }
+          await Store.consommerInvitation(d.jeton);
+        }
+
+        const entre = await entrerDansFamille(d.code, d.membre.id);
+        if (!entre) {
+          toast("Cet appareil n'a pas accès à cette famille");
+          occupe = false;
+          return;
+        }
+        await migrerPinSiBesoin(moi, pinSaisi);
       };
     }
   }

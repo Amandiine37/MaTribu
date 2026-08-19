@@ -2,10 +2,25 @@
    TRIBU — noyau de l'application
    =========================================================================
    Ce fichier contient : les outils de base (dates, points, affichage),
-   le stockage (local ou partage via Firebase), la connexion des membres,
-   et toutes les actions (cocher une tache, valider, echanger un cadeau...).
+   la securite (codes chiffres, invitations), le stockage (local ou partage
+   via Firebase), la connexion des membres, et toutes les actions.
 
    Le dessin des ecrans est dans vues.js, les formulaires dans formulaires.js.
+
+   ---------------------------------------------------------------------------
+   COMMENT L'ACCES EST PROTEGE (version 2)
+   ---------------------------------------------------------------------------
+   1. Le code de la famille ne donne plus aucun acces. Il ne sert qu'a
+      afficher un nom lisible. Pour entrer, il faut que l'appareil soit
+      inscrit dans la liste `membresUid` de la famille.
+   2. On y entre par une INVITATION a usage unique creee par un
+      administrateur (un long jeton aleatoire, valable quelques jours).
+   3. Les codes a 4 chiffres ne sont jamais enregistres tels quels : on
+      garde seulement une empreinte chiffree (PBKDF2), impossible a relire.
+   4. Les points vivent dans un JOURNAL en ecriture unique. Chaque ligne est
+      creee par un administrateur, ne peut plus etre modifiee ensuite, et son
+      montant est verifie par Firebase lui-meme (voir firestore.rules).
+      Personne ne peut donc s'attribuer des points depuis son telephone.
    ========================================================================= */
 
 /* ============================ 1. Outils ============================ */
@@ -21,6 +36,12 @@ const EMOJIS_TACHES = ["🧹", "🧽", "🍽️", "🧺", "🗑️", "🛏️", 
 const EMOJIS_CADEAUX = ["🎁", "🍿", "🎮", "🍦", "🎬", "🎡", "🍕", "🧸", "🎨", "⚽",
   "📱", "🚴", "🎧", "💤", "🏊", "🎳", "🍫", "🎟️", "🛍️", "🌟"];
 
+/* Rubriques rangees dans le document principal de la famille.
+   `etats` et `journal` sont a part : ils ont leurs propres regles de securite. */
+const CLES_DOC = ["famille", "membres", "membresUid", "adminsUid", "taches", "bareme",
+  "courses", "recettes", "repas", "notes", "cadeaux", "tarifs", "echanges",
+  "reglages", "jetonUtilise"];
+
 function id() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -31,14 +52,6 @@ function esc(s) {
 }
 function pad(n) { return String(n).padStart(2, "0"); }
 function propre(v) { return JSON.parse(JSON.stringify(v)); }
-function melanger(t) {
-  const a = t.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
 
 /* --- Dates et periodes --- */
 function isoDate(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
@@ -74,7 +87,7 @@ function clePeriode(freq, d) {
   if (freq === "mois") return d.getFullYear() + "-" + pad(d.getMonth() + 1);
   return cleSemaine(d);
 }
-function libellePeriode(freq, d) {
+function libellePeriode(freq) {
   if (freq === "jour") return "aujourd'hui";
   if (freq === "mois") return "ce mois-ci";
   return "cette semaine";
@@ -86,9 +99,7 @@ function dateJolie(s, avecAnnee) {
   if (avecAnnee) o.year = "numeric";
   return d.toLocaleDateString("fr-FR", o);
 }
-function joursEntre(a, b) {
-  return Math.round((deIso(b) - deIso(a)) / 86400000);
-}
+function joursEntre(a, b) { return Math.round((deIso(b) - deIso(a)) / 86400000); }
 
 /* --- Affichage --- */
 let minuterieToast;
@@ -126,13 +137,69 @@ function confirmer(message, opts) {
   });
 }
 
-/* ============================ 2. Etat ============================ */
+/* ============================ 2. Securite ============================ */
+
+/* Le chiffrement du navigateur n'existe qu'en https ou sur localhost.
+   Ailleurs (http simple), on previent au lieu de faire semblant. */
+const CRYPTO_DISPO = !!(window.crypto && window.crypto.subtle && window.isSecureContext);
+
+function octetsVersHex(o) {
+  return Array.from(o).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function hexVersOctets(h) {
+  const o = new Uint8Array(h.length / 2);
+  for (let i = 0; i < o.length; i++) o[i] = parseInt(h.substr(i * 2, 2), 16);
+  return o;
+}
+function jetonAleatoire(octets) {
+  return octetsVersHex(crypto.getRandomValues(new Uint8Array(octets || 24)));
+}
+
+/* Transforme un code a 4 chiffres en empreinte impossible a relire.
+   PBKDF2 = on repasse 150 000 fois dans une moulinette, ce qui rend les
+   essais en masse tres lents. */
+async function hachePin(pin, selHex) {
+  if (!CRYPTO_DISPO) return { sel: "", hash: "", clair: pin };
+  const sel = selHex ? hexVersOctets(selHex) : crypto.getRandomValues(new Uint8Array(16));
+  const cle = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin),
+    "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: sel, iterations: 150000, hash: "SHA-256" }, cle, 256);
+  return { sel: octetsVersHex(sel), hash: octetsVersHex(new Uint8Array(bits)) };
+}
+
+/* Fabrique les champs a enregistrer pour un membre. */
+async function champsPin(pin) {
+  const r = await hachePin(pin);
+  return r.hash ? { pinHash: r.hash, pinSel: r.sel, pin: null } : { pin: pin, pinHash: null, pinSel: null };
+}
+
+async function verifiePin(pin, m) {
+  if (!m) return false;
+  if (m.pinHash && m.pinSel) {
+    const r = await hachePin(pin, m.pinSel);
+    return r.hash === m.pinHash;
+  }
+  return !!m.pin && m.pin === pin;   // ancien format : converti au prochain enregistrement
+}
+
+/* Convertit en douceur les anciens codes en clair vers le format chiffre. */
+async function migrerPinSiBesoin(m, pin) {
+  if (!m || m.pinHash || !CRYPTO_DISPO) return;
+  Object.assign(m, await champsPin(pin));
+  await Store.ecrire(["membres"]);
+}
+
+/* ============================ 3. Etat ============================ */
 
 function etatVide() {
   return {
-    famille: { nom: "", code: "", creeLe: "" },
-    membres: [], taches: [], etatsTaches: {}, courses: [], recettes: [],
-    repas: {}, notes: [], cadeaux: [], echanges: [], journal: [], reglages: {}
+    famille: { nom: "", code: "", creeLe: "", version: 2 },
+    membres: [], membresUid: [], adminsUid: [],
+    taches: [], bareme: {}, etats: {},
+    courses: [], recettes: [], repas: {}, notes: [],
+    cadeaux: [], tarifs: {}, echanges: [], journal: [],
+    reglages: {}, jetonUtilise: null
   };
 }
 
@@ -144,7 +211,7 @@ const ui = {
   filtreTaches: "moi",
   filtreNotes: "avenir",
   rechercheRecette: "",
-  focus: null                         // id du champ a refocaliser apres rendu
+  focus: null
 };
 
 function membre(idm) { return etat.membres.find((m) => m.id === idm) || null; }
@@ -157,7 +224,26 @@ function classement() {
     .sort((a, b) => b.pts - a.pts || a.m.prenom.localeCompare(b.m.prenom));
 }
 
-/* --- Taches : qui, quand, ou en est-on --- */
+/* Les listes que Firebase utilise pour verifier les droits et les montants.
+   A recalculer des qu'on touche aux membres, aux taches ou aux cadeaux. */
+function recalculerIndex() {
+  const uids = [];
+  const admins = [];
+  etat.membres.forEach((m) => {
+    (m.uids || []).forEach((u) => {
+      if (u && uids.indexOf(u) === -1) uids.push(u);
+      if (u && m.role === "admin" && admins.indexOf(u) === -1) admins.push(u);
+    });
+  });
+  etat.membresUid = uids;
+  etat.adminsUid = admins;
+  etat.bareme = {};
+  etat.taches.forEach((t) => { etat.bareme[t.id] = t.points || 0; });
+  etat.tarifs = {};
+  etat.cadeaux.forEach((c) => { etat.tarifs[c.id] = c.cout || 0; });
+}
+
+/* --- Taches --- */
 function participantsValides(t) {
   return (t.participants || []).filter((x) => membre(x));
 }
@@ -171,7 +257,7 @@ function assigneDe(t, d) {
 }
 function cleEtat(t, d) { return t.id + "|" + clePeriode(t.frequence, d); }
 function etatTache(t, d) {
-  return etat.etatsTaches[cleEtat(t, d)] || { statut: "afaire" };
+  return etat.etats[cleEtat(t, d)] || { statut: "afaire" };
 }
 function tachesDuMoment() {
   const d = new Date();
@@ -189,26 +275,24 @@ function echangesEnAttente() {
   return etat.echanges.filter((e) => e.statut === "demande");
 }
 
-/* --- Notes (pense-betes) --- */
+/* --- Notes --- */
 function notesTriees() {
   return etat.notes.slice().sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
 }
-function notesAVenir() {
-  const auj = isoDate(new Date());
-  return notesTriees().filter((n) => !n.fait);
-}
+function notesAVenir() { return notesTriees().filter((n) => !n.fait); }
 function notesUrgentes() {
   const auj = isoDate(new Date());
   return notesAVenir().filter((n) => n.date && n.date <= auj);
 }
 
-/* ============================ 3. Stockage ============================ */
+/* ============================ 4. Stockage ============================ */
 
 const Store = {
   mode: "local",          // "local" ou "nuage"
   code: null,
-  raison: "",             // pourquoi on est en local
-  _ref: null, _fs: null, _unsub: null, _surChangement: null,
+  uid: null,              // identifiant de CET appareil
+  raison: "",
+  _db: null, _fs: null, _unsubs: [],
 
   configOk() {
     const c = window.CONFIG_FIREBASE;
@@ -216,7 +300,12 @@ const Store = {
   },
 
   async preparer() {
-    if (!this.configOk()) { this.mode = "local"; this.raison = "config"; return; }
+    if (!this.configOk()) {
+      this.mode = "local";
+      this.raison = "config";
+      this.uid = this._uidLocal();
+      return;
+    }
     try {
       const base = "https://www.gstatic.com/firebasejs/10.12.2/";
       const [app, auth, fs] = await Promise.all([
@@ -226,77 +315,236 @@ const Store = {
       ]);
       const a = app.initializeApp(window.CONFIG_FIREBASE);
       const au = auth.getAuth(a);
-      await auth.signInAnonymously(au);
+      const cred = await auth.signInAnonymously(au);
       this._fs = fs;
       this._db = fs.getFirestore(a);
+      this.uid = cred.user.uid;
       this.mode = "nuage";
     } catch (err) {
       console.warn("Firebase indisponible, passage en mode local :", err);
       this.mode = "local";
       this.raison = "erreur";
+      this.uid = this._uidLocal();
     }
+  },
+
+  /* En mode local, l'appareil s'invente un identifiant stable. */
+  _uidLocal() {
+    let u = localStorage.getItem("tribu:appareil");
+    if (!u) { u = "local-" + jetonAleatoire(8); localStorage.setItem("tribu:appareil", u); }
+    return u;
   },
 
   _cleLocale(code) { return "tribu:donnees:" + code; },
-
-  async charger(code) {
-    if (this.mode === "nuage") {
-      const d = await this._fs.getDoc(this._fs.doc(this._db, "familles", code));
-      return d.exists() ? d.data() : null;
-    }
+  _lireLocal(code) {
     const brut = localStorage.getItem(this._cleLocale(code));
     return brut ? JSON.parse(brut) : null;
   },
+  _ecrireLocal(code, d) {
+    localStorage.setItem(this._cleLocale(code), JSON.stringify(d));
+  },
+
+  /* --- lecture ---
+     Ne leve jamais d'exception : renvoie null et note la cause dans
+     `derniereErreur`, pour que l'appelant puisse expliquer plutot que planter. */
+  derniereErreur: null,
+
+  async charger(code) {
+    this.derniereErreur = null;
+    if (this.mode !== "nuage") return this._lireLocal(code);
+    try {
+      const d = await this._fs.getDoc(this._fs.doc(this._db, "familles", code));
+      if (!d.exists()) return null;
+      const principal = d.data();
+      const e = {};
+      const j = [];
+      try {
+        const [etats, journal] = await Promise.all([
+          this._fs.getDocs(this._fs.collection(this._db, "familles", code, "etats")),
+          this._fs.getDocs(this._fs.collection(this._db, "familles", code, "journal"))
+        ]);
+        etats.forEach((s) => { e[s.id.replace(/__/g, "|")] = s.data(); });
+        journal.forEach((s) => j.push(Object.assign({ id: s.id }, s.data())));
+      } catch (err) {
+        /* Les rubriques annexes peuvent etre refusees sans que tout soit perdu. */
+        console.warn("Lecture partielle (états / points) :", err);
+        this.derniereErreur = err;
+      }
+      return Object.assign({}, principal, { etats: e, journal: j });
+    } catch (err) {
+      console.warn("Lecture refusée :", err);
+      this.derniereErreur = err;
+      return null;
+    }
+  },
 
   async creer(code, donnees) {
-    if (this.mode === "nuage") {
-      await this._fs.setDoc(this._fs.doc(this._db, "familles", code), propre(donnees));
-    } else {
-      localStorage.setItem(this._cleLocale(code), JSON.stringify(donnees));
+    this.derniereErreur = null;
+    if (this.mode !== "nuage") { this._ecrireLocal(code, donnees); return true; }
+    try {
+      const principal = {};
+      CLES_DOC.forEach((c) => { principal[c] = propre(donnees[c]); });
+      await this._fs.setDoc(this._fs.doc(this._db, "familles", code), principal);
+      return true;
+    } catch (err) {
+      console.warn("Création refusée :", err);
+      this.derniereErreur = err;
+      return false;
     }
   },
 
   abonner(code, cb) {
     this.code = code;
-    this._surChangement = cb;
+    this._detacher();
     if (this.mode === "nuage") {
-      if (this._unsub) this._unsub();
-      this._unsub = this._fs.onSnapshot(this._fs.doc(this._db, "familles", code), (d) => {
-        if (d.exists()) cb(d.data());
-      }, (err) => { console.warn("Ecoute interrompue :", err); });
+      const d = this._db, fs = this._fs;
+      const surErreur = (err) => console.warn("Ecoute interrompue :", err);
+      this._unsubs.push(fs.onSnapshot(fs.doc(d, "familles", code), (s) => {
+        if (s.exists()) cb(s.data(), "doc");
+      }, surErreur));
+      this._unsubs.push(fs.onSnapshot(fs.collection(d, "familles", code, "etats"), (q) => {
+        const e = {};
+        q.forEach((s) => { e[s.id.replace(/__/g, "|")] = s.data(); });
+        cb({ etats: e }, "etats");
+      }, surErreur));
+      this._unsubs.push(fs.onSnapshot(fs.collection(d, "familles", code, "journal"), (q) => {
+        const j = [];
+        q.forEach((s) => j.push(Object.assign({ id: s.id }, s.data())));
+        cb({ journal: j }, "journal");
+      }, surErreur));
     } else {
-      window.addEventListener("storage", (e) => {
-        if (e.key === this._cleLocale(code) && e.newValue) cb(JSON.parse(e.newValue));
-      });
+      const surStockage = (ev) => {
+        if (ev.key === this._cleLocale(code) && ev.newValue) cb(JSON.parse(ev.newValue), "tout");
+      };
+      window.addEventListener("storage", surStockage);
+      this._unsubs.push(() => window.removeEventListener("storage", surStockage));
     }
   },
 
-  /* Ecrit UNE cle de premier niveau (ex : "taches"). On n'ecrit jamais tout
-     le document d'un coup : ainsi deux personnes qui modifient deux rubriques
-     differentes en meme temps ne s'ecrasent pas. */
+  _detacher() {
+    this._unsubs.forEach((u) => { try { u(); } catch (e) { } });
+    this._unsubs = [];
+  },
+
+  /* --- ecriture du document principal (une ou plusieurs rubriques) --- */
   async ecrire(cles) {
+    if (this.mode !== "nuage") { this._ecrireLocal(this.code, etat); return; }
     const morceau = {};
-    cles.forEach((c) => { morceau[c] = propre(etat[c]); });
-    if (this.mode === "nuage") {
-      try {
-        await this._fs.setDoc(this._fs.doc(this._db, "familles", this.code), morceau, { merge: true });
-      } catch (err) {
-        console.warn("Echec de l'enregistrement :", err);
-        toast("Enregistrement impossible (hors ligne ?)");
-      }
-    } else {
-      localStorage.setItem(this._cleLocale(this.code), JSON.stringify(etat));
+    cles.forEach((c) => { if (CLES_DOC.indexOf(c) !== -1) morceau[c] = propre(etat[c]); });
+    if (!Object.keys(morceau).length) return;
+    try {
+      await this._fs.setDoc(this._fs.doc(this._db, "familles", this.code), morceau, { merge: true });
+    } catch (err) {
+      console.warn("Echec de l'enregistrement :", err);
+      toast("Enregistrement refusé (droits insuffisants ?)");
+    }
+  },
+
+  /* --- ecriture de l'etat d'une tache --- */
+  async ecrireEtat(cle, valeur) {
+    if (this.mode !== "nuage") { this._ecrireLocal(this.code, etat); return; }
+    try {
+      await this._fs.setDoc(
+        this._fs.doc(this._db, "familles", this.code, "etats", cle.replace(/\|/g, "__")),
+        propre(valeur), { merge: true });
+    } catch (err) {
+      console.warn("Echec de l'enregistrement de la tache :", err);
+      toast("Enregistrement refusé");
+    }
+  },
+
+  /* --- ajout d'une ligne au journal des points (jamais de modification) --- */
+  async ecrireJournal(entree) {
+    if (this.mode !== "nuage") { this._ecrireLocal(this.code, etat); return true; }
+    const { id: ident, ...corps } = entree;
+    try {
+      await this._fs.setDoc(
+        this._fs.doc(this._db, "familles", this.code, "journal", ident),
+        propre(corps));
+      return true;
+    } catch (err) {
+      console.warn("Ligne de points refusee :", err);
+      toast("Points refusés par le serveur");
+      return false;
+    }
+  },
+
+  /* --- invitations --- */
+  async creerInvitation(inv) {
+    this.derniereErreur = null;
+    if (this.mode !== "nuage") {
+      const t = JSON.parse(localStorage.getItem("tribu:invitations") || "{}");
+      t[inv.jeton] = inv;
+      localStorage.setItem("tribu:invitations", JSON.stringify(t));
+      return true;
+    }
+    try {
+      const { jeton, ...corps } = inv;
+      await this._fs.setDoc(this._fs.doc(this._db, "invitations", jeton), propre(corps));
+      return true;
+    } catch (err) {
+      console.warn("Invitation refusée :", err);
+      this.derniereErreur = err;
+      return false;
+    }
+  },
+
+  async lireInvitation(jeton) {
+    if (this.mode !== "nuage") {
+      const t = JSON.parse(localStorage.getItem("tribu:invitations") || "{}");
+      return t[jeton] || null;
+    }
+    const d = await this._fs.getDoc(this._fs.doc(this._db, "invitations", jeton));
+    return d.exists() ? Object.assign({ jeton: jeton }, d.data()) : null;
+  },
+
+  async consommerInvitation(jeton) {
+    if (this.mode !== "nuage") {
+      const t = JSON.parse(localStorage.getItem("tribu:invitations") || "{}");
+      if (t[jeton]) { t[jeton].utilisee = true; t[jeton].utiliseeLe = Date.now(); }
+      localStorage.setItem("tribu:invitations", JSON.stringify(t));
+      return;
+    }
+    await this._fs.setDoc(this._fs.doc(this._db, "invitations", jeton),
+      { utilisee: true, utiliseeLe: Date.now() }, { merge: true });
+  },
+
+  /* Entree dans la famille : on ajoute cet appareil a la liste autorisee.
+     C'est la seule ecriture qu'un non-membre a le droit de faire, et
+     uniquement en presentant un jeton d'invitation valide. */
+  async rejoindre(code, jeton) {
+    if (this.mode !== "nuage") { this._ecrireLocal(code, etat); return true; }
+    try {
+      await this._fs.setDoc(this._fs.doc(this._db, "familles", code), {
+        membres: propre(etat.membres),
+        membresUid: propre(etat.membresUid),
+        jetonUtilise: jeton
+      }, { merge: true });
+      return true;
+    } catch (err) {
+      console.warn("Invitation refusee :", err);
+      return false;
     }
   }
 };
 
-/* Enregistre + redessine. `cles` = rubriques modifiees. */
+/* Enregistre le document principal + redessine. */
 function sauver(...cles) {
+  if (cles.some((c) => ["membres", "taches", "cadeaux"].indexOf(c) !== -1)) {
+    recalculerIndex();
+    ["membresUid", "adminsUid", "bareme", "tarifs"].forEach((c) => {
+      if (cles.indexOf(c) === -1) cles.push(c);
+    });
+  }
   Store.ecrire(cles);
   rendre();
 }
+function sauverEtat(cle) {
+  Store.ecrireEtat(cle, etat.etats[cle]);
+  rendre();
+}
 
-/* ============================ 4. Session ============================ */
+/* ============================ 5. Session ============================ */
 
 const CLE_SESSION = "tribu:session";
 function lireSession() {
@@ -307,14 +555,26 @@ function ecrireSession(s) {
   else localStorage.removeItem(CLE_SESSION);
 }
 
-function appliquerDonnees(d) {
+function appliquerDonnees(d, portee) {
+  if (portee === "etats") { etat.etats = d.etats || {}; return; }
+  if (portee === "journal") { etat.journal = d.journal || []; return; }
+
   const v = etatVide();
+  const garde = { etats: etat.etats, journal: etat.journal };
   etat = Object.assign(v, d || {});
-  // filets de securite si une rubrique manque
-  ["membres", "taches", "courses", "recettes", "notes", "cadeaux", "echanges", "journal"]
-    .forEach((c) => { if (!Array.isArray(etat[c])) etat[c] = []; });
-  ["etatsTaches", "repas", "reglages", "famille"]
-    .forEach((c) => { if (!etat[c] || typeof etat[c] !== "object") etat[c] = c === "famille" ? { nom: "", code: "" } : {}; });
+  if (portee === "doc") {          // le document principal ne porte pas ces deux-la
+    etat.etats = garde.etats;
+    etat.journal = garde.journal;
+  }
+  /* Reprise des donnees de la version 1 */
+  if (d && d.etatsTaches && !Object.keys(etat.etats || {}).length) etat.etats = d.etatsTaches;
+
+  ["membres", "taches", "courses", "recettes", "notes", "cadeaux", "echanges", "journal",
+    "membresUid", "adminsUid"].forEach((c) => { if (!Array.isArray(etat[c])) etat[c] = []; });
+  ["etats", "repas", "reglages", "bareme", "tarifs"].forEach((c) => {
+    if (!etat[c] || typeof etat[c] !== "object") etat[c] = {};
+  });
+  if (!etat.famille || typeof etat.famille !== "object") etat.famille = { nom: "", code: "" };
   if (moi) moi = membre(moi.id) || moi;
 }
 
@@ -325,8 +585,9 @@ async function entrerDansFamille(code, membreId) {
   moi = membre(membreId);
   if (!moi) return false;
   Store.code = code;
-  Store.abonner(code, (nouv) => { appliquerDonnees(nouv); rendre(); });
+  Store.abonner(code, (nouv, portee) => { appliquerDonnees(nouv, portee); rendre(); });
   ecrireSession({ code: code, membreId: membreId });
+  localStorage.setItem("tribu:derniereFamille", code);
   $("#ecran-connexion").hidden = true;
   $("#ecran-app").hidden = false;
   ui.vue = "accueil";
@@ -334,24 +595,27 @@ async function entrerDansFamille(code, membreId) {
   return true;
 }
 
-function deconnecter(oublierFamille) {
+/* Deconnexion : l'appareil reste autorise, on revient juste au choix du profil. */
+async function deconnecter() {
+  const code = Store.code || localStorage.getItem("tribu:derniereFamille");
   ecrireSession(null);
   moi = null;
-  etat = etatVide();
+  Store._detacher();
   $("#ecran-app").hidden = true;
   $("#ecran-connexion").hidden = false;
-  Connexion.aller(oublierFamille ? "accueil" : "accueil");
+  if (code) {
+    const d = await Store.charger(code);
+    if (d) {
+      etat = etatVide();
+      Connexion.aller("profils", { code: code, donnees: d, jeton: null });
+      return;
+    }
+  }
+  etat = etatVide();
+  Connexion.aller("accueil");
 }
 
-/* ============================ 5. Actions ============================ */
-
-function ajouterPoints(membreId, delta, motif) {
-  etat.journal.unshift({
-    id: id(), membreId: membreId, delta: delta, motif: motif,
-    date: new Date().toISOString()
-  });
-  if (etat.journal.length > 400) etat.journal = etat.journal.slice(0, 400);
-}
+/* ============================ 6. Actions ============================ */
 
 const Actions = {
 
@@ -361,15 +625,14 @@ const Actions = {
     if (!t) return;
     const d = new Date();
     const cle = cleEtat(t, d);
-    const ancien = etat.etatsTaches[cle] || {};
-    if (ancien.statut === "valide") return;
-    etat.etatsTaches[cle] = {
+    if ((etat.etats[cle] || {}).statut === "valide") return;
+    etat.etats[cle] = {
       statut: "fait",
       parQui: (moi && moi.id) || assigneDe(t, d),
       faitLe: new Date().toISOString(),
       valideLe: null, valideePar: null
     };
-    sauver("etatsTaches");
+    sauverEtat(cle);
     toast(estAdmin() ? "Fait ! À valider ci-dessous." : "Fait ! En attente de validation.");
   },
 
@@ -377,27 +640,35 @@ const Actions = {
     const t = etat.taches.find((x) => x.id === tacheId);
     if (!t) return;
     const cle = cleEtat(t, new Date());
-    const e = etat.etatsTaches[cle];
-    if (!e || e.statut !== "fait") return;
-    etat.etatsTaches[cle] = { statut: "afaire", parQui: null, faitLe: null, valideLe: null, valideePar: null };
-    sauver("etatsTaches");
+    if ((etat.etats[cle] || {}).statut !== "fait") return;
+    etat.etats[cle] = { statut: "afaire", parQui: null, faitLe: null, valideLe: null, valideePar: null };
+    sauverEtat(cle);
   },
 
-  valider(tacheId) {
+  async valider(tacheId) {
     const t = etat.taches.find((x) => x.id === tacheId);
     if (!t || !estAdmin()) return;
     const cle = cleEtat(t, new Date());
-    const e = etat.etatsTaches[cle];
+    const e = etat.etats[cle];
     if (!e || e.statut !== "fait") return;
+
+    const gagnant = e.parQui || assigneDe(t, new Date());
     e.statut = "valide";
     e.valideLe = new Date().toISOString();
     e.valideePar = moi.id;
-    etat.etatsTaches[cle] = e;
-    const gagnant = e.parQui || assigneDe(t, new Date());
-    if (gagnant && t.points) ajouterPoints(gagnant, t.points, "Tâche : " + t.nom);
-    sauver("etatsTaches", "journal");
+    etat.etats[cle] = e;
+    await Store.ecrireEtat(cle, e);
+
+    if (gagnant && t.points) {
+      await ajouterAuJournal({
+        id: "t|" + t.id + "|" + clePeriode(t.frequence, new Date()),
+        type: "tache", refId: t.id, cleEtat: cle.replace(/\|/g, "__"),
+        membreId: gagnant, delta: t.points, motif: "Tâche : " + t.nom
+      });
+    }
+    rendre();
     const m = membre(gagnant);
-    toast(m ? "+" + t.points + " points pour " + m.prenom + " 🌟" : "Validé");
+    toast(m && t.points ? "+" + t.points + " points pour " + m.prenom + " 🌟" : "Validé");
   },
 
   async refuser(tacheId) {
@@ -406,9 +677,9 @@ const Actions = {
     const ok = await confirmer("Renvoyer « " + t.nom + " » en « à faire » ? Aucun point ne sera donné.",
       { titre: "Refuser la tâche", ok: "Renvoyer", danger: true });
     if (!ok) return;
-    etat.etatsTaches[cleEtat(t, new Date())] =
-      { statut: "afaire", parQui: null, faitLe: null, valideLe: null, valideePar: null };
-    sauver("etatsTaches");
+    const cle = cleEtat(t, new Date());
+    etat.etats[cle] = { statut: "afaire", parQui: null, faitLe: null, valideLe: null, valideePar: null };
+    sauverEtat(cle);
   },
 
   /* --- Courses --- */
@@ -445,7 +716,7 @@ const Actions = {
   /* --- Repas --- */
   definirRepas(cleSem, jour, moment, valeur) {
     if (!etat.repas[cleSem]) etat.repas[cleSem] = {};
-    etat.repas[cleSem][jour + "-" + moment] = valeur;   // {recetteId} | {texte} | null
+    etat.repas[cleSem][jour + "-" + moment] = valeur;
     sauver("repas");
   },
 
@@ -487,17 +758,24 @@ const Actions = {
     sauver("echanges");
     toast("Demande envoyée 🎁");
   },
-  accorderEchange(eid) {
+
+  async accorderEchange(eid) {
     const e = etat.echanges.find((x) => x.id === eid);
     if (!e || !estAdmin() || e.statut !== "demande") return;
     if (pointsDe(e.membreId) < e.cout) { toast("Ce membre n'a plus assez de points"); return; }
+
+    const ok = await ajouterAuJournal({
+      id: "c|" + e.id, type: "cadeau", refId: e.cadeauId,
+      membreId: e.membreId, delta: -e.cout, motif: "Cadeau : " + e.cadeauNom
+    });
+    if (!ok) return;
     e.statut = "accorde";
     e.traiteLe = new Date().toISOString();
     e.traitePar = moi.id;
-    ajouterPoints(e.membreId, -e.cout, "Cadeau : " + e.cadeauNom);
-    sauver("echanges", "journal");
+    sauver("echanges");
     toast("Cadeau accordé 🎉");
   },
+
   async refuserEchange(eid) {
     const e = etat.echanges.find((x) => x.id === eid);
     if (!e || !estAdmin() || e.statut !== "demande") return;
@@ -509,15 +787,77 @@ const Actions = {
     e.traitePar = moi.id;
     sauver("echanges");
   },
-  ajusterPoints(membreId, delta, motif) {
+
+  async ajusterPoints(membreId, delta, motif) {
     if (!estAdmin()) return;
-    ajouterPoints(membreId, delta, motif || "Ajustement");
-    sauver("journal");
-    toast((delta > 0 ? "+" : "") + delta + " points");
+    const ok = await ajouterAuJournal({
+      id: "a|" + id(), type: "ajustement", refId: null,
+      membreId: membreId, delta: delta, motif: motif || "Ajustement"
+    });
+    if (ok) { rendre(); toast((delta > 0 ? "+" : "") + delta + " points"); }
   }
 };
 
-/* ============================ 6. Generateur de menus ============================ */
+/* Ajoute une ligne au journal des points.
+   Le serveur verifie le montant : si la ligne existe deja ou si le montant ne
+   correspond pas au bareme, elle est refusee et rien n'est credite. */
+async function ajouterAuJournal(entree) {
+  entree.date = new Date().toISOString();
+  entree.parAdmin = moi ? moi.id : null;
+  const ok = await Store.ecrireJournal(entree);
+  if (!ok) return false;
+  if (!etat.journal.some((x) => x.id === entree.id)) etat.journal.unshift(entree);
+  return true;
+}
+
+/* ============================ 7. Invitations ============================ */
+
+const Invitations = {
+  async creer(joursValidite) {
+    if (!estAdmin()) return null;
+    const inv = {
+      jeton: jetonAleatoire(24),
+      famille: etat.famille.code,
+      nomFamille: etat.famille.nom,
+      creeePar: moi.id,
+      creeeLe: Date.now(),
+      expireLe: Date.now() + (joursValidite || 7) * 86400000,
+      utilisee: false,
+      utiliseeLe: null
+    };
+    const ok = await Store.creerInvitation(inv);
+    if (!ok) {
+      toast("Invitation refusée : règles Firebase à vérifier");
+      return null;
+    }
+    return inv;
+  },
+
+  lien(jeton) {
+    const base = location.origin + location.pathname;
+    return base + "?invitation=" + jeton;
+  },
+
+  /* Extrait le jeton d'un lien colle, ou renvoie le texte s'il s'agit deja d'un jeton. */
+  extraireJeton(texte) {
+    const t = (texte || "").trim();
+    const m = t.match(/invitation=([a-f0-9]{16,})/i);
+    if (m) return m[1].toLowerCase();
+    return /^[a-f0-9]{16,}$/i.test(t) ? t.toLowerCase() : null;
+  },
+
+  async valider(jeton) {
+    const inv = await Store.lireInvitation(jeton);
+    if (!inv) return { ok: false, message: "Cette invitation n'existe pas." };
+    if (inv.utilisee) return { ok: false, message: "Cette invitation a déjà été utilisée." };
+    if (inv.expireLe && inv.expireLe < Date.now()) return { ok: false, message: "Cette invitation a expiré." };
+    const donnees = await Store.charger(inv.famille);
+    if (!donnees) return { ok: false, message: "Famille introuvable." };
+    return { ok: true, invitation: inv, donnees: donnees };
+  }
+};
+
+/* ============================ 8. Generateur de menus ============================ */
 
 function recettesUtiliseesRecemment(cleSem, nbSemaines) {
   const vus = new Set();
@@ -541,8 +881,7 @@ function genererMenus(cleSem, opt) {
     ["midi", "soir"].forEach((m) => {
       if (m === "midi" && !opt.midi) return;
       if (m === "soir" && !opt.soir) return;
-      const dejaLa = semaine[j + "-" + m];
-      if (dejaLa && !opt.remplacer) return;
+      if (semaine[j + "-" + m] && !opt.remplacer) return;
       cases.push({ jour: j, moment: m });
     });
   });
@@ -601,7 +940,7 @@ function ingredientsDeLaSemaine(cleSem) {
     RAYONS.indexOf(a.rayon) - RAYONS.indexOf(b.rayon) || a.nom.localeCompare(b.nom));
 }
 
-/* ============================ 7. Rendu general ============================ */
+/* ============================ 9. Rendu general ============================ */
 
 const TITRES = {
   accueil: ["Accueil", ""],
@@ -620,10 +959,7 @@ function rendre() {
 
   $("#btn-profil").textContent = moi.emoji || "🙂";
   $("#titre-vue").textContent = TITRES[v] ? TITRES[v][0] : "Tribu";
-  const sous = v === "accueil"
-    ? etat.famille.nom
-    : (TITRES[v] ? TITRES[v][1] : "");
-  $("#sous-titre-vue").textContent = sous;
+  $("#sous-titre-vue").textContent = v === "accueil" ? etat.famille.nom : (TITRES[v] ? TITRES[v][1] : "");
   $("#mes-points").textContent = pointsDe(moi.id);
 
   document.querySelectorAll(".vue").forEach((s) => s.classList.remove("active"));
@@ -684,12 +1020,11 @@ function aller(vue) {
   rendre();
 }
 
-/* ============================ 8. Ecoute des clics ============================ */
+/* ============================ 10. Ecoute des clics ============================ */
 
 document.addEventListener("click", (e) => {
   const nav = e.target.closest(".nav button");
   if (nav) { aller(nav.dataset.vue); return; }
-
   if (e.target.id === "voile") { fermerFeuille(); return; }
 
   const b = e.target.closest("[data-action]");
@@ -698,11 +1033,9 @@ document.addEventListener("click", (e) => {
   const v = b.dataset.id;
 
   switch (a) {
-    /* navigation */
     case "aller": aller(b.dataset.vue); break;
     case "fermer": fermerFeuille(); break;
 
-    /* taches */
     case "tache-fait": Actions.marquerFaite(v); break;
     case "tache-annuler": Actions.annulerFaite(v); break;
     case "tache-valider": Actions.valider(v); break;
@@ -711,13 +1044,11 @@ document.addEventListener("click", (e) => {
     case "tache-editer": Formulaires.tache(v); break;
     case "taches-filtre": ui.filtreTaches = b.dataset.valeur; rendre(); break;
 
-    /* courses */
     case "course-toggle": Actions.basculerCourse(v); break;
     case "course-suppr": Actions.supprimerCourse(v); break;
     case "course-nouvelle": Formulaires.course(); break;
     case "courses-vider": Actions.viderCoches(); break;
 
-    /* menus */
     case "semaine-prec": {
       const d = lundiDeCle(ui.semaine); d.setDate(d.getDate() - 7);
       ui.semaine = cleSemaine(d); rendre(); break;
@@ -726,22 +1057,18 @@ document.addEventListener("click", (e) => {
       const d = lundiDeCle(ui.semaine); d.setDate(d.getDate() + 7);
       ui.semaine = cleSemaine(d); rendre(); break;
     }
-    case "semaine-auj": ui.semaine = cleSemaine(new Date()); rendre(); break;
     case "repas-case": Formulaires.repas(b.dataset.jour, b.dataset.moment); break;
     case "menus-generer": Formulaires.generateur(); break;
     case "menus-courses": Formulaires.ingredientsVersCourses(); break;
 
-    /* recettes */
     case "recette-nouvelle": Formulaires.recette(null); break;
     case "recette-editer": Formulaires.recette(v); break;
 
-    /* notes */
     case "note-toggle": Actions.basculerNote(v); break;
     case "note-nouvelle": Formulaires.note(null); break;
     case "note-editer": Formulaires.note(v); break;
     case "notes-filtre": ui.filtreNotes = b.dataset.valeur; rendre(); break;
 
-    /* cadeaux et points */
     case "cadeau-demander": Actions.demanderCadeau(v); break;
     case "cadeau-nouveau": Formulaires.cadeau(null); break;
     case "cadeau-editer": Formulaires.cadeau(v); break;
@@ -750,11 +1077,12 @@ document.addEventListener("click", (e) => {
     case "points-ajuster": Formulaires.ajustementPoints(v); break;
     case "points-historique": Formulaires.historique(); break;
 
-    /* membres et reglages */
     case "membre-nouveau": Formulaires.membre(null); break;
     case "membre-editer": Formulaires.membre(v); break;
+    case "inviter": Formulaires.invitation(); break;
     case "menu-profil": Formulaires.menuProfil(); break;
-    case "deconnexion": fermerFeuille(); deconnecter(false); break;
+    case "deconnexion": fermerFeuille(); deconnecter(); break;
+
     case "theme": {
       const actuel = document.documentElement.dataset.theme || "auto";
       const suivant = actuel === "auto" ? "light" : actuel === "light" ? "dark" : "auto";
@@ -764,10 +1092,10 @@ document.addEventListener("click", (e) => {
       Formulaires.menuProfil();
       break;
     }
-    case "copier-code": {
-      const t = etat.famille.code;
-      if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => toast("Code copié"));
-      else toast("Code : " + t);
+    case "copier": {
+      const t = b.dataset.texte || "";
+      if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => toast("Copié"));
+      else toast(t);
       break;
     }
   }
@@ -793,13 +1121,12 @@ document.addEventListener("input", (e) => {
   rendre();
 });
 
-/* Devine le rayon d'un article : d'abord d'apres les recettes deja saisies,
-   sinon d'apres une liste de mots courants. */
+/* Devine le rayon d'un article */
 const MOTS_RAYONS = {
   "Fruits & légumes": ["pomme", "banane", "tomate", "salade", "carotte", "oignon", "ail ", "courgette",
     "pomme de terre", "pommes de terre", "citron", "fraise", "poireau", "champignon", "brocoli",
     "concombre", "avocat", "orange", "raisin", "persil", "basilic", "épinard", "haricot", "poivron",
-    "aubergine", "melon", "kiwi", "poire", "endive", "radis", "salade"],
+    "aubergine", "melon", "kiwi", "poire", "endive", "radis"],
   "Boucherie": ["poulet", "boeuf", "bœuf", "porc", "jambon", "lardon", "steak", "saucisse", "merguez",
     "dinde", "veau", "agneau", "escalope", "rôti", "roti", "viande"],
   "Poissonnerie": ["saumon", "cabillaud", "poisson", "crevette", "moule", "colin", "truite", "sole"],
@@ -825,18 +1152,129 @@ function devinerRayon(nom) {
   return "Épicerie";
 }
 
-/* ============================ 9. Demarrage ============================ */
+/* ============================ 11. Ecran de panne ============================ */
+
+/* Regle d'or : l'application ne doit JAMAIS rester blanche. Si quelque chose
+   casse au demarrage, on affiche ce qui s'est passe, en clair, avec de quoi
+   s'en sortir sans ordinateur. */
+let panneAffichee = false;
+
+function ecranPanne(err, titre, conseil) {
+  if (panneAffichee) return;
+  panneAffichee = true;
+
+  const app = document.getElementById("ecran-app");
+  const el = document.getElementById("ecran-connexion");
+  if (!el) return;
+  if (app) app.hidden = true;
+  el.hidden = false;
+
+  const morceaux = [];
+  if (err) {
+    if (err.code) morceaux.push(err.code);
+    if (err.message) morceaux.push(err.message);
+    if (!morceaux.length) morceaux.push(String(err));
+  }
+  (window.__erreursDemarrage || []).forEach((t) => { if (morceaux.indexOf(t) === -1) morceaux.push(t); });
+  const detail = morceaux.join(" — ") || "Aucun message technique.";
+
+  /* Message adapte a la cause la plus probable */
+  let explication = conseil;
+  if (!explication && err && err.code === "permission-denied") {
+    explication = "Firebase refuse l'accès aux données. Le plus souvent : les règles de sécurité " +
+      "publiées ne correspondent pas à la version de l'application qui est en ligne.";
+  }
+  if (!explication) explication = "L'application n'a pas réussi à démarrer.";
+
+  el.innerHTML =
+    '<div class="logo-tribu">🏡</div>' +
+    "<h1>" + esc(titre || "Ça coince") + "</h1>" +
+    '<p class="intro">' + esc(explication) + "</p>" +
+    '<div class="carte"><div class="carte-titre">Détail technique</div>' +
+    '<p style="font-size:.78rem;line-height:1.5;word-break:break-word;margin:0">' +
+    esc(detail) + "</p></div>" +
+    '<button class="btn principal plein" data-role="recharger" style="margin-bottom:.5rem">Recharger la page</button>' +
+    '<button class="btn plein" data-role="vider" style="margin-bottom:.5rem">Vider le cache et recharger</button>' +
+    '<button class="btn plein danger" data-role="zero">Repartir de zéro sur cet appareil</button>' +
+    '<p class="aide centre" style="margin-top:1rem">Si ça ne suffit pas, faites une capture ' +
+    "d'écran de ce message.</p>";
+
+  el.querySelector('[data-role="recharger"]').onclick = () => location.reload();
+  el.querySelector('[data-role="vider"]').onclick = async () => {
+    await viderCacheLocal();
+    location.reload();
+  };
+  const bz = el.querySelector('[data-role="zero"]');
+  let confirme = false;
+  bz.onclick = async () => {
+    if (!confirme) {
+      confirme = true;
+      bz.textContent = "Confirmer ? Vos données de CET appareil seront effacées";
+      return;
+    }
+    localStorage.clear();
+    await viderCacheLocal();
+    location.reload();
+  };
+}
+
+async function viderCacheLocal() {
+  try {
+    if (window.caches) {
+      const noms = await caches.keys();
+      await Promise.all(noms.map((n) => caches.delete(n)));
+    }
+    if (navigator.serviceWorker) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+  } catch (e) { console.warn("Nettoyage du cache impossible :", e); }
+}
+
+window.__signalerPanne = function () {
+  const app = document.getElementById("ecran-app");
+  if (app && !app.hidden) return;          // l'app tourne : ce n'est pas fatal
+  if (!document.getElementById("chargement")) return;
+  ecranPanne(null);
+};
+
+/* ============================ 12. Demarrage ============================ */
 
 async function demarrer() {
+  try {
+    await demarrerVraiment();
+  } catch (err) {
+    console.error("Démarrage impossible :", err);
+    ecranPanne(err);
+  }
+}
+
+async function demarrerVraiment() {
   const th = localStorage.getItem("tribu:theme");
   if (th && th !== "auto") document.documentElement.dataset.theme = th;
 
   await Store.preparer();
 
+  /* Un lien d'invitation a-t-il ete ouvert ? */
+  const params = new URLSearchParams(location.search);
+  const jetonUrl = params.get("invitation");
+  if (jetonUrl) {
+    history.replaceState(null, "", location.pathname);
+    $("#ecran-connexion").hidden = false;
+    Connexion.aller("invitation", { jetonPreRempli: jetonUrl });
+    return;
+  }
+
   const s = lireSession();
   if (s && s.code && s.membreId) {
     const ok = await entrerDansFamille(s.code, s.membreId);
     if (ok) return;
+    /* Echec : soit la famille a disparu, soit Firebase refuse l'accès.
+       Dans le second cas on l'explique au lieu de renvoyer bêtement au départ. */
+    if (Store.derniereErreur && Store.derniereErreur.code === "permission-denied") {
+      ecranPanne(Store.derniereErreur, "Accès refusé");
+      return;
+    }
     ecrireSession(null);
   }
   $("#ecran-connexion").hidden = false;

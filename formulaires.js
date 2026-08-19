@@ -545,7 +545,7 @@ Formulaires.membre = function (mid) {
       sauver("membres", "taches", "journal");
       toast("Membre supprimé");
     };
-    f.onsubmit = (ev) => {
+    f.onsubmit = async (ev) => {
       ev.preventDefault();
       const d = new FormData(f);
       const pin = String(d.get("pin") || "").trim();
@@ -558,17 +558,81 @@ Formulaires.membre = function (mid) {
         m.prenom = String(d.get("prenom")).trim();
         m.emoji = emojiChoisi(f, "😀");
         m.role = role;
-        if (pin) m.pin = pin;
+        if (pin) Object.assign(m, await champsPin(pin));
       } else {
         if (!pin) { toast("Choisissez un code à 4 chiffres"); return; }
-        etat.membres.push({
+        /* Le nouveau membre n'a encore aucun appareil : il en obtiendra un
+           en ouvrant l'invitation que vous allez lui envoyer. */
+        etat.membres.push(Object.assign({
           id: id(), prenom: String(d.get("prenom")).trim(), emoji: emojiChoisi(f, "😀"),
-          role: role, pin: pin, creeLe: new Date().toISOString()
-        });
+          role: role, uids: [], creeLe: new Date().toISOString()
+        }, await champsPin(pin)));
       }
       fermerFeuille();
       sauver("membres");
-      toast(m ? "Profil enregistré" : "Membre ajouté 👋");
+      if (!m) Formulaires.invitation();
+      else toast("Profil enregistré");
+    };
+  });
+};
+
+/* ================================ INVITATION ================================ */
+
+Formulaires.invitation = function () {
+  if (!estAdmin()) { toast("Seul un administrateur peut inviter"); return; }
+
+  const html = '<div id="f-invit">' +
+    '<p class="aide" style="margin-bottom:1rem">L\'invitation est un lien <b>à usage unique</b>. ' +
+    "Envoyez-le à la personne (SMS, message…) : en l'ouvrant, son téléphone sera autorisé " +
+    "à accéder à la famille.</p>" +
+    '<label class="champ"><span>Valable pendant</span></label>' +
+    puceMultiple("duree", [
+      { val: "1", html: "24 heures" },
+      { val: "7", html: "7 jours" },
+      { val: "30", html: "30 jours" }], ["7"]) +
+    '<button class="btn principal plein" data-role="creer">Créer l\'invitation</button>' +
+    '<div id="resultat-invit" style="margin-top:1rem"></div>' +
+    '<button class="btn plein" data-action="fermer" style="margin-top:1rem">Fermer</button></div>';
+
+  ouvrirFeuille("Inviter dans la famille", html, (f) => {
+    brancherMulti(f, "duree", true);
+    const zone = f.querySelector("#resultat-invit");
+    const bouton = f.querySelector('[data-role="creer"]');
+
+    bouton.onclick = async () => {
+      bouton.disabled = true;
+      const jours = Number(valeursMulti(f, "duree")[0] || 7);
+      const inv = await Invitations.creer(jours);
+      bouton.disabled = false;
+      if (!inv) { toast("Création impossible"); return; }
+      const lien = Invitations.lien(inv.jeton);
+      const fin = new Date(inv.expireLe).toLocaleDateString("fr-FR",
+        { day: "numeric", month: "long", year: "numeric" });
+
+      zone.innerHTML = '<div class="bandeau info">✅<div>Invitation créée, valable jusqu\'au ' +
+        esc(fin) + ".</div></div>" +
+        '<div class="code-famille" style="font-size:.72rem;word-break:break-all;letter-spacing:0">' +
+        esc(lien) + "</div>" +
+        '<div class="rangee-btn" style="margin-top:.7rem">' +
+        '<button class="btn doux" data-action="copier" data-texte="' + esc(lien) + '">Copier le lien</button>' +
+        '<button class="btn principal" data-role="partager">Partager</button></div>' +
+        '<p class="aide" style="margin-top:.6rem">Une fois utilisée, elle ne fonctionnera plus. ' +
+        "Créez-en une nouvelle pour chaque personne et chaque appareil.</p>";
+
+      const bp = zone.querySelector('[data-role="partager"]');
+      bp.onclick = () => {
+        if (navigator.share) {
+          navigator.share({
+            title: "Rejoindre " + etat.famille.nom + " sur Tribu",
+            text: "Voici ton invitation pour rejoindre notre organisation familiale :",
+            url: lien
+          }).catch(() => { });
+        } else if (navigator.clipboard) {
+          navigator.clipboard.writeText(lien).then(() => toast("Lien copié"));
+        } else {
+          toast("Copiez le lien ci-dessus");
+        }
+      };
     };
   });
 };
@@ -631,6 +695,10 @@ Formulaires.menuProfil = function () {
   const etatTexte = Store.mode === "nuage"
     ? '<span class="etat-connexion en-ligne"><i></i>Partagé avec la famille</span>'
     : '<span class="etat-connexion local"><i></i>Sur cet appareil uniquement</span>';
+  const alerteCrypto = CRYPTO_DISPO ? "" :
+    '<div class="bandeau">⚠️<div>' +
+    "Cette page n'est pas servie en <b>https</b> : les codes à 4 chiffres ne peuvent pas " +
+    "être chiffrés. À n'utiliser que pour des essais.</div></div>";
 
   const html =
     '<div class="ligne" style="padding-top:0">' +
@@ -638,7 +706,7 @@ Formulaires.menuProfil = function () {
     '<div class="ligne-corps"><b>' + esc(moi.prenom) + "</b><small>" +
     (estAdmin() ? "Administrateur" : "Membre") + " • " + esc(etat.famille.nom) + "</small></div>" +
     '<span class="etiquette or">' + pointsDe(moi.id) + " pts</span></div>" +
-    '<p style="margin:.6rem 0 1rem">' + etatTexte + "</p>" +
+    '<p style="margin:.6rem 0 1rem">' + etatTexte + "</p>" + alerteCrypto +
     '<button class="btn plein" data-action="aller" data-vue="points" style="margin-bottom:.5rem">🌟 Points & cadeaux</button>' +
     '<button class="btn plein" data-action="aller" data-vue="recettes" style="margin-bottom:.5rem">📖 Mes recettes</button>' +
     (estAdmin()
@@ -674,14 +742,14 @@ Formulaires.monProfilSimple = function () {
 
   ouvrirFeuille("Mon profil", html, (f) => {
     brancherEmojis(f);
-    f.onsubmit = (ev) => {
+    f.onsubmit = async (ev) => {
       ev.preventDefault();
       const d = new FormData(f);
       const pin = String(d.get("pin") || "").trim();
       if (pin && !/^[0-9]{4}$/.test(pin)) { toast("Le code doit faire 4 chiffres"); return; }
       moi.prenom = String(d.get("prenom")).trim();
       moi.emoji = emojiChoisi(f, "😀");
-      if (pin) moi.pin = pin;
+      if (pin) Object.assign(moi, await champsPin(pin));
       fermerFeuille();
       sauver("membres");
       toast("Profil enregistré");
