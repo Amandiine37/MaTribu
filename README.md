@@ -301,6 +301,11 @@ Il est tiré au sort sur 6 caractères : une collision est quasi impossible. Si
 malgré tout le repère choisi est déjà pris, l'application le dit et en propose
 un autre — il suffit de réessayer.
 
+La vérification passe par une petite collection **`reperes`** qui ne contient
+qu'une date de création. Savoir qu'un repère existe n'ouvre aucun accès : cela
+sert uniquement à répondre honnêtement « ce nom est déjà pris » avant de créer,
+plutôt que de le deviner à partir d'un refus (qui peut avoir d'autres causes).
+
 ## Lire les retours des utilisateurs
 
 Le bouton **« Signaler un problème / proposer une idée »** (dans *Mon profil*)

@@ -930,8 +930,19 @@ Formulaires.membre = function (mid) {
       etat.membres = etat.membres.filter((x) => x.id !== m.id);
       etat.taches.forEach((t) => { t.participants = (t.participants || []).filter((p) => p !== m.id); });
       etat.journal = etat.journal.filter((e) => e.membreId !== m.id);
+      /* Ses appareils perdent l'accès en même temps que son profil. Il faut
+         les retirer des DEUX endroits : le registre et la liste des appareils
+         autorisés — sinon le filet anti-verrouillage, qui conserve les
+         appareils qu'il n'arrive pas à rattacher, les remettrait. */
+      const sesAppareils = Object.keys(etat.appareils || {})
+        .filter((u) => etat.appareils[u] === m.id)
+        .concat(m.uids || []);
+      sesAppareils.forEach((u) => { delete etat.appareils[u]; });
+      etat.membresUid = (etat.membresUid || []).filter((u) => sesAppareils.indexOf(u) === -1);
+      etat.adminsUid = (etat.adminsUid || []).filter((u) => sesAppareils.indexOf(u) === -1);
       fermerFeuille();
       sauver("membres", "taches", "journal");
+      await Store.retirerAppareils(sesAppareils);
       toast("Membre supprimé");
     };
     f.onsubmit = async (ev) => {
@@ -995,7 +1006,7 @@ Formulaires.invitation = function () {
       cibles.map((m) => ({
         val: m.id,
         html: esc((m.emoji || "🙂") + " " + m.prenom) +
-          ((m.uids || []).length || registreAppareils(m.id) ? "" : " (jamais connecté)")
+          (aUnAppareil(m) ? "" : " (jamais connecté)")
       }))), ["nouveau"]) +
     '<p class="aide" style="margin:-.5rem 0 1rem">Choisissez un prénom existant pour ' +
     "ajouter un <b>deuxième téléphone</b> à quelqu'un, ou pour connecter un profil " +

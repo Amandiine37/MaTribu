@@ -165,6 +165,7 @@ Ouvrez l'application sur votre téléphone :
 | Ce que vous voyez | Ce qu'il faut faire |
 |---|---|
 | Bandeau « Mode hors partage » qui reste | Un `A_REMPLIR` traîne encore dans `firebase-config.js`, ou le fichier n'a pas été redéposé sur GitHub. |
+| Écran « Création impossible » à la création d'une famille | Les règles ne sont pas publiées dans leur dernière version, **ou** le domaine du site n'est pas dans *Authentication → Paramètres → Domaines autorisés*. Le détail technique affiché à l'écran précise laquelle. |
 | « Invitation refusée par le serveur » | Les règles de l'étape 3 ne sont pas publiées, ou pas dans leur version complète (`firestore.rules`). |
 | « Cette invitation n'existe pas ou a été supprimée » | Le lien a été tronqué en route (SMS coupé). Recopiez-le en entier, ou passez par le bouton « Partager ». |
 | « Cette invitation a expiré / a déjà été utilisée » | Normal : créez-en une nouvelle. Il en faut une par personne **et par appareil**. |

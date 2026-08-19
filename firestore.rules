@@ -51,6 +51,18 @@ service cloud.firestore {
         && invitation(jeton).expireLe > request.time.toMillis();
     }
 
+    // ---------- annuaire des reperes de famille ----------
+    // Ne contient qu'une date. Savoir qu'un repere existe n'ouvre AUCUN acces :
+    // cela sert seulement a dire « ce nom est deja pris » avant de creer, au
+    // lieu de le deviner a partir d'un refus.
+
+    match /reperes/{code} {
+      allow get: if connecte();
+      allow list: if false;
+      allow create: if connecte();
+      allow update, delete: if false;
+    }
+
     // ---------- catalogue de recettes partagees entre familles ----------
     // Lisible par toutes les familles connectees. On ne peut publier qu'une
     // fiche portant le code de SA propre famille, et on ne peut retirer que

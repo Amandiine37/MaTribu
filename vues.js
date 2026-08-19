@@ -52,6 +52,52 @@ Vues.accueil = function () {
       "Pour partager avec la famille, remplissez le fichier <b>firebase-config.js</b> (voir le guide).</div></div>");
   }
 
+  /* Premiers pas : tant que la tribu n'est pas installée, on dit quoi faire.
+     La carte disparaît d'elle-même une fois tout coché. */
+  if (estAdmin() && !localStorage.getItem("tribu:conseilsMasques")) {
+    const aInviter = etat.membres.filter((m) => !m.sansAppareil && !aUnAppareil(m));
+    const partagees = etat.taches.filter((t) => participantsValides(t).length > 1).length;
+    const etapes = [
+      {
+        fait: etat.membres.length > 1,
+        titre: "Ajouter les membres de la famille",
+        detail: "Chaque personne a son profil, ses points et ses tâches.",
+        action: "membre-nouveau", bouton: "Ajouter"
+      },
+      {
+        fait: etat.membres.length > 1 && !aInviter.length,
+        titre: "Envoyer une invitation à chacun",
+        detail: aInviter.length
+          ? "En attente : " + aInviter.map((m) => m.prenom).join(", ") +
+          ". Un lien par personne, et un par téléphone."
+          : "C'est le lien d'invitation qui donne l'accès — pas le repère de la tribu.",
+        action: "inviter", bouton: "Inviter"
+      },
+      {
+        fait: partagees > 0,
+        titre: "Répartir les tâches",
+        detail: "Cochez plusieurs personnes sur une tâche et activez « Chacun son tour » : " +
+          "l'application changera d'assigné toute seule.",
+        action: "aller", vue: "taches", bouton: "Ouvrir"
+      }
+    ];
+    const restantes = etapes.filter((e) => !e.fait);
+    if (restantes.length) {
+      h.push(bloc("🚀 Premiers pas <span class=\"etiquette\">" +
+        (etapes.length - restantes.length) + "/" + etapes.length + "</span>",
+        etapes.map((e) =>
+          '<div class="ligne' + (e.fait ? " fait" : "") + '">' +
+          '<span class="etape' + (e.fait ? " ok" : "") + '">' + (e.fait ? "✓" : "") + "</span>" +
+          '<div class="ligne-corps"><b>' + esc(e.titre) + "</b>" +
+          (e.fait ? "" : "<small>" + esc(e.detail) + "</small>") + "</div>" +
+          (e.fait ? "" : '<button class="btn mini principal" data-action="' + e.action +
+            (e.vue ? '" data-vue="' + e.vue : "") + '">' + esc(e.bouton) + "</button>") +
+          "</div>").join("") +
+        '<button class="lien" data-action="masquer-conseils" style="margin-top:.7rem">' +
+        "Masquer ces conseils</button>"));
+    }
+  }
+
   /* Mes taches */
   const mes = mesTachesAFaire();
   h.push(bloc("🧹 Mes tâches" + (mes.length ? ' <span class="etiquette chaud">' + mes.length + "</span>" : ""),
@@ -609,7 +655,7 @@ Vues.admin = function () {
       '<div class="ligne-corps"><b>' + esc(m.prenom) + "</b><small>" +
       (m.sansAppareil ? "Géré par les parents" : m.role === "admin" ? "Administrateur" : "Membre") +
       " • " + pointsDe(m.id) + " pts" +
-      (!m.sansAppareil && !(m.uids || []).length ? " • en attente d'invitation" : "") + "</small>" +
+      (!m.sansAppareil && !aUnAppareil(m) ? " • en attente d'invitation" : "") + "</small>" +
       (m.sansAppareil ? '<span class="etiquettes"><span class="etiquette">🧒 sans téléphone</span></span>' : "") +
       "</div>" +
       '<button class="btn mini" data-action="membre-editer" data-id="' + m.id + '">✏️</button></div>').join(""),
@@ -619,9 +665,23 @@ Vues.admin = function () {
     '<p class="aide">Pour ajouter une personne — ou un nouveau téléphone pour quelqu\'un qui est ' +
     "déjà dans la famille — créez une invitation. C'est un lien <b>à usage unique</b> qui expire " +
     "au bout de quelques jours.</p>" +
-    '<p class="aide" style="margin-top:.5rem">Le code de la famille (<b>' + esc(etat.famille.code) +
-    "</b>) ne donne accès à rien : il ne sert qu'à reconnaître votre tribu.</p>" +
+    '<p class="aide" style="margin-top:.5rem">Le <b>repère</b> de votre tribu (' + esc(etat.famille.code) +
+    ") ne donne accès à rien et n'est jamais à saisir par les autres : il ne sert " +
+    "qu'à nommer votre dossier. Ne le confondez pas avec les <b>codes à 4 chiffres</b>, " +
+    "qui sont personnels — un par membre.</p>" +
     '<button class="btn plein principal" data-action="inviter" style="margin-top:.8rem">Créer une invitation</button>'));
+
+  h.push(bloc("❓ Comment ça marche",
+    '<div class="ligne"><span class="etape">1</span><div class="ligne-corps">' +
+    "<b>Vous créez la famille</b><small>C'est fait : vous en êtes administratrice.</small></div></div>" +
+    '<div class="ligne"><span class="etape">2</span><div class="ligne-corps">' +
+    "<b>Vous invitez chaque membre</b><small>Un lien par personne, et un par téléphone. " +
+    "Il ne sert qu'une fois et expire.</small></div></div>" +
+    '<div class="ligne"><span class="etape">3</span><div class="ligne-corps">' +
+    "<b>Chacun choisit son code à 4 chiffres</b><small>Personnel, différent pour chacun. " +
+    "Il sert à prouver qui vous êtes, pas à ouvrir la famille.</small></div></div>" +
+    '<button class="lien" data-action="revoir-conseils" style="margin-top:.7rem">' +
+    "Revoir les premiers pas sur l'accueil</button>"));
 
   h.push(bloc("📱 Appareils autorisés",
     '<p class="aide">' + (etat.membresUid || []).length + " appareil(s) peuvent ouvrir cette famille. " +
@@ -695,7 +755,20 @@ const Connexion = {
         ? '<button class="btn principal plein" id="b-reprendre" style="margin-bottom:.6rem">Continuer sur cet appareil</button>'
         : "") +
       '<button class="btn ' + (derniere ? "" : "principal ") + 'plein" id="b-creer" style="margin-bottom:.6rem">Créer ma famille</button>' +
-      '<button class="btn plein" id="b-invitation">J\'ai reçu une invitation</button>' + local;
+      '<button class="btn plein" id="b-invitation">J\'ai reçu une invitation</button>' +
+
+      '<div class="carte" style="margin-top:1.4rem">' +
+      '<div class="carte-titre">Comment ça marche ?</div>' +
+      '<div class="ligne"><span class="etape">1</span><div class="ligne-corps">' +
+      "<b>Une seule personne crée la famille</b><small>Elle en devient l'administratrice. " +
+      "Inutile que les autres la créent aussi.</small></div></div>" +
+      '<div class="ligne"><span class="etape">2</span><div class="ligne-corps">' +
+      "<b>Elle envoie une invitation à chacun</b><small>Un lien par personne — et un par " +
+      "téléphone. Il ne sert qu'une fois.</small></div></div>" +
+      '<div class="ligne"><span class="etape">3</span><div class="ligne-corps">' +
+      "<b>Chacun ouvre son lien</b><small>Il choisit son prénom, son avatar et un code à " +
+      "4 chiffres personnel.</small></div></div>" +
+      "</div>" + local;
   },
 
   /* --- 2. Creation d'une famille --- */
@@ -840,11 +913,12 @@ const Connexion = {
         if (!/^[0-9]{4}$/.test(pin)) { toast("Le code doit faire 4 chiffres"); return; }
         bouton.disabled = true;
 
-        /* En ligne, on ne peut pas vérifier si le repère est libre : lire la
-           famille de quelqu'un d'autre est interdit, et c'est voulu. On tente
-           donc la création, et on explique proprement si elle est refusée. */
-        if (Store.mode === "local" && await Store.charger(code)) {
-          toast("Ce repère est déjà pris, changez-le");
+        /* Vérification honnête : on interroge l'annuaire des repères, qui
+           répond oui ou non. On ne devine plus à partir d'un refus. */
+        const libre = await Store.repereLibre(code);
+        if (libre === false) {
+          ev.target.querySelector('[name="code"]').value = nouveauRepere();
+          toast("Ce repère est déjà utilisé — en voici un autre");
           bouton.disabled = false;
           return;
         }
@@ -871,17 +945,15 @@ const Connexion = {
         if (!cree) {
           bouton.disabled = false;
           const e = Store.derniereErreur;
-          if (e && e.code === "permission-denied") {
-            /* Cause de loin la plus fréquente : une autre famille utilise déjà
-               ce repère. On propose tout de suite un nouveau tirage. */
-            const champCode = ev.target.querySelector('[name="code"]');
-            champCode.value = nouveauRepere();
-            toast("Ce repère est déjà utilisé — en voici un autre");
-          } else {
-            toast("Création impossible : " + ((e && e.message) || "erreur inconnue"));
-          }
+          /* On n'invente plus la cause : on l'affiche, avec les pistes. */
+          ecranPanne(e, "Création impossible",
+            "Firebase a refusé de créer la famille. Les causes possibles : les " +
+            "règles de sécurité ne sont pas publiées dans leur dernière version, " +
+            "ou le domaine du site n'est pas autorisé dans Firebase " +
+            "(Authentication → Paramètres → Domaines autorisés).");
           return;
         }
+        await Store.marquerRepere(code);
         await entrerDansFamille(code, moiId);
         toast("Bienvenue dans votre tribu 🏡");
       };

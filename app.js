@@ -335,6 +335,17 @@ function registreAppareils(membreId) {
   return Object.keys(etat.appareils || {})
     .filter((u) => etat.appareils[u] === membreId).length;
 }
+
+/* Ce profil s'est-il déjà connecté quelque part ?
+   Deux sources à consulter — et c'est important : depuis le passage aux
+   invitations, un appareil qui rejoint s'inscrit dans le registre `appareils`
+   et NON dans le champ `uids` du profil (il n'a pas le droit de réécrire la
+   liste des membres). Ne regarder que `uids` afficherait « en attente
+   d'invitation » sur des gens pourtant bien connectés. */
+function aUnAppareil(m) {
+  if (!m) return false;
+  return !!((m.uids || []).length || registreAppareils(m.id));
+}
 function membresConnectables() { return etat.membres.filter((m) => !m.sansAppareil); }
 
 /* Les tâches en attente des enfants gérés, pour que le parent les coche. */
@@ -372,6 +383,20 @@ function recalculerIndexSur(d) {
     const m = profil(d.appareils[u]);
     if (m) ajoute(u, m.role === "admin");
   });
+
+  /* Filet anti-verrouillage. Un appareil déjà autorisé qu'on n'arrive pas à
+     rattacher à un profil appartient quand même à quelqu'un : le retirer le
+     mettrait dehors sans prévenir. On ne retire donc que les appareils dont
+     le profil a été supprimé, et jamais celui qui est en train d'écrire. */
+  const orphelin = (u) => {
+    const cible = (d.appareils || {})[u];
+    return cible !== undefined && !profil(cible);
+  };
+  (d.membresUid || []).forEach((u) => {
+    if (uids.indexOf(u) === -1 && !orphelin(u)) uids.push(u);
+  });
+  if (Store.uid && uids.indexOf(Store.uid) === -1) uids.push(Store.uid);
+
   d.membresUid = uids;
   d.adminsUid = admins;
   d.bareme = {};
@@ -531,6 +556,31 @@ const Store = {
     }
   },
 
+  /* Petit annuaire des repères déjà pris. Il ne contient QUE la date de
+     création : savoir qu'un repère existe n'ouvre aucun accès. Il sert
+     uniquement à dire honnêtement « ce nom est déjà utilisé » au lieu de le
+     deviner à partir d'un refus, qui peut avoir d'autres causes. */
+  async repereLibre(code) {
+    if (this.mode !== "nuage") return !this._lireLocal(code);
+    try {
+      const d = await this._fs.getDoc(this._fs.doc(this._db, "reperes", code));
+      return !d.exists();
+    } catch (err) {
+      console.warn("Annuaire des repères illisible :", err);
+      return null;                     // on ne sait pas : on tentera quand même
+    }
+  },
+
+  async marquerRepere(code) {
+    if (this.mode !== "nuage") return;
+    try {
+      await this._fs.setDoc(this._fs.doc(this._db, "reperes", code),
+        { creeLe: Date.now() });
+    } catch (err) {
+      console.warn("Repère non enregistré dans l'annuaire :", err);
+    }
+  },
+
   async creer(code, donnees) {
     this.derniereErreur = null;
     if (this.mode !== "nuage") { this._ecrireLocal(code, donnees); return true; }
@@ -590,6 +640,21 @@ const Store = {
     } catch (err) {
       console.warn("Echec de l'enregistrement :", err);
       toast("Enregistrement refusé (droits insuffisants ?)");
+    }
+  },
+
+  /* Retire vraiment des appareils du registre.
+     Indispensable : une ecriture « fusionnee » ajoute ou remplace des cles,
+     mais n'en supprime jamais. Il faut le demander explicitement. */
+  async retirerAppareils(uids) {
+    if (!uids.length) return;
+    if (this.mode !== "nuage") { this._ecrireLocal(this.code, etat); return; }
+    const morceau = { appareils: {} };
+    uids.forEach((u) => { morceau.appareils[u] = this._fs.deleteField(); });
+    try {
+      await this._fs.setDoc(this._fs.doc(this._db, "familles", this.code), morceau, { merge: true });
+    } catch (err) {
+      console.warn("Retrait d'appareil refusé :", err);
     }
   },
 
@@ -1601,6 +1666,15 @@ document.addEventListener("click", (e) => {
     case "membre-nouveau": Formulaires.membre(null); break;
     case "membre-editer": Formulaires.membre(v); break;
     case "inviter": Formulaires.invitation(); break;
+    case "masquer-conseils":
+      localStorage.setItem("tribu:conseilsMasques", "1");
+      rendre();
+      toast("Conseils masqués — ils reviennent depuis Administration");
+      break;
+    case "revoir-conseils":
+      localStorage.removeItem("tribu:conseilsMasques");
+      aller("accueil");
+      break;
     case "menu-profil": Formulaires.menuProfil(); break;
     case "deconnexion": fermerFeuille(); deconnecter(); break;
 
