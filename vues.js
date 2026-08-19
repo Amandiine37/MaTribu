@@ -39,8 +39,13 @@ Vues.accueil = function () {
   const salut = heure < 5 ? "Bonne nuit" : heure < 12 ? "Bonjour" : heure < 18 ? "Bon après-midi" : "Bonsoir";
   const auj = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
-  h.push('<h2 class="titre-section">' + salut + " " + esc(moi.prenom) + " 👋</h2>");
+  h.push('<h2 class="titre-section">' + salut + " " + esc(moi.prenom) +
+    ' 👋<span class="badge-beta">bêta</span></h2>');
   h.push('<p class="aide" style="margin:-.6rem 0 1rem;text-transform:capitalize">' + esc(auj) + "</p>");
+
+  h.push('<div class="bandeau">🧪<div><b>Version d\'essai (' + esc(VERSION) + ').</b> ' +
+    "Des bugs sont possibles et les données pourraient changer de forme. " +
+    '<button class="lien" data-action="retour">Signaler un problème ou proposer une idée</button></div></div>');
 
   if (Store.mode === "local") {
     h.push('<div class="bandeau">⚠️<div><b>Mode hors partage.</b> Les données restent sur cet appareil. ' +
@@ -78,6 +83,25 @@ Vues.accueil = function () {
           "</div>");
       });
       h.push(bloc("✅ À valider", l.join("")));
+    }
+  }
+
+  /* Tâches des enfants sans téléphone : c'est le parent qui coche */
+  if (estAdmin()) {
+    const enfants = tachesDesEnfants();
+    if (enfants.length) {
+      h.push(bloc("🧒 À faire pour les enfants" +
+        ' <span class="etiquette chaud">' + enfants.length + "</span>",
+        enfants.map((x) => {
+          const qui = membre(x.assigne);
+          return '<div class="ligne">' + avatarDe(qui) +
+            '<div class="ligne-corps"><b>' + esc((x.t.emoji || "🧹") + " " + x.t.nom) + "</b><small>" +
+            esc(qui.prenom) + " • +" + x.t.points + " pts • " + libellePeriode(x.t.frequence) + "</small></div>" +
+            '<button class="btn mini principal" data-action="tache-fait" data-id="' + x.t.id + '">C\'est fait</button>' +
+            "</div>";
+        }).join("") +
+        '<p class="aide" style="margin-top:.6rem">Cocher ici vaut validation : les points sont ' +
+        "crédités tout de suite à l'enfant.</p>"));
     }
   }
 
@@ -221,9 +245,31 @@ Vues.taches = function () {
 
 Vues.courses = function () {
   const h = [];
-  h.push('<form id="form-course-rapide" style="display:flex;gap:.5rem;margin:.2rem 0 1rem">' +
+  const surStock = ui.ongletCourses === "stock";
+  const bas = stockSousMinimum().length;
+
+  h.push('<div class="puces" style="margin:.2rem 0 1rem">' +
+    '<button class="puce ' + (!surStock ? "on" : "") + '" data-action="courses-onglet" data-valeur="liste">' +
+    "🛒 Liste de courses</button>" +
+    '<button class="puce ' + (surStock ? "on" : "") + '" data-action="courses-onglet" data-valeur="stock">' +
+    "🥫 Ma réserve" + (bas ? " · " + bas : "") + "</button></div>");
+
+  return h.join("") + (surStock ? vueReserve() : vueListeCourses());
+};
+
+/* ---------------------------- la liste de courses ---------------------------- */
+
+function vueListeCourses() {
+  const h = [];
+  h.push('<form id="form-course-rapide" style="display:flex;gap:.5rem;margin:0 0 1rem">' +
     '<input type="text" id="champ-course" placeholder="Ajouter un article…" autocomplete="off">' +
     '<button class="btn principal" type="submit" style="flex-shrink:0">Ajouter</button></form>');
+
+  const bas = stockSousMinimum();
+  if (bas.length) {
+    h.push('<div class="bandeau">🥫<div><b>' + bas.length + " article(s) sous le minimum</b> dans votre réserve. " +
+      '<button class="lien" data-action="stock-racheter">Les ajouter à la liste</button></div></div>');
+  }
 
   const actifs = etat.courses.filter((c) => !c.coche);
   const coches = etat.courses.filter((c) => c.coche);
@@ -240,7 +286,7 @@ Vues.courses = function () {
   ordre.forEach((r) => {
     const l = parRayon[r];
     if (!l || !l.length) return;
-    h.push('<div class="sous-titre"><h3>' + esc(r) + "</h3><span class=\"etiquette\">" + l.length + "</span></div>");
+    h.push('<div class="sous-titre"><h3>' + esc(r) + '</h3><span class="etiquette">' + l.length + "</span></div>");
     h.push('<div class="carte">' + l.map(ligneCourse).join("") + "</div>");
   });
 
@@ -250,14 +296,64 @@ Vues.courses = function () {
     h.push('<div class="carte">' + coches.map(ligneCourse).join("") + "</div>");
   }
   return h.join("");
-};
+}
 
 function ligneCourse(c) {
+  const q = formaterQte(c.qte, c.unite);
   return '<div class="ligne' + (c.coche ? " fait" : "") + '">' +
     '<button class="coche' + (c.coche ? " on" : "") + '" data-action="course-toggle" data-id="' + c.id + '">✓</button>' +
     '<div class="ligne-corps"><b>' + esc(c.nom) + "</b>" +
-    (c.qte ? "<small>" + esc(c.qte) + "</small>" : "") + "</div>" +
+    (q ? "<small>" + esc(q) + "</small>" : "") + "</div>" +
+    '<button class="btn mini" data-action="course-editer" data-id="' + c.id + '">✏️</button>' +
     '<button class="btn mini" data-action="course-suppr" data-id="' + c.id + '">🗑️</button></div>';
+}
+
+/* ------------------------------- la réserve ------------------------------- */
+
+function vueReserve() {
+  const h = [];
+  if (!etat.stock.length) {
+    h.push(rienDu("🥫",
+      "Votre réserve est vide.<br>Appuyez sur <b>+</b> pour y mettre ce que vous gardez " +
+      "en permanence : pâtes, conserves, farine, lessive…<br><br>" +
+      "Indiquez une <b>quantité minimum</b> et l'application vous préviendra quand il faut racheter."));
+    return h.join("");
+  }
+
+  const bas = stockSousMinimum();
+  if (bas.length) {
+    h.push('<div class="bandeau">⚠️<div><b>À racheter : ' + esc(bas.map((s) => s.nom).join(", ")) + "</b>" +
+      '<br><button class="lien" data-action="stock-racheter">Ajouter à la liste de courses</button></div></div>');
+  } else {
+    h.push('<div class="bandeau info">✅<div>Tout est au-dessus du minimum.</div></div>');
+  }
+
+  const parRayon = {};
+  etat.stock.forEach((s) => { (parRayon[s.rayon] = parRayon[s.rayon] || []).push(s); });
+  const ordre = RAYONS.concat(Object.keys(parRayon).filter((r) => !RAYONS.includes(r)));
+
+  ordre.forEach((r) => {
+    const l = parRayon[r];
+    if (!l || !l.length) return;
+    h.push('<div class="sous-titre"><h3>' + esc(r) + '</h3><span class="etiquette">' + l.length + "</span></div>");
+    h.push('<div class="carte">' + l.sort((a, b) => a.nom.localeCompare(b.nom)).map(ligneStock).join("") + "</div>");
+  });
+  return h.join("");
+}
+
+function ligneStock(s) {
+  const mini = nombre(s.mini);
+  const q = nombre(s.qte);
+  const manque = mini !== null && mini > 0 && (q === null || q < mini);
+  return '<div class="ligne">' +
+    '<div class="ligne-corps"><b>' + esc(s.nom) + "</b><small>" +
+    esc(formaterQte(s.qte, s.unite) || "0") +
+    (mini !== null && mini > 0 ? " • minimum " + esc(formaterQte(s.mini, s.unite)) : "") + "</small>" +
+    (manque ? '<span class="etiquettes"><span class="etiquette rouge">à racheter</span></span>' : "") +
+    "</div>" +
+    '<button class="btn mini" data-action="stock-moins" data-id="' + s.id + '">−</button>' +
+    '<button class="btn mini" data-action="stock-plus" data-id="' + s.id + '">+</button>' +
+    '<button class="btn mini" data-action="stock-editer" data-id="' + s.id + '">✏️</button></div>';
 }
 
 /* ================================ MENUS ================================ */
@@ -463,8 +559,11 @@ Vues.points = function () {
   h.push('<div class="sous-titre"><h3>Classement</h3></div>');
   h.push('<div class="carte">' + classement().map((x, i) =>
     '<div class="ligne"><span class="rang' + (i === 0 ? " or" : "") + '">' + (i + 1) + "</span>" +
-    avatarDe(x.m) + '<div class="ligne-corps"><b>' + esc(x.m.prenom) + "</b></div>" +
+    avatarDe(x.m) + '<div class="ligne-corps"><b>' + esc(x.m.prenom) + "</b>" +
+    (x.m.sansAppareil ? "<small>profil géré par les parents</small>" : "") + "</div>" +
     '<span class="etiquette or">' + x.pts + " pts</span>" +
+    (estAdmin() && x.m.sansAppareil
+      ? '<button class="btn mini or" data-action="cadeau-pour" data-id="' + x.m.id + '">🎁</button>' : "") +
     (estAdmin() ? '<button class="btn mini" data-action="points-ajuster" data-id="' + x.m.id + '">±</button>' : "") +
     "</div>").join("") + "</div>");
 
@@ -486,7 +585,11 @@ Vues.admin = function () {
     etat.membres.map((m) =>
       '<div class="ligne">' + avatarDe(m) +
       '<div class="ligne-corps"><b>' + esc(m.prenom) + "</b><small>" +
-      (m.role === "admin" ? "Administrateur" : "Membre") + " • " + pointsDe(m.id) + " pts</small></div>" +
+      (m.sansAppareil ? "Géré par les parents" : m.role === "admin" ? "Administrateur" : "Membre") +
+      " • " + pointsDe(m.id) + " pts" +
+      (!m.sansAppareil && !(m.uids || []).length ? " • en attente d'invitation" : "") + "</small>" +
+      (m.sansAppareil ? '<span class="etiquettes"><span class="etiquette">🧒 sans téléphone</span></span>' : "") +
+      "</div>" +
       '<button class="btn mini" data-action="membre-editer" data-id="' + m.id + '">✏️</button></div>').join(""),
     "Ajouter", "membre-nouveau"));
 
@@ -553,7 +656,8 @@ const Connexion = {
   },
 
   entete(sousTitre) {
-    return '<div class="logo-tribu">🏡</div><h1>Tribu</h1>' +
+    return '<div class="logo-tribu">🏡</div>' +
+      '<h1>Tribu<span class="badge-beta">bêta</span></h1>' +
       '<p class="intro">' + sousTitre + "</p>";
   },
 
@@ -615,7 +719,9 @@ const Connexion = {
 
   /* --- 4. Choix du profil --- */
   profils(d) {
-    const membres = (d.donnees && d.donnees.membres) || [];
+    /* Les profils gérés (enfants sans téléphone) ne se connectent pas :
+       on ne les propose donc pas à la connexion. */
+    const membres = ((d.donnees && d.donnees.membres) || []).filter((m) => !m.sansAppareil);
     return this.entete("Bienvenue chez <b>" + esc(d.donnees.famille.nom) + "</b>.<br>Qui êtes-vous ?") +
       '<div class="grille-profils">' + membres.map((m) =>
         '<button class="profil-carte" data-membre="' + m.id + '">' +

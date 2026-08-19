@@ -51,6 +51,19 @@ service cloud.firestore {
         && invitation(jeton).expireLe > request.time.toMillis();
     }
 
+    // ---------- retours des utilisateurs (bugs, idees) ----------
+    // Chacun peut en deposer un, personne ne peut les relire depuis l'appli :
+    // ils se consultent dans la console Firebase.
+
+    match /retours/{ligne} {
+      allow read: if false;
+      allow create: if request.auth != null
+                    && request.resource.data.titre is string
+                    && request.resource.data.titre.size() <= 200
+                    && request.resource.data.detail.size() <= 2000;
+      allow update, delete: if false;
+    }
+
     // ---------- invitations ----------
     // Le jeton fait 48 caracteres aleatoires : le connaitre vaut autorisation.
     // On ne peut jamais LISTER les invitations, seulement en ouvrir une precise.
@@ -77,7 +90,7 @@ service cloud.firestore {
       function rubriquesLibres() {
         // ce qu'un membre ordinaire a le droit de modifier
         return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['courses', 'repas', 'notes', 'recettes', 'echanges']);
+          .hasOnly(['courses', 'stock', 'repas', 'notes', 'recettes', 'echanges']);
       }
 
       function sInscritAvecInvitation() {

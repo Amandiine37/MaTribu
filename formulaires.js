@@ -47,6 +47,11 @@ function selectRayon(valeur) {
   return '<select name="rayon">' + RAYONS.map((r) =>
     '<option value="' + esc(r) + '"' + (r === valeur ? " selected" : "") + ">" + esc(r) + "</option>").join("") + "</select>";
 }
+function selectUnite(valeur, nom) {
+  return '<select name="' + (nom || "unite") + '">' + UNITES.map((u) =>
+    '<option value="' + esc(u) + '"' + (u === (valeur || "") ? " selected" : "") + ">" +
+    (u || "— sans —") + "</option>").join("") + "</select>";
+}
 function boutonsFormulaire(labelOk, avecSuppression) {
   return '<div class="rangee-btn" style="margin-top:1.2rem">' +
     (avecSuppression ? '<button type="button" class="btn danger" data-role="suppr">Supprimer</button>' : "") +
@@ -119,7 +124,7 @@ Formulaires.tache = function (tid) {
 
     f.onsubmit = (ev) => {
       ev.preventDefault();
-      const d = new FormData(f);
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
       const freq = valeursMulti(f, "freq")[0] || "semaine";
       const part = valeursMulti(f, "part");
       if (!part.length) { toast("Choisissez au moins une personne"); return; }
@@ -153,22 +158,169 @@ Formulaires.tache = function (tid) {
 
 /* ================================ COURSE ================================ */
 
-Formulaires.course = function () {
+Formulaires.course = function (cid) {
+  const c = cid ? etat.courses.find((x) => x.id === cid) : null;
+  const cour = c || { nom: "", qte: "", unite: "", rayon: "Épicerie" };
+
   const html = '<form id="f-course">' +
     '<label class="champ"><span>Article</span>' +
-    '<input type="text" name="nom" required maxlength="40" placeholder="Lait"></label>' +
-    '<div class="duo"><label class="champ"><span>Quantité (facultatif)</span>' +
-    '<input type="text" name="qte" maxlength="20" placeholder="2 briques"></label>' +
-    '<label class="champ"><span>Rayon</span>' + selectRayon("Épicerie") + "</label></div>" +
-    boutonsFormulaire("Ajouter") + "</form>";
+    '<input type="text" name="nom" value="' + esc(cour.nom) + '" required maxlength="40" placeholder="Lait"></label>' +
+    '<div class="duo"><label class="champ"><span>Quantité</span>' +
+    '<input type="text" name="qte" value="' + esc(cour.qte) + '" maxlength="10" inputmode="decimal" placeholder="2"></label>' +
+    '<label class="champ"><span>Unité</span>' + selectUnite(cour.unite) + "</label></div>" +
+    '<label class="champ"><span>Rayon</span>' + selectRayon(cour.rayon) + "</label>" +
+    boutonsFormulaire(c ? "Enregistrer" : "Ajouter", !!c) + "</form>";
 
-  ouvrirFeuille("Ajouter aux courses", html, (f) => {
-    f.querySelector('[name="nom"]').focus();
+  ouvrirFeuille(c ? "Modifier l'article" : "Ajouter aux courses", html, (f) => {
+    if (!c) f.querySelector('[name="nom"]').focus();
+    const bs = f.querySelector('[data-role="suppr"]');
+    if (bs) bs.onclick = () => { fermerFeuille(); Actions.supprimerCourse(c.id); };
     f.onsubmit = (ev) => {
       ev.preventDefault();
-      const d = new FormData(f);
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
       fermerFeuille();
-      Actions.ajouterCourse(String(d.get("nom")), String(d.get("rayon")), String(d.get("qte")));
+      if (c) {
+        c.nom = String(d.get("nom")).trim();
+        c.qte = String(d.get("qte")).trim();
+        c.unite = String(d.get("unite"));
+        c.rayon = String(d.get("rayon"));
+        sauver("courses");
+        toast("Article modifié");
+      } else {
+        Actions.ajouterCourse(String(d.get("nom")), String(d.get("rayon")),
+          String(d.get("qte")), String(d.get("unite")));
+      }
+    };
+  });
+};
+
+/* ================================ RÉSERVE ================================ */
+
+Formulaires.stock = function (sid) {
+  const s = sid ? etat.stock.find((x) => x.id === sid) : null;
+  const cour = s || { nom: "", qte: "", unite: "", mini: "", rayon: "Épicerie" };
+
+  const html = '<form id="f-stock">' +
+    '<label class="champ"><span>Article</span>' +
+    '<input type="text" name="nom" value="' + esc(cour.nom) + '" required maxlength="40" ' +
+    'placeholder="Pâtes, tomates pelées, lessive…"></label>' +
+    '<div class="duo"><label class="champ"><span>J\'en ai</span>' +
+    '<input type="text" name="qte" value="' + esc(cour.qte) + '" maxlength="10" inputmode="decimal" placeholder="3"></label>' +
+    '<label class="champ"><span>Unité</span>' + selectUnite(cour.unite) + "</label></div>" +
+    '<label class="champ"><span>Quantité minimum avant de racheter</span>' +
+    '<input type="text" name="mini" value="' + esc(cour.mini) + '" maxlength="10" inputmode="decimal" placeholder="2"></label>' +
+    '<p class="aide" style="margin:-.5rem 0 1rem">Laissez vide si vous ne voulez pas être prévenue. ' +
+    "Sinon, dès que la quantité passe en dessous, l'article vous est proposé dans les courses.</p>" +
+    '<label class="champ"><span>Rayon</span>' + selectRayon(cour.rayon) + "</label>" +
+    boutonsFormulaire(s ? "Enregistrer" : "Ajouter à la réserve", !!s) + "</form>";
+
+  ouvrirFeuille(s ? "Modifier " + s.nom : "Nouvel article de réserve", html, (f) => {
+    if (!s) f.querySelector('[name="nom"]').focus();
+    const bs = f.querySelector('[data-role="suppr"]');
+    if (bs) bs.onclick = async () => {
+      const ok = await confirmer("Retirer « " + s.nom + " » de la réserve ?",
+        { titre: "Supprimer", ok: "Retirer", danger: true });
+      if (!ok) return;
+      fermerFeuille();
+      Actions.supprimerStock(s.id);
+      toast("Retiré de la réserve");
+    };
+    f.onsubmit = (ev) => {
+      ev.preventDefault();
+      const d = new FormData(ev.target);
+      fermerFeuille();
+      Actions.enregistrerStock({
+        nom: String(d.get("nom")).trim(),
+        qte: String(d.get("qte")).trim(),
+        unite: String(d.get("unite")),
+        mini: String(d.get("mini")).trim(),
+        rayon: String(d.get("rayon"))
+      }, s ? s.id : null);
+      toast(s ? "Réserve mise à jour" : "Ajouté à la réserve 🥫");
+    };
+  });
+};
+
+/* Vider le panier, en proposant de rentrer les achats dans la réserve. */
+Formulaires.viderCourses = function () {
+  const achetes = etat.courses.filter((c) => c.coche);
+  if (!achetes.length) { toast("Aucun article coché"); return; }
+  const connus = achetes.filter((c) => articleStock(c.nom)).length;
+
+  const html = '<div id="f-vider">' +
+    '<p style="margin:.2rem 0 1rem;line-height:1.5;font-size:.92rem">Retirer les ' +
+    achetes.length + " article(s) coché(s) de la liste ?</p>" +
+    (connus
+      ? '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
+      '<input type="checkbox" id="case-stock" checked style="width:auto;margin-top:.2rem">' +
+      '<span style="margin:0">Ajouter à ma réserve<br><small style="font-weight:400">' +
+      connus + " de ces articles sont dans votre réserve : leurs quantités seront " +
+      "augmentées de ce que vous venez d'acheter.</small></span></label>"
+      : "") +
+    '<div class="rangee-btn" style="margin-top:1rem">' +
+    '<button class="btn" data-action="fermer">Annuler</button>' +
+    '<button class="btn principal" data-role="ok">Retirer</button></div></div>';
+
+  ouvrirFeuille("Nettoyer la liste", html, (f) => {
+    f.querySelector('[data-role="ok"]').onclick = () => {
+      const c = f.querySelector("#case-stock");
+      fermerFeuille();
+      Actions.viderCoches(!!(c && c.checked));
+    };
+  });
+};
+
+/* ============================ SIGNALER / PROPOSER ============================ */
+
+Formulaires.retour = function () {
+  const html = '<form id="f-retour">' +
+    '<p class="aide" style="margin-bottom:1rem">L\'application est en version <b>bêta</b> : ' +
+    "vos remarques servent vraiment. Décrivez ce qui s'est passé ou ce que vous aimeriez.</p>" +
+    '<label class="champ"><span>De quoi s\'agit-il ?</span></label>' +
+    puceMultiple("genre", [
+      { val: "bug", html: "🐞 Un problème" },
+      { val: "idee", html: "💡 Une idée" },
+      { val: "autre", html: "💬 Autre" }], ["bug"]) +
+    '<label class="champ"><span>En une phrase</span>' +
+    '<input type="text" name="titre" required maxlength="80" ' +
+    'placeholder="Le bouton Valider ne fait rien"></label>' +
+    '<label class="champ"><span>Détails (que faisiez-vous ? qu\'attendiez-vous ?)</span>' +
+    '<textarea name="detail" maxlength="1500" required ' +
+    'placeholder="J\'étais dans l\'onglet Tâches, j\'ai appuyé sur…"></textarea></label>' +
+    '<p class="aide">Sont joints automatiquement : votre prénom, le nom de la tribu, ' +
+    "la version de l'application et le type de téléphone. Rien d'autre.</p>" +
+    '<div class="rangee-btn" style="margin-top:1.2rem">' +
+    '<button type="button" class="btn" data-action="fermer">Annuler</button>' +
+    '<button type="submit" class="btn principal">Envoyer</button></div></form>';
+
+  ouvrirFeuille("Signaler ou proposer", html, (f) => {
+    brancherMulti(f, "genre", true);
+    f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const bouton = ev.target.querySelector('button[type="submit"]');
+      bouton.disabled = true;
+      const d = new FormData(ev.target);
+      const retour = {
+        id: id(),
+        genre: valeursMulti(f, "genre")[0] || "autre",
+        titre: String(d.get("titre")).trim(),
+        detail: String(d.get("detail")).trim(),
+        deQui: moi ? moi.prenom : "?",
+        famille: etat.famille.code || "?",
+        nomFamille: etat.famille.nom || "",
+        version: VERSION,
+        appareil: navigator.userAgent.slice(0, 200),
+        envoyeLe: new Date().toISOString()
+      };
+      const ok = await Store.envoyerRetour(retour);
+      fermerFeuille();
+      if (ok && Store.mode === "nuage") {
+        toast("Merci ! Votre message est parti 💌");
+      } else if (ok) {
+        toast("Enregistré sur cet appareil (pas de connexion au partage)");
+      } else {
+        toast("Envoi impossible — réessayez plus tard");
+      }
     };
   });
 };
@@ -253,7 +405,7 @@ Formulaires.generateur = function () {
   ouvrirFeuille("Générer les menus de la semaine", html, (f) => {
     f.onsubmit = (ev) => {
       ev.preventDefault();
-      const d = new FormData(f);
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
       fermerFeuille();
       const n = genererMenus(ui.semaine, {
         midi: !!d.get("midi"), soir: !!d.get("soir"), remplacer: !!d.get("remplacer"),
@@ -267,6 +419,8 @@ Formulaires.generateur = function () {
 
 /* ================================ INGREDIENTS -> COURSES ================================ */
 
+/* Les ingrédients de la semaine, moins ce que vous avez déjà en réserve.
+   C'est le lien entre les menus et le stock. */
 Formulaires.ingredientsVersCourses = function () {
   const ing = ingredientsDeLaSemaine(ui.semaine);
   if (!ing.length) {
@@ -275,19 +429,54 @@ Formulaires.ingredientsVersCourses = function () {
   }
   const dejaLa = new Set(etat.courses.filter((c) => !c.coche).map((c) => c.nom.toLowerCase().trim()));
 
-  let html = '<div id="f-ing"><p class="aide" style="margin-bottom:.8rem">Décochez ce que vous avez déjà.</p>';
+  /* Pour chaque ingrédient : besoin, stock, reste à acheter. */
+  const lignes = ing.map((i) => {
+    const m = manquePour(i.nom, i.qte, i.unite);
+    return {
+      nom: i.nom, rayon: i.rayon, unite: i.unite,
+      besoin: i.besoinTexte,
+      enStock: m.enStock,
+      manque: m.manque,
+      connu: m.connu,
+      couvert: m.connu && m.manque !== null && m.manque <= 0,
+      dejaListe: dejaLa.has(i.nom.toLowerCase().trim())
+    };
+  });
+
+  const couverts = lignes.filter((l) => l.couvert).length;
+  const aCocher = (l) => !l.couvert && !l.dejaListe;
+
+  let html = '<div id="f-ing">' +
+    '<p class="aide" style="margin-bottom:.8rem">Les quantités tiennent compte de votre réserve. ' +
+    "Décochez ce que vous ne voulez pas acheter.</p>";
+
+  if (couverts) {
+    html += '<div class="bandeau info">🥫<div><b>' + couverts + " ingrédient(s)</b> sont déjà " +
+      "couverts par votre réserve : ils sont décochés.</div></div>";
+  }
+
   let rayonCourant = "";
-  ing.forEach((i, k) => {
-    if (i.rayon !== rayonCourant) {
-      rayonCourant = i.rayon;
+  lignes.forEach((l, k) => {
+    if (l.rayon !== rayonCourant) {
+      rayonCourant = l.rayon;
       html += '<div class="sous-titre" style="margin:.9rem 0 .3rem"><h3>' + esc(rayonCourant) + "</h3></div>";
     }
-    const dedans = dejaLa.has(i.nom.toLowerCase().trim());
+    const details = [];
+    details.push("besoin " + esc(l.besoin || "?"));
+    if (l.enStock !== null) details.push("en réserve " + esc(l.enStock));
+    if (l.couvert) details.push("✅ rien à acheter");
+    else if (l.connu && l.manque !== null && l.enStock !== null) {
+      details.push("<b>à acheter " + esc(formaterQte(l.manque, l.unite)) + "</b>");
+    }
+    if (l.dejaListe) details.push("déjà dans la liste");
+    if (!l.connu) details.push("⚠️ unités différentes, à vérifier");
+
     html += '<label class="ligne" style="cursor:pointer">' +
-      '<input type="checkbox" data-k="' + k + '" style="width:auto"' + (dedans ? "" : " checked") + ">" +
-      '<span class="ligne-corps"><b>' + esc(i.nom) + "</b><small>" +
-      esc(i.qte || "") + (dedans ? " • déjà dans la liste" : "") + "</small></span></label>";
+      '<input type="checkbox" data-k="' + k + '" style="width:auto"' + (aCocher(l) ? " checked" : "") + ">" +
+      '<span class="ligne-corps"><b>' + esc(l.nom) + "</b><small>" +
+      details.join(" • ") + "</small></span></label>";
   });
+
   html += '<div class="rangee-btn" style="margin-top:1.2rem">' +
     '<button class="btn" data-action="fermer">Annuler</button>' +
     '<button class="btn principal" data-role="ok">Ajouter aux courses</button></div></div>';
@@ -295,13 +484,18 @@ Formulaires.ingredientsVersCourses = function () {
   ouvrirFeuille("Ingrédients de la semaine", html, (f) => {
     f.querySelector('[data-role="ok"]').onclick = () => {
       const choisis = Array.from(f.querySelectorAll('input[type="checkbox"]:checked'))
-        .map((c) => ing[Number(c.dataset.k)]);
+        .map((c) => lignes[Number(c.dataset.k)]);
       fermerFeuille();
       if (!choisis.length) return;
-      choisis.reverse().forEach((i) => {
+      choisis.slice().reverse().forEach((l) => {
+        /* On achète ce qui manque vraiment ; si le calcul est impossible,
+           on reprend le besoin complet plutôt que d'inventer un chiffre. */
+        const qte = (l.connu && l.manque !== null && l.enStock !== null)
+          ? texteNombre(l.manque)
+          : (nombre(l.besoin) !== null ? texteNombre(nombre(l.besoin)) : l.besoin);
         etat.courses.unshift({
-          id: id(), nom: i.nom, qte: i.qte, rayon: i.rayon, coche: false,
-          parQui: moi && moi.id, creeLe: new Date().toISOString()
+          id: id(), nom: l.nom, qte: qte, unite: l.unite, rayon: l.rayon,
+          coche: false, parQui: moi && moi.id, creeLe: new Date().toISOString()
         });
       });
       sauver("courses");
@@ -318,11 +512,16 @@ Formulaires.recette = function (rid) {
   const ings = (cour.ingredients || []).slice();
 
   const ligneIng = (i, k) =>
-    '<div class="duo" data-ing="' + k + '" style="margin-bottom:.5rem;align-items:flex-start">' +
-    '<input type="text" data-c="nom" value="' + esc(i.nom || "") + '" placeholder="Ingrédient" style="flex:2">' +
-    '<input type="text" data-c="qte" value="' + esc(i.qte || "") + '" placeholder="Quantité" style="flex:1">' +
-    "<span style=\"flex:1.4\">" + selectRayon(i.rayon || "Épicerie") + "</span>" +
-    '<button type="button" class="btn mini" data-role="suppr-ing" style="flex:0 0 auto">🗑️</button></div>';
+    '<div data-ing="' + k + '" style="margin-bottom:.7rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)">' +
+    '<div style="display:flex;gap:.5rem;margin-bottom:.4rem">' +
+    '<input type="text" data-c="nom" value="' + esc(i.nom || "") + '" placeholder="Ingrédient" style="flex:1">' +
+    '<button type="button" class="btn mini" data-role="suppr-ing" style="flex:0 0 auto">🗑️</button></div>' +
+    '<div class="duo">' +
+    '<input type="text" data-c="qte" value="' + esc(i.qte || "") + '" placeholder="Quantité" ' +
+    'inputmode="decimal" maxlength="10" style="flex:.8">' +
+    '<span style="flex:1.1">' + selectUnite(i.unite, "unite-ing") + "</span>" +
+    '<span style="flex:1.4">' + selectRayon(i.rayon || "Épicerie") + "</span>" +
+    "</div></div>";
 
   const html = '<form id="f-recette">' +
     '<label class="champ"><span>Nom du plat</span>' +
@@ -377,11 +576,12 @@ Formulaires.recette = function (rid) {
 
     f.onsubmit = (ev) => {
       ev.preventDefault();
-      const d = new FormData(f);
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
       const liste = Array.from(zone.querySelectorAll("[data-ing]")).map((row) => ({
         nom: row.querySelector('[data-c="nom"]').value.trim(),
         qte: row.querySelector('[data-c="qte"]').value.trim(),
-        rayon: row.querySelector("select").value
+        unite: row.querySelector('[name="unite-ing"]').value,
+        rayon: row.querySelector('[name="rayon"]').value
       })).filter((i) => i.nom);
 
       const donnees = {
@@ -440,7 +640,7 @@ Formulaires.note = function (nid) {
     };
     f.onsubmit = (ev) => {
       ev.preventDefault();
-      const d = new FormData(f);
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
       const donnees = {
         titre: String(d.get("titre")).trim(),
         date: String(d.get("date") || ""),
@@ -491,7 +691,7 @@ Formulaires.cadeau = function (cid) {
     };
     f.onsubmit = (ev) => {
       ev.preventDefault();
-      const d = new FormData(f);
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
       const donnees = {
         nom: String(d.get("nom")).trim(), emoji: emojiChoisi(f, "🎁"),
         cout: Number(d.get("cout")) || 1, actif: !d.get("retire")
@@ -517,6 +717,15 @@ Formulaires.membre = function (mid) {
     '<label class="champ"><span>Prénom</span>' +
     '<input type="text" name="prenom" value="' + esc(cour.prenom || "") + '" required maxlength="20"></label>' +
     '<label class="champ"><span>Avatar</span></label>' + grilleEmojis(EMOJIS_MEMBRES, cour.emoji) +
+
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
+    '<input type="checkbox" name="sansAppareil" id="case-sans-appareil" style="width:auto;margin-top:.2rem"' +
+    (cour.sansAppareil ? " checked" : "") + ">" +
+    '<span style="margin:0">Pas de téléphone<br><small style="font-weight:400">Profil géré par les parents. ' +
+    "L'enfant a ses tâches, ses points et ses cadeaux, mais ne se connecte pas : " +
+    "c'est vous qui cochez pour lui.</small></span></label>" +
+
+    '<div id="bloc-connexion">' +
     '<label class="champ"><span>Rôle</span></label>' +
     puceMultiple("role", [
       { val: "membre", html: "Membre" },
@@ -524,13 +733,22 @@ Formulaires.membre = function (mid) {
     '<p class="aide" style="margin:-.6rem 0 1rem">Un administrateur valide les tâches, accorde les cadeaux ' +
     "et gère les réglages de la famille.</p>" +
     '<label class="champ"><span>Code à 4 chiffres' + (m ? " (laisser vide pour ne pas changer)" : "") + "</span>" +
-    '<input type="tel" name="pin" inputmode="numeric" maxlength="4" placeholder="' + (m ? "••••" : "1234") + '"' +
-    (m ? "" : " required") + "></label>" +
+    '<input type="tel" name="pin" inputmode="numeric" maxlength="4" placeholder="' + (m ? "••••" : "1234") + '">' +
+    "</label></div>" +
+
     boutonsFormulaire(m ? "Enregistrer" : "Ajouter", !!m && etat.membres.length > 1) + "</form>";
 
   ouvrirFeuille(m ? "Modifier " + m.prenom : "Nouveau membre", html, (f) => {
     brancherEmojis(f);
     brancherMulti(f, "role", true);
+
+    /* Un profil sans téléphone n'a besoin ni de rôle ni de code. */
+    const caseSans = f.querySelector("#case-sans-appareil");
+    const blocConnexion = f.querySelector("#bloc-connexion");
+    const majBloc = () => { blocConnexion.hidden = caseSans.checked; };
+    caseSans.onchange = majBloc;
+    majBloc();
+
     const bs = f.querySelector('[data-role="suppr"]');
     if (bs) bs.onclick = async () => {
       if (m.id === moi.id) { toast("Vous ne pouvez pas vous supprimer vous-même"); return; }
@@ -547,30 +765,42 @@ Formulaires.membre = function (mid) {
     };
     f.onsubmit = async (ev) => {
       ev.preventDefault();
-      const d = new FormData(f);
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
+      const sansAppareil = !!d.get("sansAppareil");
       const pin = String(d.get("pin") || "").trim();
-      if (pin && !/^[0-9]{4}$/.test(pin)) { toast("Le code doit faire 4 chiffres"); return; }
-      const role = valeursMulti(f, "role")[0] || "membre";
+      if (!sansAppareil && pin && !/^[0-9]{4}$/.test(pin)) {
+        toast("Le code doit faire 4 chiffres"); return;
+      }
+      const role = sansAppareil ? "membre" : (valeursMulti(f, "role")[0] || "membre");
       if (m && m.role === "admin" && role !== "admin" && nbAdmins <= 1) {
         toast("Il faut au moins un administrateur"); return;
       }
+      if (sansAppareil && m && (m.uids || []).length) {
+        toast("Retirez d'abord ses appareils : ce profil est déjà connecté quelque part");
+        return;
+      }
+
       if (m) {
         m.prenom = String(d.get("prenom")).trim();
         m.emoji = emojiChoisi(f, "😀");
         m.role = role;
-        if (pin) Object.assign(m, await champsPin(pin));
+        m.sansAppareil = sansAppareil;
+        if (!sansAppareil && pin) Object.assign(m, await champsPin(pin));
+        if (sansAppareil) { m.pin = null; m.pinHash = null; m.pinSel = null; }
       } else {
-        if (!pin) { toast("Choisissez un code à 4 chiffres"); return; }
-        /* Le nouveau membre n'a encore aucun appareil : il en obtiendra un
-           en ouvrant l'invitation que vous allez lui envoyer. */
-        etat.membres.push(Object.assign({
+        if (!sansAppareil && !pin) { toast("Choisissez un code à 4 chiffres"); return; }
+        const nouveau = {
           id: id(), prenom: String(d.get("prenom")).trim(), emoji: emojiChoisi(f, "😀"),
-          role: role, uids: [], creeLe: new Date().toISOString()
-        }, await champsPin(pin)));
+          role: role, uids: [], sansAppareil: sansAppareil, creeLe: new Date().toISOString()
+        };
+        if (!sansAppareil) Object.assign(nouveau, await champsPin(pin));
+        etat.membres.push(nouveau);
       }
+
       fermerFeuille();
       sauver("membres");
-      if (!m) Formulaires.invitation();
+      if (!m && !sansAppareil) Formulaires.invitation();     // il lui faut un accès
+      else if (!m) toast("Profil créé — à vous de cocher ses tâches 🧒");
       else toast("Profil enregistré");
     };
   });
@@ -637,6 +867,40 @@ Formulaires.invitation = function () {
   });
 };
 
+/* ================ BOUTIQUE POUR UN ENFANT SANS TÉLÉPHONE ================ */
+
+Formulaires.cadeauPour = function (mid) {
+  if (!estAdmin()) return;
+  const m = membre(mid);
+  if (!m) return;
+  const pts = pointsDe(mid);
+  const dispo = etat.cadeaux.filter((c) => c.actif !== false).sort((a, b) => a.cout - b.cout);
+
+  const html = '<div id="f-cadeau-pour">' +
+    '<p class="aide" style="margin-bottom:1rem">' + esc(m.prenom) + " a <b>" + pts + " points</b>. " +
+    "Choisissez ce qu'il ou elle souhaite échanger.</p>" +
+    (dispo.length
+      ? '<div class="grille-cadeaux">' + dispo.map((c) => {
+        const assez = pts >= c.cout;
+        return '<div class="cadeau"><span class="em">' + esc(c.emoji || "🎁") + "</span>" +
+          "<b>" + esc(c.nom) + "</b>" +
+          '<span class="etiquette or">' + c.cout + " pts</span>" +
+          '<button class="btn mini ' + (assez ? "principal" : "") + '" data-cadeau="' + c.id + '"' +
+          (assez ? "" : " disabled") + ">" + (assez ? "Échanger" : "Trop cher") + "</button></div>";
+      }).join("") + "</div>"
+      : '<p class="aide">Aucun cadeau dans la boutique.</p>') +
+    '<button class="btn plein" data-action="fermer" style="margin-top:1rem">Fermer</button></div>';
+
+  ouvrirFeuille("Cadeaux de " + m.prenom, html, (f) => {
+    f.onclick = (ev) => {
+      const b = ev.target.closest("[data-cadeau]");
+      if (!b) return;
+      fermerFeuille();
+      Actions.accorderCadeauPour(mid, b.dataset.cadeau);
+    };
+  });
+};
+
 /* ================================ POINTS ================================ */
 
 Formulaires.ajustementPoints = function (mid) {
@@ -665,7 +929,7 @@ Formulaires.ajustementPoints = function (mid) {
     };
     f.onsubmit = (ev) => {
       ev.preventDefault();
-      const d = new FormData(f);
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
       const delta = Number(d.get("delta"));
       if (!delta) { fermerFeuille(); return; }
       fermerFeuille();
@@ -715,6 +979,10 @@ Formulaires.menuProfil = function () {
     '<button class="btn plein" data-action="theme" style="margin-bottom:.5rem">🌓 Thème : ' + nomTheme + "</button>" +
     '<button class="btn plein" data-role="mon-profil" style="margin-bottom:.5rem">✏️ Modifier mon profil</button>' +
     "<hr class=\"sep\">" +
+    '<button class="btn plein doux" data-action="retour" style="margin-bottom:.5rem">' +
+    "🐞 Signaler un problème / proposer une idée</button>" +
+    '<p class="aide centre" style="margin-bottom:.8rem">Version ' + esc(VERSION) +
+    " — merci de vos retours !</p>" +
     '<button class="btn plein danger" data-action="deconnexion">Changer de membre / se déconnecter</button>';
 
   ouvrirFeuille("Mon profil", html, (f) => {
@@ -744,7 +1012,7 @@ Formulaires.monProfilSimple = function () {
     brancherEmojis(f);
     f.onsubmit = async (ev) => {
       ev.preventDefault();
-      const d = new FormData(f);
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
       const pin = String(d.get("pin") || "").trim();
       if (pin && !/^[0-9]{4}$/.test(pin)) { toast("Le code doit faire 4 chiffres"); return; }
       moi.prenom = String(d.get("prenom")).trim();

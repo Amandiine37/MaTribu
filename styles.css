@@ -409,3 +409,22 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:1.1rem 0;}
 .etat-connexion i{width:8px;height:8px;border-radius:999px;background:var(--ink-muted);display:block;}
 .etat-connexion.en-ligne i{background:var(--ok);}
 .etat-connexion.local i{background:var(--warm);}
+
+/* ---------- bandeau version bêta ---------- */
+.badge-beta{
+  display:inline-block;
+  background:var(--warm-soft);color:var(--warm);
+  font-size:.62rem;font-weight:800;letter-spacing:.1em;
+  padding:.14rem .42rem;border-radius:6px;
+  vertical-align:middle;margin-left:.4rem;text-transform:uppercase;
+}
+.ruban-beta{
+  text-align:center;font-size:.72rem;color:var(--warm);
+  background:var(--warm-soft);
+  padding:.35rem .6rem;border-radius:0 0 12px 12px;
+  max-width:540px;margin:0 auto;font-weight:600;
+}
+.ruban-beta button{
+  background:none;border:none;padding:0;color:inherit;
+  font:inherit;text-decoration:underline;text-underline-offset:2px;
+}

@@ -36,10 +36,24 @@ const EMOJIS_TACHES = ["🧹", "🧽", "🍽️", "🧺", "🗑️", "🛏️", 
 const EMOJIS_CADEAUX = ["🎁", "🍿", "🎮", "🍦", "🎬", "🎡", "🍕", "🧸", "🎨", "⚽",
   "📱", "🚴", "🎧", "💤", "🏊", "🎳", "🍫", "🎟️", "🛍️", "🌟"];
 
+const VERSION = "0.9 bêta";
+
+/* Unites utilisables pour les ingredients, le stock et les courses.
+   "" = pas d'unite, on compte simplement (4 carottes). */
+const UNITES = ["", "g", "kg", "ml", "cl", "l", "boîte(s)", "paquet(s)", "pot(s)",
+  "sachet(s)", "tranche(s)", "bouquet(s)", "branche(s)", "gousse(s)", "tête(s)",
+  "bûche(s)", "morceau(x)", "pincée(s)", "c. à soupe", "c. à café"];
+
+/* Familles d'unites convertibles entre elles, avec leur valeur de reference. */
+const FAMILLES_UNITES = {
+  masse: { g: 1, kg: 1000 },
+  volume: { ml: 1, cl: 10, l: 1000 }
+};
+
 /* Rubriques rangees dans le document principal de la famille.
    `etats` et `journal` sont a part : ils ont leurs propres regles de securite. */
 const CLES_DOC = ["famille", "membres", "membresUid", "adminsUid", "taches", "bareme",
-  "courses", "recettes", "repas", "notes", "cadeaux", "tarifs", "echanges",
+  "courses", "stock", "recettes", "repas", "notes", "cadeaux", "tarifs", "echanges",
   "reglages", "jetonUtilise"];
 
 function id() {
@@ -52,6 +66,57 @@ function esc(s) {
 }
 function pad(n) { return String(n).padStart(2, "0"); }
 function propre(v) { return JSON.parse(JSON.stringify(v)); }
+
+/* --- Quantites et unites --- */
+
+/* "1,2" ou "1.2" -> 1.2 ; texte vide ou illisible -> null */
+function nombre(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = parseFloat(String(v).replace(",", ".").trim());
+  return isNaN(n) ? null : n;
+}
+/* 1.5 -> "1,5" ; 3 -> "3" */
+function texteNombre(n) {
+  if (n === null || n === undefined) return "";
+  return String(Math.round(n * 100) / 100).replace(".", ",");
+}
+function formaterQte(qte, unite) {
+  const n = nombre(qte);
+  const q = n === null ? String(qte || "") : texteNombre(n);
+  if (!q) return unite || "";
+  return unite ? q + " " + unite : q;
+}
+function familleUnite(u) {
+  for (const f in FAMILLES_UNITES) if (FAMILLES_UNITES[f][u] !== undefined) return f;
+  return null;
+}
+/* Convertit une quantite d'une unite vers une autre. null si impossible. */
+function convertirUnite(qte, de, vers) {
+  const n = nombre(qte);
+  if (n === null) return null;
+  if ((de || "") === (vers || "")) return n;
+  const fa = familleUnite(de), fb = familleUnite(vers);
+  if (!fa || fa !== fb) return null;
+  return n * FAMILLES_UNITES[fa][de] / FAMILLES_UNITES[fa][vers];
+}
+
+/* Additionne des quantites { qte, unite }. Celles qui ne se convertissent pas
+   restent affichees a part : « 500 g + 2 boîte(s) ». */
+function additionnerQuantites(liste) {
+  const paquets = [];
+  liste.forEach((x) => {
+    const n = nombre(x.qte);
+    if (n === null) { paquets.push({ qte: null, unite: x.unite || "", texte: String(x.qte || "") }); return; }
+    const trouve = paquets.find((p) => p.qte !== null && convertirUnite(1, x.unite || "", p.unite) !== null);
+    if (trouve) trouve.qte += convertirUnite(n, x.unite || "", trouve.unite);
+    else paquets.push({ qte: n, unite: x.unite || "", texte: "" });
+  });
+  return {
+    paquets: paquets,
+    texte: paquets.map((p) => p.qte === null ? p.texte : formaterQte(p.qte, p.unite))
+      .filter(Boolean).join(" + ")
+  };
+}
 
 /* --- Dates et periodes --- */
 function isoDate(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
@@ -197,7 +262,7 @@ function etatVide() {
     famille: { nom: "", code: "", creeLe: "", version: 2 },
     membres: [], membresUid: [], adminsUid: [],
     taches: [], bareme: {}, etats: {},
-    courses: [], recettes: [], repas: {}, notes: [],
+    courses: [], stock: [], recettes: [], repas: {}, notes: [],
     cadeaux: [], tarifs: {}, echanges: [], journal: [],
     reglages: {}, jetonUtilise: null
   };
@@ -210,12 +275,28 @@ const ui = {
   semaine: cleSemaine(new Date()),
   filtreTaches: "moi",
   filtreNotes: "avenir",
+  ongletCourses: "liste",        // "liste" ou "stock"
   rechercheRecette: "",
   focus: null
 };
 
 function membre(idm) { return etat.membres.find((m) => m.id === idm) || null; }
 function estAdmin() { return !!(moi && moi.role === "admin"); }
+
+/* Profil « géré » : un enfant sans téléphone. Il participe normalement aux
+   tâches, aux points et aux cadeaux, mais ne se connecte pas lui-même : ce
+   sont les parents qui cochent pour lui et qui dépensent ses points. */
+function estGere(idm) {
+  const m = typeof idm === "string" ? membre(idm) : idm;
+  return !!(m && m.sansAppareil);
+}
+function membresGeres() { return etat.membres.filter((m) => m.sansAppareil); }
+function membresConnectables() { return etat.membres.filter((m) => !m.sansAppareil); }
+
+/* Les tâches en attente des enfants gérés, pour que le parent les coche. */
+function tachesDesEnfants() {
+  return tachesDuMoment().filter((x) => x.assigne && estGere(x.assigne) && x.et.statut === "afaire");
+}
 function pointsDe(idm) {
   return etat.journal.reduce((s, e) => s + (e.membreId === idm ? e.delta : 0), 0);
 }
@@ -296,13 +377,26 @@ const Store = {
 
   configOk() {
     const c = window.CONFIG_FIREBASE;
-    return !!(c && c.apiKey && c.apiKey !== "A_REMPLIR" && c.projectId && c.projectId !== "A_REMPLIR");
+    const remplie = !!(c && c.apiKey && c.apiKey !== "A_REMPLIR" && c.projectId && c.projectId !== "A_REMPLIR");
+    if (!remplie) return false;
+
+    /* Garde-fou : sur un serveur de test (localhost), on reste en mode local
+       pour ne pas écrire dans la vraie base de la famille. Pour tester quand
+       même la synchronisation, ouvrir l'adresse avec « ?nuage=1 ». */
+    const local = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    if (local && !new URLSearchParams(location.search).has("nuage")) {
+      this.raison = "localhost";
+      console.info("Serveur de test : mode local forcé (ajoutez ?nuage=1 pour utiliser Firebase).");
+      return false;
+    }
+    return true;
   },
 
   async preparer() {
+    this.raison = "";
     if (!this.configOk()) {
       this.mode = "local";
-      this.raison = "config";
+      if (!this.raison) this.raison = "config";   // configOk() peut dire « localhost »
       this.uid = this._uidLocal();
       return;
     }
@@ -469,6 +563,26 @@ const Store = {
     }
   },
 
+  /* --- retours des utilisateurs (bugs, idées) ---
+     Ils partent dans une collection à part, que personne ne peut relire depuis
+     l'application : ils se consultent dans la console Firebase. */
+  async envoyerRetour(retour) {
+    if (this.mode !== "nuage") {
+      const t = JSON.parse(localStorage.getItem("tribu:retours") || "[]");
+      t.unshift(retour);
+      localStorage.setItem("tribu:retours", JSON.stringify(t.slice(0, 50)));
+      return true;
+    }
+    try {
+      await this._fs.setDoc(this._fs.doc(this._db, "retours", retour.id), propre(retour));
+      return true;
+    } catch (err) {
+      console.warn("Retour non envoyé :", err);
+      this.derniereErreur = err;
+      return false;
+    }
+  },
+
   /* --- invitations --- */
   async creerInvitation(inv) {
     this.derniereErreur = null;
@@ -569,8 +683,8 @@ function appliquerDonnees(d, portee) {
   /* Reprise des donnees de la version 1 */
   if (d && d.etatsTaches && !Object.keys(etat.etats || {}).length) etat.etats = d.etatsTaches;
 
-  ["membres", "taches", "courses", "recettes", "notes", "cadeaux", "echanges", "journal",
-    "membresUid", "adminsUid"].forEach((c) => { if (!Array.isArray(etat[c])) etat[c] = []; });
+  ["membres", "taches", "courses", "stock", "recettes", "notes", "cadeaux", "echanges",
+    "journal", "membresUid", "adminsUid"].forEach((c) => { if (!Array.isArray(etat[c])) etat[c] = []; });
   ["etats", "repas", "reglages", "bareme", "tarifs"].forEach((c) => {
     if (!etat[c] || typeof etat[c] !== "object") etat[c] = {};
   });
@@ -620,19 +734,40 @@ async function deconnecter() {
 const Actions = {
 
   /* --- Taches --- */
-  marquerFaite(tacheId) {
+  async marquerFaite(tacheId) {
     const t = etat.taches.find((x) => x.id === tacheId);
     if (!t) return;
     const d = new Date();
     const cle = cleEtat(t, d);
     if ((etat.etats[cle] || {}).statut === "valide") return;
+
+    /* Les points reviennent a la personne a qui la tache est attribuee.
+       Si un parent coche a la place d'un enfant, c'est l'enfant qui gagne. */
+    const assigne = assigneDe(t, d);
+    const beneficiaire = assigne || (moi && moi.id);
+    const gere = !!(assigne && estGere(assigne));
+
+    /* Un enfant sans telephone ne peut pas valider lui-meme : quand le parent
+       coche pour lui, cela vaut validation, sinon la tache resterait bloquee. */
+    const directe = estAdmin() && gere;
+
     etat.etats[cle] = {
-      statut: "fait",
-      parQui: (moi && moi.id) || assigneDe(t, d),
+      statut: directe ? "valide" : "fait",
+      parQui: beneficiaire,
       faitLe: new Date().toISOString(),
-      valideLe: null, valideePar: null
+      valideLe: directe ? new Date().toISOString() : null,
+      valideePar: directe ? moi.id : null
     };
-    sauverEtat(cle);
+    await Store.ecrireEtat(cle, etat.etats[cle]);
+
+    if (directe) {
+      await crediterTache(t, cle, beneficiaire);
+      rendre();
+      const m = membre(beneficiaire);
+      toast(m && t.points ? "+" + t.points + " points pour " + m.prenom + " 🌟" : "Validé");
+      return;
+    }
+    rendre();
     toast(estAdmin() ? "Fait ! À valider ci-dessous." : "Fait ! En attente de validation.");
   },
 
@@ -659,13 +794,7 @@ const Actions = {
     etat.etats[cle] = e;
     await Store.ecrireEtat(cle, e);
 
-    if (gagnant && t.points) {
-      await ajouterAuJournal({
-        id: "t|" + t.id + "|" + clePeriode(t.frequence, new Date()),
-        type: "tache", refId: t.id, cleEtat: cle.replace(/\|/g, "__"),
-        membreId: gagnant, delta: t.points, motif: "Tâche : " + t.nom
-      });
-    }
+    await crediterTache(t, cle, gagnant);
     rendre();
     const m = membre(gagnant);
     toast(m && t.points ? "+" + t.points + " points pour " + m.prenom + " 🌟" : "Validé");
@@ -683,12 +812,13 @@ const Actions = {
   },
 
   /* --- Courses --- */
-  ajouterCourse(nom, rayon, qte) {
+  ajouterCourse(nom, rayon, qte, unite) {
     nom = (nom || "").trim();
     if (!nom) return;
     etat.courses.unshift({
-      id: id(), nom: nom, qte: (qte || "").trim(), rayon: rayon || "Autre",
-      coche: false, parQui: moi && moi.id, creeLe: new Date().toISOString()
+      id: id(), nom: nom, qte: String(qte || "").trim(), unite: unite || "",
+      rayon: rayon || "Autre", coche: false, parQui: moi && moi.id,
+      creeLe: new Date().toISOString()
     });
     sauver("courses");
   },
@@ -702,15 +832,75 @@ const Actions = {
     etat.courses = etat.courses.filter((x) => x.id !== cid);
     sauver("courses");
   },
-  async viderCoches() {
-    const n = etat.courses.filter((c) => c.coche).length;
-    if (!n) return;
-    const ok = await confirmer("Retirer les " + n + " article(s) coché(s) de la liste ?",
-      { titre: "Nettoyer la liste", ok: "Retirer" });
-    if (!ok) return;
+  /* Les courses cochées sortent de la liste. Si l'article existe dans la
+     réserve, on propose d'y ajouter ce qui vient d'être acheté. */
+  async viderCoches(rentrerEnStock) {
+    const achetes = etat.courses.filter((c) => c.coche);
+    if (!achetes.length) return;
+    let rentres = 0;
+    if (rentrerEnStock) {
+      achetes.forEach((c) => {
+        const s = articleStock(c.nom);
+        if (!s) return;
+        const ajout = convertirUnite(c.qte, c.unite || "", s.unite || "");
+        if (ajout === null) return;
+        s.qte = texteNombre((nombre(s.qte) || 0) + ajout);
+        s.majLe = new Date().toISOString();
+        rentres++;
+      });
+    }
     etat.courses = etat.courses.filter((c) => !c.coche);
+    sauver("courses", "stock");
+    toast(rentres ? "Liste nettoyée, " + rentres + " article(s) rentré(s) en réserve"
+      : "Liste nettoyée");
+  },
+
+  /* --- Stock --- */
+  enregistrerStock(donnees, sid) {
+    if (sid) {
+      const s = etat.stock.find((x) => x.id === sid);
+      if (!s) return;
+      Object.assign(s, donnees, { majLe: new Date().toISOString() });
+    } else {
+      etat.stock.push(Object.assign({ id: id(), majLe: new Date().toISOString() }, donnees));
+    }
+    sauver("stock");
+  },
+  supprimerStock(sid) {
+    etat.stock = etat.stock.filter((x) => x.id !== sid);
+    sauver("stock");
+  },
+  /* Boutons + / − directement dans la liste du stock */
+  ajusterStock(sid, delta) {
+    const s = etat.stock.find((x) => x.id === sid);
+    if (!s) return;
+    const q = nombre(s.qte) || 0;
+    s.qte = texteNombre(Math.max(0, q + delta));
+    s.majLe = new Date().toISOString();
+    sauver("stock");
+  },
+
+  /* Envoie dans les courses tout ce qui est passé sous le minimum. */
+  async racheterSousMinimum() {
+    const bas = stockSousMinimum();
+    if (!bas.length) { toast("Rien à racheter, tout est au-dessus du minimum"); return; }
+    const dejaLa = new Set(etat.courses.filter((c) => !c.coche).map((c) => c.nom.toLowerCase().trim()));
+    const aAjouter = bas.filter((s) => !dejaLa.has(s.nom.toLowerCase().trim()));
+    if (!aAjouter.length) { toast("Ils sont déjà dans la liste de courses"); return; }
+    const ok = await confirmer("Ajouter " + aAjouter.length + " article(s) à la liste de courses ?",
+      { titre: "Réapprovisionner", ok: "Ajouter" });
+    if (!ok) return;
+    aAjouter.slice().reverse().forEach((s) => {
+      const mini = nombre(s.mini) || 0;
+      const q = nombre(s.qte) || 0;
+      etat.courses.unshift({
+        id: id(), nom: s.nom, qte: texteNombre(Math.max(mini - q, mini)), unite: s.unite || "",
+        rayon: s.rayon || "Autre", coche: false, parQui: moi && moi.id,
+        creeLe: new Date().toISOString()
+      });
+    });
     sauver("courses");
-    toast("Liste nettoyée");
+    toast(aAjouter.length + " article(s) ajouté(s) 🛒");
   },
 
   /* --- Repas --- */
@@ -788,6 +978,33 @@ const Actions = {
     sauver("echanges");
   },
 
+  /* Un parent dépense les points d'un enfant qui n'a pas de téléphone :
+     il n'y a personne pour faire la demande, donc l'échange est direct. */
+  async accorderCadeauPour(membreId, cadeauId) {
+    if (!estAdmin()) return;
+    const c = etat.cadeaux.find((x) => x.id === cadeauId);
+    const m = membre(membreId);
+    if (!c || !m) return;
+    if (pointsDe(membreId) < c.cout) { toast("Pas assez de points"); return; }
+    const ok = await confirmer("Échanger " + c.cout + " points de " + m.prenom +
+      " contre « " + c.nom + " » ?", { titre: "Offrir ce cadeau", ok: "Échanger" });
+    if (!ok) return;
+
+    const eid = id();
+    const credite = await ajouterAuJournal({
+      id: "c|" + eid, type: "cadeau", refId: c.id,
+      membreId: membreId, delta: -c.cout, motif: "Cadeau : " + c.nom
+    });
+    if (!credite) return;
+    etat.echanges.unshift({
+      id: eid, membreId: membreId, cadeauId: c.id, cadeauNom: c.nom, cadeauEmoji: c.emoji,
+      cout: c.cout, statut: "accorde", demandeLe: new Date().toISOString(),
+      traiteLe: new Date().toISOString(), traitePar: moi.id
+    });
+    sauver("echanges");
+    toast(c.nom + " pour " + m.prenom + " 🎉");
+  },
+
   async ajusterPoints(membreId, delta, motif) {
     if (!estAdmin()) return;
     const ok = await ajouterAuJournal({
@@ -797,6 +1014,16 @@ const Actions = {
     if (ok) { rendre(); toast((delta > 0 ? "+" : "") + delta + " points"); }
   }
 };
+
+/* Credite les points d'une tache validee, une seule fois par periode. */
+async function crediterTache(t, cle, beneficiaire) {
+  if (!beneficiaire || !t.points) return;
+  await ajouterAuJournal({
+    id: "t|" + t.id + "|" + clePeriode(t.frequence, new Date()),
+    type: "tache", refId: t.id, cleEtat: cle.replace(/\|/g, "__"),
+    membreId: beneficiaire, delta: t.points, motif: "Tâche : " + t.nom
+  });
+}
 
 /* Ajoute une ligne au journal des points.
    Le serveur verifie le montant : si la ligne existe deja ou si le montant ne
@@ -919,6 +1146,7 @@ function genererMenus(cleSem, opt) {
   return cases.length;
 }
 
+/* Tous les ingredients des repas prevus, regroupes par nom et additionnes. */
 function ingredientsDeLaSemaine(cleSem) {
   const sem = etat.repas[cleSem] || {};
   const parNom = new Map();
@@ -928,16 +1156,57 @@ function ingredientsDeLaSemaine(cleSem) {
     if (!r) return;
     (r.ingredients || []).forEach((ing) => {
       const cle = ing.nom.toLowerCase().trim();
-      if (parNom.has(cle)) {
-        const e = parNom.get(cle);
-        if (ing.qte && e.qte.indexOf(ing.qte) === -1) e.qte += " + " + ing.qte;
-      } else {
-        parNom.set(cle, { nom: ing.nom, qte: ing.qte || "", rayon: ing.rayon || "Autre" });
+      if (!parNom.has(cle)) {
+        parNom.set(cle, { nom: ing.nom, rayon: ing.rayon || "Autre", morceaux: [] });
       }
+      parNom.get(cle).morceaux.push({ qte: ing.qte, unite: ing.unite || "" });
     });
   });
-  return Array.from(parNom.values()).sort((a, b) =>
+
+  return Array.from(parNom.values()).map((e) => {
+    const total = additionnerQuantites(e.morceaux);
+    const principal = total.paquets[0] || { qte: null, unite: "" };
+    return {
+      nom: e.nom, rayon: e.rayon,
+      qte: principal.qte === null ? "" : texteNombre(principal.qte),
+      unite: principal.unite,
+      besoinTexte: total.texte
+    };
+  }).sort((a, b) =>
     RAYONS.indexOf(a.rayon) - RAYONS.indexOf(b.rayon) || a.nom.localeCompare(b.nom));
+}
+
+/* ============================ Stock (la réserve) ============================ */
+
+function articleStock(nom) {
+  const n = String(nom || "").toLowerCase().trim();
+  return etat.stock.find((s) => s.nom.toLowerCase().trim() === n) || null;
+}
+
+/* Un article est « à racheter » quand sa quantité passe sous le minimum. */
+function stockSousMinimum() {
+  return etat.stock.filter((s) => {
+    const mini = nombre(s.mini);
+    const q = nombre(s.qte);
+    return mini !== null && mini > 0 && (q === null || q < mini);
+  });
+}
+
+/* Ce qu'il reste vraiment à acheter pour un ingrédient, compte tenu du stock.
+   Renvoie { manque, unite, connu } — `connu` est faux quand les unités ne se
+   convertissent pas (on ne devine pas, on le dit). */
+function manquePour(nom, qte, unite) {
+  const s = articleStock(nom);
+  const besoin = nombre(qte);
+  if (!s) return { manque: besoin, unite: unite, connu: true, enStock: null };
+  const dispo = convertirUnite(s.qte, s.unite || "", unite || "");
+  if (besoin === null || dispo === null) {
+    return { manque: besoin, unite: unite, connu: false, enStock: formaterQte(s.qte, s.unite) };
+  }
+  return {
+    manque: Math.max(0, besoin - dispo), unite: unite, connu: true,
+    enStock: formaterQte(s.qte, s.unite)
+  };
 }
 
 /* ============================ 9. Rendu general ============================ */
@@ -1002,13 +1271,16 @@ function majPastilles() {
 const FAB = {
   taches: { admin: true, action: "tache-nouvelle" },
   courses: { admin: false, action: "course-nouvelle" },
+  stock: { admin: false, action: "stock-nouveau" },
   notes: { admin: false, action: "note-nouvelle" },
   recettes: { admin: false, action: "recette-nouvelle" },
   points: { admin: true, action: "cadeau-nouveau" }
 };
 function majFab() {
   const f = $("#fab");
-  const conf = FAB[ui.vue];
+  /* L'onglet Courses abrite deux listes : le bouton + change de rôle. */
+  const cle = ui.vue === "courses" && ui.ongletCourses === "stock" ? "stock" : ui.vue;
+  const conf = FAB[cle];
   if (!conf || (conf.admin && !estAdmin())) { f.hidden = true; return; }
   f.hidden = false;
   f.dataset.action = conf.action;
@@ -1047,7 +1319,19 @@ document.addEventListener("click", (e) => {
     case "course-toggle": Actions.basculerCourse(v); break;
     case "course-suppr": Actions.supprimerCourse(v); break;
     case "course-nouvelle": Formulaires.course(); break;
-    case "courses-vider": Actions.viderCoches(); break;
+    case "course-editer": Formulaires.course(v); break;
+    case "courses-vider": Formulaires.viderCourses(); break;
+    case "courses-onglet": ui.ongletCourses = b.dataset.valeur; rendre(); break;
+
+    /* réserve */
+    case "stock-nouveau": Formulaires.stock(null); break;
+    case "stock-editer": Formulaires.stock(v); break;
+    case "stock-plus": Actions.ajusterStock(v, 1); break;
+    case "stock-moins": Actions.ajusterStock(v, -1); break;
+    case "stock-racheter": Actions.racheterSousMinimum(); break;
+
+    /* retours */
+    case "retour": Formulaires.retour(); break;
 
     case "semaine-prec": {
       const d = lundiDeCle(ui.semaine); d.setDate(d.getDate() - 7);
@@ -1076,6 +1360,7 @@ document.addEventListener("click", (e) => {
     case "echange-refuser": Actions.refuserEchange(v); break;
     case "points-ajuster": Formulaires.ajustementPoints(v); break;
     case "points-historique": Formulaires.historique(); break;
+    case "cadeau-pour": Formulaires.cadeauPour(v); break;
 
     case "membre-nouveau": Formulaires.membre(null); break;
     case "membre-editer": Formulaires.membre(v); break;
