@@ -1,0 +1,153 @@
+/* =========================================================================
+   TRIBU — regles de securite Firebase
+   =========================================================================
+   A copier-coller dans : console Firebase > Firestore Database > Regles,
+   puis cliquer sur PUBLIER.
+
+   Ce que ces regles garantissent, meme si quelqu'un bidouille l'application
+   depuis son telephone :
+
+   1. Une famille n'est lisible que par les APPAREILS inscrits dans sa liste
+      `membresUid`. Connaitre le nom ou le repere de la famille ne suffit pas.
+   2. On entre dans une famille uniquement avec un JETON D'INVITATION valide,
+      non expire et non utilise. Et on ne peut alors s'ajouter que soi-meme.
+   3. Un membre ordinaire ne peut modifier que les rubriques partagees
+      (courses, repas, rappels, recettes, demandes de cadeaux). Les membres,
+      les taches, les cadeaux et les baremes sont reserves aux administrateurs.
+   4. Une tache ne peut etre passee en "valide" que par un administrateur.
+   5. LES POINTS : chaque ligne du journal est creee par un administrateur,
+      ne peut JAMAIS etre modifiee ni supprimee ensuite, et son montant doit
+      correspondre exactement au bareme de la tache ou au prix du cadeau.
+      Personne ne peut donc s'attribuer de points.
+   ========================================================================= */
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- petites fonctions utilitaires ----------
+
+    function famille(fid) {
+      return get(/databases/$(database)/documents/familles/$(fid)).data;
+    }
+    function connecte() {
+      return request.auth != null;
+    }
+    function estMembre(fid) {
+      return connecte() && request.auth.uid in famille(fid).membresUid;
+    }
+    function estAdmin(fid) {
+      return connecte() && request.auth.uid in famille(fid).adminsUid;
+    }
+    function invitation(jeton) {
+      return get(/databases/$(database)/documents/invitations/$(jeton)).data;
+    }
+    function invitationValide(fid, jeton) {
+      return jeton is string
+        && exists(/databases/$(database)/documents/invitations/$(jeton))
+        && invitation(jeton).famille == fid
+        && invitation(jeton).utilisee == false
+        && invitation(jeton).expireLe > request.time.toMillis();
+    }
+
+    // ---------- invitations ----------
+    // Le jeton fait 48 caracteres aleatoires : le connaitre vaut autorisation.
+    // On ne peut jamais LISTER les invitations, seulement en ouvrir une precise.
+
+    match /invitations/{jeton} {
+      allow get: if connecte();
+      allow list: if false;
+      allow create: if connecte()
+                    && estAdmin(request.resource.data.famille)
+                    && request.resource.data.utilisee == false;
+      // seule la mise a "utilisee" est permise, et une seule fois
+      allow update: if connecte()
+                    && resource.data.utilisee == false
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['utilisee', 'utiliseeLe'])
+                    && request.resource.data.utilisee == true;
+      allow delete: if connecte() && estAdmin(resource.data.famille);
+    }
+
+    // ---------- la famille ----------
+
+    match /familles/{fid} {
+
+      function rubriquesLibres() {
+        // ce qu'un membre ordinaire a le droit de modifier
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['courses', 'repas', 'notes', 'recettes', 'echanges']);
+      }
+
+      function sInscritAvecInvitation() {
+        return connecte()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['membres', 'membresUid', 'jetonUtilise'])
+          && request.auth.uid in request.resource.data.membresUid
+          && !(request.auth.uid in resource.data.membresUid)
+          && request.resource.data.membresUid.size() == resource.data.membresUid.size() + 1
+          && request.resource.data.adminsUid == resource.data.adminsUid
+          && invitationValide(fid, request.resource.data.jetonUtilise);
+      }
+
+      allow get: if estMembre(fid);
+      allow list: if false;
+
+      // On cree sa propre famille : il faut s'y inscrire soi-meme comme admin.
+      allow create: if connecte()
+                    && request.auth.uid in request.resource.data.membresUid
+                    && request.auth.uid in request.resource.data.adminsUid;
+
+      allow update: if estAdmin(fid)
+                    || (estMembre(fid) && rubriquesLibres())
+                    || sInscritAvecInvitation();
+
+      allow delete: if false;
+
+      // ---------- etat des taches (fait / valide) ----------
+      // Un membre peut dire "c'est fait". Seul un administrateur valide.
+
+      match /etats/{cle} {
+        allow read: if estMembre(fid);
+        allow create, update: if estAdmin(fid)
+                              || (estMembre(fid)
+                                  && request.resource.data.statut in ['afaire', 'fait']);
+        allow delete: if false;
+      }
+
+      // ---------- journal des points ----------
+      // Ecriture unique, jamais de modification, montant verifie ici.
+
+      match /journal/{ligne} {
+
+        function montantJuste() {
+          let e = request.resource.data;
+          return e.delta is int
+            && (
+                 // points d'une tache : le montant doit etre celui du bareme,
+                 // et la tache doit avoir ete reellement validee.
+                 (e.type == 'tache'
+                   && famille(fid).bareme[e.refId] == e.delta
+                   && exists(/databases/$(database)/documents/familles/$(fid)/etats/$(e.cleEtat))
+                   && get(/databases/$(database)/documents/familles/$(fid)/etats/$(e.cleEtat))
+                        .data.statut == 'valide')
+
+                 // achat d'un cadeau : retrait exact du prix affiche
+                 || (e.type == 'cadeau'
+                      && famille(fid).tarifs[e.refId] == -e.delta)
+
+                 // ajustement manuel d'un administrateur, borne
+                 || (e.type == 'ajustement'
+                      && e.delta >= -1000 && e.delta <= 1000)
+               );
+        }
+
+        allow read: if estMembre(fid);
+        allow create: if estAdmin(fid) && montantJuste();
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+  }
+}
