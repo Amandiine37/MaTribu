@@ -158,7 +158,7 @@ h2.titre-section{
 .btn.doux{background:var(--accent-soft);border-color:transparent;color:var(--accent-strong);}
 .btn.danger{background:var(--danger-soft);border-color:transparent;color:var(--danger);}
 .btn.or{background:var(--gold-soft);border-color:transparent;color:var(--gold);}
-.btn.plein{width:100%;}
+.btn.plein{width:100%;display:flex;}
 .btn.mini{padding:.36rem .62rem;font-size:.78rem;border-radius:9px;}
 .btn:disabled{opacity:.42;pointer-events:none;}
 .lien{

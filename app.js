@@ -277,8 +277,34 @@ const ui = {
   filtreNotes: "avenir",
   ongletCourses: "liste",        // "liste" ou "stock"
   rechercheRecette: "",
+  filtresRecettes: [],           // "perso", "vege", "rapide", "leger"
   focus: null
 };
+
+/* Les 50 plats fournis avec l'application : on ne les propose pas au partage,
+   toutes les familles les ont déjà. Le reste est considéré comme « à vous ». */
+const NOMS_DEPART = new Set((window.RECETTES_DEPART || [])
+  .map((r) => r.nom.toLowerCase().trim()));
+
+function estRecettePerso(r) {
+  if (r.origine === "perso") return true;
+  if (r.origine) return false;                       // "depart" ou "importee"
+  return !NOMS_DEPART.has(String(r.nom || "").toLowerCase().trim());
+}
+
+function recettesFiltrees() {
+  const q = ui.rechercheRecette.toLowerCase().trim();
+  const f = ui.filtresRecettes;
+  return etat.recettes.filter((r) => {
+    if (q && !r.nom.toLowerCase().includes(q) &&
+      !(r.ingredients || []).some((i) => i.nom.toLowerCase().includes(q))) return false;
+    if (f.includes("perso") && !estRecettePerso(r)) return false;
+    if (f.includes("vege") && !r.vegetarien) return false;
+    if (f.includes("rapide") && !r.rapide) return false;
+    if (f.includes("leger") && r.type !== "leger") return false;
+    return true;
+  }).sort((a, b) => a.nom.localeCompare(b.nom));
+}
 
 function membre(idm) { return etat.membres.find((m) => m.id === idm) || null; }
 function estAdmin() { return !!(moi && moi.role === "admin"); }
@@ -578,6 +604,47 @@ const Store = {
       return true;
     } catch (err) {
       console.warn("Retour non envoyé :", err);
+      this.derniereErreur = err;
+      return false;
+    }
+  },
+
+  /* --- recettes partagées entre familles ---
+     Une petite bibliothèque commune, ouverte à toutes les familles de l'app.
+     On n'y met QUE ce qu'une famille décide explicitement de publier. */
+  async publierRecette(fiche) {
+    if (this.mode !== "nuage") return false;
+    try {
+      await this._fs.setDoc(this._fs.doc(this._db, "recettesPartagees", fiche.id), propre(fiche));
+      return true;
+    } catch (err) {
+      console.warn("Publication refusée :", err);
+      this.derniereErreur = err;
+      return false;
+    }
+  },
+
+  async listerRecettesPartagees() {
+    if (this.mode !== "nuage") return null;
+    try {
+      const q = await this._fs.getDocs(this._fs.collection(this._db, "recettesPartagees"));
+      const l = [];
+      q.forEach((s) => l.push(Object.assign({ id: s.id }, s.data())));
+      return l.sort((a, b) => String(b.publieLe || "").localeCompare(String(a.publieLe || "")));
+    } catch (err) {
+      console.warn("Lecture du catalogue refusée :", err);
+      this.derniereErreur = err;
+      return null;
+    }
+  },
+
+  async retirerRecettePartagee(idFiche) {
+    if (this.mode !== "nuage") return false;
+    try {
+      await this._fs.deleteDoc(this._fs.doc(this._db, "recettesPartagees", idFiche));
+      return true;
+    } catch (err) {
+      console.warn("Retrait refusé :", err);
       this.derniereErreur = err;
       return false;
     }
@@ -1084,6 +1151,81 @@ const Invitations = {
   }
 };
 
+/* ==================== Partage de recettes entre familles ==================== */
+
+const Partage = {
+
+  /* Ce qui part vraiment dans le catalogue commun : la recette, et le seul
+     nom de la tribu. Ni code de famille secret, ni prénoms, ni points. */
+  ficheDe(r) {
+    return {
+      id: id(),
+      nom: r.nom,
+      emoji: r.emoji || "🍽️",
+      type: r.type || "consistant",
+      vegetarien: !!r.vegetarien,
+      rapide: !!r.rapide,
+      lien: r.lien || "",
+      ingredients: (r.ingredients || []).slice(0, 40).map((i) => ({
+        nom: i.nom, qte: i.qte || "", unite: i.unite || "", rayon: i.rayon || "Autre"
+      })),
+      parFamille: etat.famille.nom || "Une famille",
+      familleRef: etat.famille.code,      // sert à pouvoir retirer sa publication
+      publieLe: new Date().toISOString(),
+      version: VERSION
+    };
+  },
+
+  async publier(recetteId) {
+    const r = etat.recettes.find((x) => x.id === recetteId);
+    if (!r) return false;
+    if (Store.mode !== "nuage") {
+      toast("Le partage demande la connexion familiale (Firebase)");
+      return false;
+    }
+    if (!estRecettePerso(r)) {
+      toast("Seules vos propres recettes peuvent être partagées");
+      return false;
+    }
+    const fiche = this.ficheDe(r);
+    const ok = await Store.publierRecette(fiche);
+    if (!ok) { toast("Publication refusée par le serveur"); return false; }
+    r.partageId = fiche.id;
+    sauver("recettes");
+    return true;
+  },
+
+  async retirer(recetteId) {
+    const r = etat.recettes.find((x) => x.id === recetteId);
+    if (!r || !r.partageId) return false;
+    const ok = await Store.retirerRecettePartagee(r.partageId);
+    if (!ok) { toast("Retrait impossible"); return false; }
+    r.partageId = null;
+    sauver("recettes");
+    return true;
+  },
+
+  /* Recopie une recette du catalogue dans la bibliothèque de la famille. */
+  importer(fiche) {
+    const existe = etat.recettes.some((r) =>
+      r.nom.toLowerCase().trim() === String(fiche.nom).toLowerCase().trim());
+    if (existe) { toast("Vous avez déjà un plat de ce nom"); return false; }
+    etat.recettes.push({
+      id: id(),
+      nom: fiche.nom, emoji: fiche.emoji || "🍽️", type: fiche.type || "consistant",
+      vegetarien: !!fiche.vegetarien, rapide: !!fiche.rapide, lien: fiche.lien || "",
+      ingredients: (fiche.ingredients || []).map((i) => ({
+        nom: i.nom, qte: i.qte || "", unite: i.unite || "", rayon: i.rayon || "Autre"
+      })),
+      origine: "importee",
+      deQui: fiche.parFamille || "",
+      creeLe: new Date().toISOString()
+    });
+    sauver("recettes");
+    return true;
+  }
+};
+
 /* ============================ 8. Generateur de menus ============================ */
 
 function recettesUtiliseesRecemment(cleSem, nbSemaines) {
@@ -1347,6 +1489,15 @@ document.addEventListener("click", (e) => {
 
     case "recette-nouvelle": Formulaires.recette(null); break;
     case "recette-editer": Formulaires.recette(v); break;
+    case "recettes-partagees": Formulaires.catalogue(); break;
+    case "recettes-filtre": {
+      const f = b.dataset.valeur;
+      const i = ui.filtresRecettes.indexOf(f);
+      if (i === -1) ui.filtresRecettes.push(f); else ui.filtresRecettes.splice(i, 1);
+      rendre();
+      break;
+    }
+    case "recettes-filtre-vider": ui.filtresRecettes = []; ui.rechercheRecette = ""; rendre(); break;
 
     case "note-toggle": Actions.basculerNote(v); break;
     case "note-nouvelle": Formulaires.note(null); break;

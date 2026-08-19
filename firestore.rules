@@ -51,6 +51,27 @@ service cloud.firestore {
         && invitation(jeton).expireLe > request.time.toMillis();
     }
 
+    // ---------- catalogue de recettes partagees entre familles ----------
+    // Lisible par toutes les familles connectees. On ne peut publier qu'une
+    // fiche portant le code de SA propre famille, et on ne peut retirer que
+    // ses propres publications.
+
+    match /recettesPartagees/{fiche} {
+      allow read: if connecte();
+
+      allow create: if connecte()
+                    && estMembre(request.resource.data.familleRef)
+                    && request.resource.data.nom is string
+                    && request.resource.data.nom.size() > 0
+                    && request.resource.data.nom.size() <= 80
+                    && request.resource.data.parFamille.size() <= 60
+                    && request.resource.data.ingredients.size() <= 40;
+
+      // une fiche publiee ne se modifie pas : on la retire et on republie
+      allow update: if false;
+      allow delete: if connecte() && estMembre(resource.data.familleRef);
+    }
+
     // ---------- retours des utilisateurs (bugs, idees) ----------
     // Chacun peut en deposer un, personne ne peut les relire depuis l'appli :
     // ils se consultent dans la console Firebase.

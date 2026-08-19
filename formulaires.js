@@ -270,6 +270,168 @@ Formulaires.viderCourses = function () {
   });
 };
 
+/* ==================== CATALOGUE PARTAGÉ ENTRE FAMILLES ==================== */
+
+Formulaires.catalogue = function () {
+  if (Store.mode !== "nuage") {
+    ouvrirFeuille("Recettes partagées",
+      '<div class="bandeau">⚠️<div>Le catalogue commun demande la connexion familiale ' +
+      "(Firebase). Tant qu'elle n'est pas configurée, vos recettes restent sur cet " +
+      "appareil.</div></div>" +
+      '<button class="btn plein" data-action="fermer">Fermer</button>');
+    return;
+  }
+
+  ouvrirFeuille("Recettes partagées",
+    '<div id="f-cat"><p class="aide">Chargement du catalogue…</p></div>', async (f) => {
+      const zone = f.querySelector("#f-cat");
+      const fiches = await Store.listerRecettesPartagees();
+
+      if (fiches === null) {
+        zone.innerHTML = '<div class="bandeau">⚠️<div>Catalogue inaccessible. Les règles de ' +
+          "sécurité Firebase ne sont peut-être pas à jour.</div></div>" +
+          '<button class="btn plein" data-action="fermer">Fermer</button>';
+        return;
+      }
+      if (!fiches.length) {
+        zone.innerHTML = rienDu("🌍",
+          "Le catalogue est vide pour le moment.<br>Publiez une de vos recettes " +
+          "pour l'ouvrir aux autres familles !") +
+          '<button class="btn plein" data-action="fermer">Fermer</button>';
+        return;
+      }
+
+      const dessiner = (q) => {
+        const l = fiches.filter((x) => !q ||
+          x.nom.toLowerCase().includes(q) ||
+          String(x.parFamille || "").toLowerCase().includes(q));
+        const dejaLa = new Set(etat.recettes.map((r) => r.nom.toLowerCase().trim()));
+
+        return l.length
+          ? l.map((x) => {
+            const possede = dejaLa.has(String(x.nom).toLowerCase().trim());
+            const aMoi = x.familleRef === etat.famille.code;
+            return '<div class="ligne"><span style="font-size:1.4rem">' + esc(x.emoji || "🍽️") + "</span>" +
+              '<div class="ligne-corps"><b>' + esc(x.nom) + "</b><small>" +
+              esc(x.parFamille || "?") + " • " + (x.ingredients || []).length + " ingrédients</small>" +
+              '<span class="etiquettes">' +
+              (x.vegetarien ? '<span class="etiquette vert">végé</span>' : "") +
+              (x.rapide ? '<span class="etiquette">rapide</span>' : "") +
+              (aMoi ? '<span class="etiquette chaud">votre publication</span>' : "") +
+              "</span></div>" +
+              '<button class="btn mini" data-voir="' + esc(x.id) + '">👁️</button>' +
+              (possede
+                ? '<span class="etiquette vert">déjà chez vous</span>'
+                : '<button class="btn mini principal" data-prendre="' + esc(x.id) + '">Ajouter</button>') +
+              "</div>";
+          }).join("")
+          : '<p class="aide">Aucun plat ne correspond.</p>';
+      };
+
+      zone.innerHTML =
+        '<input type="text" id="rech-cat" placeholder="Rechercher un plat ou une famille…" ' +
+        'autocomplete="off" style="margin-bottom:.8rem">' +
+        '<div id="liste-cat" style="max-height:52dvh;overflow-y:auto">' + dessiner("") + "</div>" +
+        '<p class="aide" style="margin-top:.8rem">Ces recettes sont publiées par d\'autres ' +
+        "familles utilisant Tribu. Elles n'ont pas été vérifiées : lisez-les avant de cuisiner.</p>" +
+        '<button class="btn plein" data-action="fermer" style="margin-top:.8rem">Fermer</button>';
+
+      const liste = zone.querySelector("#liste-cat");
+      zone.querySelector("#rech-cat").oninput = (ev) => {
+        liste.innerHTML = dessiner(ev.target.value.toLowerCase().trim());
+      };
+
+      liste.onclick = (ev) => {
+        const bVoir = ev.target.closest("[data-voir]");
+        if (bVoir) {
+          const x = fiches.find((y) => y.id === bVoir.dataset.voir);
+          Formulaires.apercuRecette(x);
+          return;
+        }
+        const bPrendre = ev.target.closest("[data-prendre]");
+        if (!bPrendre) return;
+        const x = fiches.find((y) => y.id === bPrendre.dataset.prendre);
+        if (Partage.importer(x)) {
+          fermerFeuille();
+          toast("« " + x.nom + " » ajoutée à vos recettes 📖");
+        }
+      };
+    });
+};
+
+/* Aperçu d'une recette du catalogue avant de la prendre. */
+Formulaires.apercuRecette = function (x) {
+  if (!x) return;
+  const ing = (x.ingredients || []).map((i) =>
+    '<div class="ligne"><div class="ligne-corps"><b>' + esc(i.nom) + "</b>" +
+    "<small>" + esc(formaterQte(i.qte, i.unite) || "—") + " • " + esc(i.rayon || "") + "</small></div></div>"
+  ).join("");
+
+  ouvrirFeuille(x.emoji + " " + x.nom,
+    '<p class="aide" style="margin-bottom:.8rem">Publiée par <b>' + esc(x.parFamille || "?") + "</b></p>" +
+    '<div class="puces" style="margin-bottom:1rem">' +
+    (x.vegetarien ? '<span class="etiquette vert">végé</span> ' : "") +
+    (x.rapide ? '<span class="etiquette">rapide</span> ' : "") +
+    '<span class="etiquette">' + (x.type === "leger" ? "léger" : "consistant") + "</span></div>" +
+    '<div class="carte">' + (ing || '<p class="aide">Aucun ingrédient.</p>') + "</div>" +
+    (x.lien ? '<a class="btn plein doux" href="' + esc(x.lien) + '" target="_blank" rel="noopener" ' +
+      'style="text-decoration:none;margin-bottom:.5rem">Ouvrir la recette ↗</a>' : "") +
+    '<button class="btn plein principal" data-role="prendre">Ajouter à mes recettes</button>' +
+    '<button class="btn plein" data-action="fermer" style="margin-top:.5rem">Fermer</button>',
+    (f) => {
+      f.querySelector('[data-role="prendre"]').onclick = () => {
+        if (Partage.importer(x)) {
+          fermerFeuille();
+          toast("« " + x.nom + " » ajoutée à vos recettes 📖");
+        }
+      };
+    });
+};
+
+/* Publier une de ses recettes dans le catalogue commun. */
+Formulaires.publierRecette = function (rid) {
+  const r = etat.recettes.find((x) => x.id === rid);
+  if (!r) return;
+
+  if (r.partageId) {
+    ouvrirFeuille("Recette partagée",
+      '<p style="margin:.2rem 0 1rem;line-height:1.5;font-size:.92rem">« ' + esc(r.nom) +
+      " » est visible par les autres familles de Tribu.</p>" +
+      '<button class="btn plein danger" data-role="retirer" style="margin-bottom:.5rem">' +
+      "Retirer du catalogue</button>" +
+      '<button class="btn plein" data-action="fermer">Fermer</button>',
+      (f) => {
+        f.querySelector('[data-role="retirer"]').onclick = async () => {
+          const ok = await Partage.retirer(r.id);
+          fermerFeuille();
+          if (ok) toast("Retirée du catalogue");
+        };
+      });
+    return;
+  }
+
+  ouvrirFeuille("Partager cette recette",
+    '<p style="margin:.2rem 0 1rem;line-height:1.5;font-size:.92rem">' +
+    "Publier « <b>" + esc(r.nom) + "</b> » la rendra visible par <b>toutes les familles</b> " +
+    "qui utilisent Tribu. Chacune pourra la recopier dans sa propre liste.</p>" +
+    '<div class="bandeau">👀<div>Sont publiés : le nom du plat, ses ingrédients, le lien ' +
+    "éventuel, et le <b>nom de votre tribu</b> (« " + esc(etat.famille.nom) + " »).<br>" +
+    "Ne sont jamais publiés : vos prénoms, vos points, vos courses, ni le code de votre famille.</div></div>" +
+    '<p class="aide" style="margin-bottom:1rem">Vous pourrez la retirer à tout moment.</p>' +
+    '<div class="rangee-btn">' +
+    '<button class="btn" data-action="fermer">Annuler</button>' +
+    '<button class="btn principal" data-role="publier">Publier</button></div>',
+    (f) => {
+      const b = f.querySelector('[data-role="publier"]');
+      b.onclick = async () => {
+        b.disabled = true;
+        const ok = await Partage.publier(r.id);
+        fermerFeuille();
+        if (ok) toast("Publiée ! Merci pour les autres familles 🌍");
+      };
+    });
+};
+
 /* ============================ SIGNALER / PROPOSER ============================ */
 
 Formulaires.retour = function () {
@@ -541,6 +703,12 @@ Formulaires.recette = function (rid) {
     '<input type="url" name="lien" value="' + esc(cour.lien || "") + '" placeholder="https://…"></label>' +
     (cour.lien ? '<a class="btn plein doux" href="' + esc(cour.lien) + '" target="_blank" rel="noopener" ' +
       'style="margin-bottom:1rem;text-decoration:none">Ouvrir la recette ↗</a>' : "") +
+    (r && estRecettePerso(r)
+      ? '<button type="button" class="btn plein ' + (r.partageId ? "doux" : "") +
+      '" data-role="partager" style="margin-bottom:1rem">' +
+      (r.partageId ? "🌍 Partagée avec les autres familles" : "🌍 Partager avec les autres familles") +
+      "</button>"
+      : "") +
     "<hr class=\"sep\">" +
     '<div class="sous-titre" style="margin-top:0"><h3>Ingrédients</h3></div>' +
     '<div id="zone-ing">' + ings.map(ligneIng).join("") + "</div>" +
@@ -551,6 +719,9 @@ Formulaires.recette = function (rid) {
     brancherEmojis(f);
     brancherMulti(f, "type", true);
     const zone = f.querySelector("#zone-ing");
+
+    const bp = f.querySelector('[data-role="partager"]');
+    if (bp) bp.onclick = () => Formulaires.publierRecette(r.id);
 
     f.querySelector('[data-role="ajout-ing"]').onclick = () => {
       const div = document.createElement("div");
@@ -594,7 +765,7 @@ Formulaires.recette = function (rid) {
         ingredients: liste
       };
       if (r) Object.assign(r, donnees);
-      else etat.recettes.push(Object.assign({ id: id() }, donnees));
+      else etat.recettes.push(Object.assign({ id: id(), origine: "perso" }, donnees));
       fermerFeuille();
       sauver("recettes");
       toast(r ? "Recette enregistrée" : "Recette ajoutée");

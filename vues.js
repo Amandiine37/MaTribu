@@ -412,30 +412,52 @@ function caseRepas(jour, moment, contenu) {
 Vues.recettes = function () {
   const h = [];
   h.push('<button class="lien" data-action="aller" data-vue="menus" style="margin-bottom:.8rem">‹ Retour aux menus</button>');
-  h.push('<input type="text" id="champ-recherche-recette" placeholder="Rechercher un plat…" ' +
-    'value="' + esc(ui.rechercheRecette) + '" autocomplete="off" style="margin-bottom:1rem">');
 
-  const q = ui.rechercheRecette.toLowerCase().trim();
-  const liste = etat.recettes
-    .filter((r) => !q || r.nom.toLowerCase().includes(q) ||
-      (r.ingredients || []).some((i) => i.nom.toLowerCase().includes(q)))
-    .sort((a, b) => a.nom.localeCompare(b.nom));
+  h.push('<input type="text" id="champ-recherche-recette" placeholder="Rechercher un plat ou un ingrédient…" ' +
+    'value="' + esc(ui.rechercheRecette) + '" autocomplete="off" style="margin-bottom:.7rem">');
+
+  const filtres = [
+    ["perso", "✍️ Mes recettes"],
+    ["vege", "🌿 Végé"],
+    ["rapide", "⚡ Rapide"],
+    ["leger", "🥗 Léger"]
+  ];
+  h.push('<div class="puces" style="margin-bottom:.8rem">' +
+    filtres.map(([v, l]) =>
+      '<button class="puce ' + (ui.filtresRecettes.includes(v) ? "on" : "") +
+      '" data-action="recettes-filtre" data-valeur="' + v + '">' + l + "</button>").join("") +
+    "</div>");
+
+  h.push('<button class="btn plein doux" data-action="recettes-partagees" style="margin-bottom:1rem">' +
+    "🌍 Recettes partagées par d'autres familles</button>");
+
+  const liste = recettesFiltrees();
+  const actif = ui.filtresRecettes.length || ui.rechercheRecette.trim();
 
   if (!liste.length) {
-    h.push(rienDu("📖", q ? "Aucun plat ne correspond." : "Aucune recette.<br>Appuyez sur <b>+</b> pour en ajouter une."));
+    h.push(rienDu("📖", actif
+      ? "Aucun plat ne correspond.<br><button class=\"lien\" data-action=\"recettes-filtre-vider\">Enlever les filtres</button>"
+      : "Aucune recette.<br>Appuyez sur <b>+</b> pour en ajouter une."));
     return h.join("");
   }
 
-  h.push('<div class="sous-titre"><h3>' + liste.length + " plat" + (liste.length > 1 ? "s" : "") + "</h3></div>");
+  h.push('<div class="sous-titre"><h3>' + liste.length + " plat" + (liste.length > 1 ? "s" : "") +
+    (actif ? " sur " + etat.recettes.length : "") + "</h3>" +
+    (actif ? '<button class="lien" data-action="recettes-filtre-vider">Tout afficher</button>' : "") +
+    "</div>");
+
   h.push('<div class="carte">' + liste.map((r) =>
     '<div class="ligne"><span style="font-size:1.4rem">' + esc(r.emoji || "🍽️") + "</span>" +
     '<div class="ligne-corps"><b>' + esc(r.nom) + "</b><small>" +
-    (r.ingredients || []).length + " ingrédients</small>" +
+    (r.ingredients || []).length + " ingrédients" +
+    (r.origine === "importee" && r.deQui ? " • de " + esc(r.deQui) : "") + "</small>" +
     '<span class="etiquettes">' +
     (r.vegetarien ? '<span class="etiquette vert">végé</span>' : "") +
     (r.rapide ? '<span class="etiquette">rapide</span>' : "") +
     (r.type === "leger" ? '<span class="etiquette">léger</span>' : "") +
     (r.lien ? '<span class="etiquette chaud">lien</span>' : "") +
+    (r.partageId ? '<span class="etiquette vert">🌍 partagée</span>' : "") +
+    (r.origine === "importee" ? '<span class="etiquette">importée</span>' : "") +
     "</span></div>" +
     '<button class="btn mini" data-action="recette-editer" data-id="' + r.id + '">✏️</button></div>').join("") +
     "</div>");
@@ -826,7 +848,8 @@ const Connexion = {
           id: moiId, prenom: String(f.get("prenom")).trim(), emoji: emojiChoisi(),
           role: "admin", uids: [Store.uid], creeLe: new Date().toISOString()
         }, await champsPin(pin))];
-        donnees.recettes = (window.RECETTES_DEPART || []).map((r) => Object.assign({ id: id() }, r));
+        donnees.recettes = (window.RECETTES_DEPART || [])
+          .map((r) => Object.assign({ id: id(), origine: "depart" }, r));
         donnees.taches = tachesDeDepart(moiId);
         donnees.cadeaux = cadeauxDeDepart();
 
