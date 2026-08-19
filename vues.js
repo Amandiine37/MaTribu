@@ -700,7 +700,10 @@ const Connexion = {
 
   /* --- 2. Creation d'une famille --- */
   creer() {
-    const suggere = "MAISON-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+    /* Repère tiré au sort assez long pour qu'une autre famille ne tombe
+       jamais sur le même : on ne peut pas vérifier à l'avance s'il est libre
+       (lire la famille d'autrui est justement interdit). */
+    const suggere = nouveauRepere();
     return this.entete("Créons votre tribu. Vous en serez l'administrateur.") +
       '<form id="f-creer">' +
       '<label class="champ"><span>Nom de la famille</span>' +
@@ -837,7 +840,10 @@ const Connexion = {
         if (!/^[0-9]{4}$/.test(pin)) { toast("Le code doit faire 4 chiffres"); return; }
         bouton.disabled = true;
 
-        if (await Store.charger(code)) {
+        /* En ligne, on ne peut pas vérifier si le repère est libre : lire la
+           famille de quelqu'un d'autre est interdit, et c'est voulu. On tente
+           donc la création, et on explique proprement si elle est refusée. */
+        if (Store.mode === "local" && await Store.charger(code)) {
           toast("Ce repère est déjà pris, changez-le");
           bouton.disabled = false;
           return;
@@ -866,10 +872,11 @@ const Connexion = {
           bouton.disabled = false;
           const e = Store.derniereErreur;
           if (e && e.code === "permission-denied") {
-            ecranPanne(e, "Création refusée",
-              "Firebase a refusé la création de la famille. Vérifiez que les règles publiées " +
-              "sont bien celles du fichier firestore.rules, et que la version de l'application " +
-              "en ligne est bien la dernière.");
+            /* Cause de loin la plus fréquente : une autre famille utilise déjà
+               ce repère. On propose tout de suite un nouveau tirage. */
+            const champCode = ev.target.querySelector('[name="code"]');
+            champCode.value = nouveauRepere();
+            toast("Ce repère est déjà utilisé — en voici un autre");
           } else {
             toast("Création impossible : " + ((e && e.message) || "erreur inconnue"));
           }

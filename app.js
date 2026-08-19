@@ -220,6 +220,18 @@ function jetonAleatoire(octets) {
   return octetsVersHex(crypto.getRandomValues(new Uint8Array(octets || 24)));
 }
 
+/* Repere de famille tire au sort. Il sert d'identifiant du dossier : deux
+   familles ne peuvent pas porter le meme. Comme on n'a pas le droit de lire
+   les familles des autres, impossible de verifier a l'avance qu'il est libre
+   -> on le prend assez long pour que la collision soit negligeable. */
+function nouveauRepere() {
+  const lettres = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";   // sans I, O, 0, 1
+  let s = "";
+  const alea = crypto.getRandomValues(new Uint8Array(6));
+  for (let i = 0; i < 6; i++) s += lettres[alea[i] % lettres.length];
+  return "MAISON-" + s;
+}
+
 /* Transforme un code a 4 chiffres en empreinte impossible a relire.
    PBKDF2 = on repasse 150 000 fois dans une moulinette, ce qui rend les
    essais en masse tres lents. */

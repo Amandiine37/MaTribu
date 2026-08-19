@@ -259,6 +259,48 @@ Tout cela repose sur le fichier **`firestore.rules`**, à publier dans Firebase
 - **Entre membres d'une même famille, tout est visible.** L'appli protège des
   gens extérieurs, pas des curiosités entre frères et sœurs.
 
+## Faire essayer l'application à une autre famille
+
+Oui, c'est prévu et ça fonctionne : il suffit de leur donner l'adresse de
+l'application. Ils appuient sur **« Créer ma famille »** et repartent de zéro
+avec leur propre tribu — leurs membres, leurs tâches, leurs points, les 50
+recettes de départ.
+
+**Leurs données sont totalement séparées des vôtres.** Une famille n'est lisible
+que par les téléphones qui y ont été inscrits : personne ne peut voir la vôtre,
+et vous ne pouvez pas voir la leur depuis l'application.
+
+### Ce qu'il faut leur dire honnêtement
+
+- **Leurs données sont hébergées chez vous.** Tout passe par *votre* projet
+  Firebase. Vous pouvez donc tout lire depuis la console Firebase — y compris
+  leurs tâches, leurs courses et les prénoms de leurs enfants. Dites-le-leur :
+  c'est la moindre des choses, et c'est ce que demande le RGPD dès qu'on héberge
+  les données d'autrui.
+- **Vous êtes responsable de ces données.** Si vous supprimez le projet Firebase,
+  ils perdent tout. Si vous arrêtez le projet, prévenez-les.
+- **Conseillez-leur deux administrateurs.** L'accès étant lié à l'appareil, si
+  leur unique administrateur perd le sien, plus personne ne peut inviter — et
+  seul vous, depuis la console, pourrez les débloquer.
+- **Le catalogue de recettes est commun.** Ce qu'ils publient, vous le voyez, et
+  réciproquement. Rien d'autre n'est partagé entre familles.
+- **Leurs signalements de bugs vous arrivent** dans la collection `retours`.
+
+### Les limites gratuites
+
+L'offre gratuite de Firebase autorise, par jour, de l'ordre de **50 000
+lectures** et **20 000 écritures**, pour **1 Go** de stockage. Une famille active
+consomme quelques centaines de lectures par jour : vous pouvez héberger
+tranquillement une dizaine de familles. Au-delà, surveillez la consommation dans
+la console (onglet *Usage*).
+
+### Le repère de famille
+
+Chaque famille a un repère unique (`MAISON-DTUNKE`) qui sert de nom de dossier.
+Il est tiré au sort sur 6 caractères : une collision est quasi impossible. Si
+malgré tout le repère choisi est déjà pris, l'application le dit et en propose
+un autre — il suffit de réessayer.
+
 ## Lire les retours des utilisateurs
 
 Le bouton **« Signaler un problème / proposer une idée »** (dans *Mon profil*)
