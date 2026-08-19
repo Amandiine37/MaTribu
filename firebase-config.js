@@ -18,10 +18,10 @@
    ========================================================================= */
 
 window.CONFIG_FIREBASE = {
-  apiKey: "A_REMPLIR",
-  authDomain: "A_REMPLIR",
-  projectId: "A_REMPLIR",
-  storageBucket: "A_REMPLIR",
-  messagingSenderId: "A_REMPLIR",
-  appId: "A_REMPLIR"
+  apiKey: "AIzaSyBGo1o-5qxSGBDk_pWOie6OjQdfOwHgQsk",
+  authDomain: "matribu-b360d.firebaseapp.com",
+  projectId: "matribu-b360d",
+  storageBucket: "matribu-b360d.firebasestorage.app",
+  messagingSenderId: "713320479232",
+  appId: "1:713320479232:web:2f9fecae989b57f9bef6e5"
 };
