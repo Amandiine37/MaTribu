@@ -982,10 +982,24 @@ Formulaires.membre = function (mid) {
 Formulaires.invitation = function () {
   if (!estAdmin()) { toast("Seul un administrateur peut inviter"); return; }
 
+  /* Les profils qui peuvent recevoir une invitation : ceux qui se connectent
+     (les enfants « sans téléphone » n'en ont pas besoin). */
+  const cibles = etat.membres.filter((m) => !m.sansAppareil);
+
   const html = '<div id="f-invit">' +
     '<p class="aide" style="margin-bottom:1rem">L\'invitation est un lien <b>à usage unique</b>. ' +
     "Envoyez-le à la personne (SMS, message…) : en l'ouvrant, son téléphone sera autorisé " +
     "à accéder à la famille.</p>" +
+    '<label class="champ"><span>Pour qui ?</span></label>' +
+    puceMultiple("pour", [{ val: "nouveau", html: "➕ Une nouvelle personne" }].concat(
+      cibles.map((m) => ({
+        val: m.id,
+        html: esc((m.emoji || "🙂") + " " + m.prenom) +
+          ((m.uids || []).length || registreAppareils(m.id) ? "" : " (jamais connecté)")
+      }))), ["nouveau"]) +
+    '<p class="aide" style="margin:-.5rem 0 1rem">Choisissez un prénom existant pour ' +
+    "ajouter un <b>deuxième téléphone</b> à quelqu'un, ou pour connecter un profil " +
+    "que vous avez créé dans Administration.</p>" +
     '<label class="champ"><span>Valable pendant</span></label>' +
     puceMultiple("duree", [
       { val: "1", html: "24 heures" },
@@ -997,21 +1011,31 @@ Formulaires.invitation = function () {
 
   ouvrirFeuille("Inviter dans la famille", html, (f) => {
     brancherMulti(f, "duree", true);
+    brancherMulti(f, "pour", true);
     const zone = f.querySelector("#resultat-invit");
     const bouton = f.querySelector('[data-role="creer"]');
 
     bouton.onclick = async () => {
+      const pour = valeursMulti(f, "pour")[0] || "nouveau";
+      const cible = pour === "nouveau" ? null : membre(pour);
+      if (cible && !cible.pinHash && !cible.pin) {
+        toast("Donnez d'abord un code à 4 chiffres à " + cible.prenom);
+        return;
+      }
       bouton.disabled = true;
       const jours = Number(valeursMulti(f, "duree")[0] || 7);
-      const inv = await Invitations.creer(jours);
+      const inv = await Invitations.creer(jours, cible ? cible.id : null);
       bouton.disabled = false;
       if (!inv) { toast("Création impossible"); return; }
       const lien = Invitations.lien(inv.jeton);
       const fin = new Date(inv.expireLe).toLocaleDateString("fr-FR",
         { day: "numeric", month: "long", year: "numeric" });
 
-      zone.innerHTML = '<div class="bandeau info">✅<div>Invitation créée, valable jusqu\'au ' +
-        esc(fin) + ".</div></div>" +
+      zone.innerHTML = '<div class="bandeau info">✅<div>Invitation créée pour <b>' +
+        esc(inv.profil ? inv.profil.prenom : "une nouvelle personne") +
+        "</b>, valable jusqu'au " + esc(fin) +
+        (inv.profil ? ".<br>Cette personne devra saisir son code à 4 chiffres." : ".") +
+        "</div></div>" +
         '<div class="code-famille" style="font-size:.72rem;word-break:break-all;letter-spacing:0">' +
         esc(lien) + "</div>" +
         '<div class="rangee-btn" style="margin-top:.7rem">' +

@@ -1,5 +1,11 @@
 # 🏡 Tribu — l'organisation de la maison, en famille
 
+> ### 🧪 Version 0.9 — BÊTA
+> L'application est utilisable au quotidien, mais elle est encore jeune : des
+> bugs sont possibles et la forme des données peut encore changer.
+> Un bouton **« Signaler un problème / proposer une idée »** est disponible
+> dans *Mon profil* — servez-vous-en sans hésiter.
+
 Application pour téléphone (à installer sur l'écran d'accueil) qui rassemble :
 
 | Onglet | À quoi ça sert |
@@ -9,6 +15,7 @@ Application pour téléphone (à installer sur l'écran d'accueil) qui rassemble
 | 🛒 **Courses** | La liste de courses partagée, rangée par rayon. |
 | 🍽️ **Menus** | Les repas midi et soir de la semaine, avec un générateur automatique. |
 | 🔔 **Rappels** | Les rendez-vous et pense-bêtes à ne pas oublier. |
+| 🥫 **Ma réserve** | Votre stock (épicerie, conserves…) avec les quantités minimum, dans l'onglet Courses. |
 | 🌟 **Points & cadeaux** | Le score de chacun et la boutique de récompenses. |
 
 ---
@@ -18,10 +25,44 @@ Application pour téléphone (à installer sur l'écran d'accueil) qui rassemble
 ### Les profils
 
 - La première personne qui crée la famille devient **administrateur**.
-- Elle choisit un **code de famille** (ex. `MAISON-K4T9`) qu'elle donne aux autres.
+- Les autres la rejoignent par **invitation** : l'administrateur crée un lien
+  depuis *Administration → Créer une invitation* et le lui envoie. Le lien ne
+  sert **qu'une fois** et expire au bout de quelques jours.
+- En créant l'invitation, l'administrateur choisit **pour qui** elle est :
+  - **➕ Une nouvelle personne** : l'invité crée lui-même son prénom, son avatar
+    et son code à 4 chiffres ;
+  - **un prénom existant** : pour connecter un profil déjà créé dans
+    *Administration*, ou pour ajouter un **deuxième téléphone** à quelqu'un.
+    L'invité devra alors saisir le code à 4 chiffres de ce profil.
+  (Un profil sans code à 4 chiffres ne peut pas être invité : donnez-lui-en un
+  d'abord dans *Administration → Membres*.)
 - Chacun choisit son prénom, un avatar et un **code à 4 chiffres** pour entrer.
+- Il faut **une invitation par appareil** : c'est ce qui fait que connaître le
+  nom de votre tribu ne suffit jamais pour entrer.
 - Un administrateur peut : créer/modifier les tâches, valider les tâches faites,
   gérer les cadeaux, ajouter ou modifier des membres, ajuster les points.
+
+> 💡 Nommez **deux administrateurs**. Si le seul administrateur perd l'accès à
+> son téléphone, plus personne ne peut valider les tâches ni inviter.
+
+### Les enfants qui n'ont pas de téléphone
+
+Dans *Administration → Membres → Ajouter*, cochez **« Pas de téléphone »**.
+
+L'enfant a alors un profil complet — ses tâches, ses points, son rang au
+classement, ses cadeaux — mais il ne se connecte pas :
+
+- il n'apparaît pas dans la liste « Qui êtes-vous ? » et n'a pas de code à
+  4 chiffres ;
+- ses tâches du moment s'affichent sur **votre** accueil, dans une carte
+  **« 🧒 À faire pour les enfants »** ;
+- quand vous cochez « C'est fait » pour lui, cela vaut validation : les points
+  lui sont crédités immédiatement (à lui, pas à vous) ;
+- pour dépenser ses points, ouvrez **Points & cadeaux** : à côté de son nom dans
+  le classement, le bouton **🎁** ouvre la boutique en son nom.
+
+Le jour où il a un téléphone, décochez la case, donnez-lui un code à 4 chiffres
+et envoyez-lui une invitation : il garde ses points et son historique.
 
 ### Les tâches
 
@@ -41,6 +82,38 @@ Application pour téléphone (à installer sur l'écran d'accueil) qui rassemble
 - Un membre demande un cadeau → l'administrateur accorde → les points sont retirés.
 - Chacun peut consulter son historique de points.
 
+### La réserve et les courses
+
+L'onglet **Courses** contient deux listes, avec un sélecteur en haut :
+
+**🛒 Liste de courses** — ce qu'il faut acheter, rangé par rayon. Chaque article
+a une quantité et une unité (2 l de lait, 500 g de farine…).
+
+**🥫 Ma réserve** — ce que vous gardez en permanence à la maison : épicerie,
+conserves, produits d'entretien. Pour chaque article :
+
+- la quantité que vous avez, avec son unité ;
+- une **quantité minimum** facultative. Dès que vous passez en dessous,
+  l'article est signalé et un bouton l'ajoute à la liste de courses.
+- les boutons **−** et **+** ajustent la quantité en un geste.
+
+**Le lien avec les menus, c'est là que ça devient utile :** quand vous appuyez
+sur **🛒 Aux courses** depuis l'onglet Menus, l'application calcule pour chaque
+ingrédient *besoin de la semaine − ce que vous avez en réserve*. Ce qui est déjà
+couvert est décoché automatiquement, et les autres sont proposés avec la
+quantité réellement manquante.
+
+> Exemple : la semaine demande 6 pommes et 250 g de farine. Vous avez 2 pommes
+> et 1 kg de farine → l'application propose **4 pommes**, et laisse la farine de
+> côté. Les kilos et les grammes sont convertis tout seuls (idem ml / cl / l).
+
+Enfin, quand vous cochez vos achats et videz le panier, l'application vous
+propose de **rentrer les achats dans la réserve**. La boucle est bouclée.
+
+*Les unités qui ne se convertissent pas entre elles (des grammes et des boîtes,
+par exemple) ne sont pas mélangées : l'application le signale au lieu de
+deviner.*
+
 ### Les menus
 
 - Appuyez sur **🎲 Générer** : l'application remplit la semaine en piochant dans
@@ -53,6 +126,49 @@ Application pour téléphone (à installer sur l'écran d'accueil) qui rassemble
   collez-y l'adresse de la recette (Cookomix, un blog…) et un bouton l'ouvrira.
   L'application ne stocke que le nom du plat et ses ingrédients — pas le texte
   des recettes, qui appartient à leurs auteurs.
+
+### Retrouver une recette
+
+Dans **Mes recettes**, la barre de recherche cherche dans les noms de plats
+**et dans les ingrédients** (tapez « coco » pour retrouver tout ce qui contient
+du lait de coco).
+
+En dessous, quatre filtres se combinent librement :
+
+| Filtre | Ce qu'il garde |
+|---|---|
+| ✍️ **Mes recettes** | Uniquement celles que vous avez créées (pas les 50 fournies) |
+| 🌿 **Végé** | Les plats végétariens |
+| ⚡ **Rapide** | Moins de 30 minutes |
+| 🥗 **Léger** | Les plats marqués « léger » |
+
+### Partager vos recettes avec d'autres familles
+
+Les familles qui utilisent Tribu disposent d'un **catalogue commun**, accessible
+depuis *Mes recettes* → **🌍 Recettes partagées par d'autres familles**. Vous
+pouvez y feuilleter les plats publiés, les prévisualiser, et en recopier un chez
+vous d'un geste.
+
+Pour publier l'un de vos plats : ouvrez-le (✏️) puis **🌍 Partager avec les
+autres familles**. Un écran vous rappelle précisément ce qui devient visible :
+
+- ✅ publié : le nom du plat, ses ingrédients, le lien éventuel, et le **nom de
+  votre tribu** ;
+- ❌ jamais publié : vos prénoms, vos points, vos courses, vos tâches, ni le code
+  de votre famille.
+
+Quelques règles :
+
+- seules **vos propres créations** peuvent être partagées — pas les 50 recettes
+  fournies (tout le monde les a déjà), ni celles importées d'une autre famille ;
+- vous pouvez **retirer** une publication à tout moment, depuis la même fenêtre ;
+- une fiche publiée n'est pas modifiable : pour corriger, retirez-la et
+  republiez-la.
+
+> ⚠️ Ces recettes sont écrites par d'autres utilisateurs et **ne sont vérifiées
+> par personne**. Lisez-les avant de cuisiner. En tant que propriétaire du projet
+> Firebase, vous pouvez supprimer n'importe quelle fiche depuis la console
+> (collection `recettesPartagees`).
 
 ---
 
@@ -96,6 +212,7 @@ bandeau orange le rappelle sur l'accueil.
 | `formulaires.js` | Les fenêtres qui remontent du bas (ajouter, modifier…). |
 | `recettes.js` | Les 50 plats fournis au démarrage. Modifiable dans l'app. |
 | `firebase-config.js` | **Le seul fichier à remplir** pour activer le partage. |
+| `firestore.rules` | Les règles de sécurité, **à copier dans Firebase**. Sans elles, rien n'est protégé. |
 | `manifest.webmanifest` | Permet d'installer l'app sur l'écran d'accueil. |
 | `sw.js` | Rend l'application utilisable sans réseau. |
 | `icon-192.png`, `icon-512.png` | Les icônes. |
@@ -110,17 +227,57 @@ python serve.py
 
 puis ouvrir `http://localhost:4174`.
 
+> 🛡️ Sur `localhost`, l'application reste **volontairement en mode local** : vos
+> essais n'écrivent jamais dans la vraie base de la famille. Pour tester la
+> synchronisation pour de bon, ouvrez `http://localhost:4174/?nuage=1`.
+
 ---
+
+## Comment vos données sont protégées
+
+| Protection | Ce que ça veut dire |
+|---|---|
+| **Accès par appareil** | Seuls les téléphones inscrits dans la famille peuvent la lire. Le repère de la tribu (`MAISON-K4T9`) n'ouvre rien. |
+| **Invitations à usage unique** | Un lien, une personne, un appareil. Il expire, et se désactive dès qu'il a servi. |
+| **Codes à 4 chiffres chiffrés** | Ils ne sont jamais enregistrés tels quels, seulement sous forme d'empreinte illisible (PBKDF2). Même en ouvrant la base, on ne peut pas les relire. Si quelqu'un l'oublie, un administrateur le réinitialise. |
+| **Points en écriture unique** | Chaque gain de points est une ligne qui ne peut plus jamais être modifiée, créée par un administrateur, et dont le montant est vérifié par Firebase lui-même. Impossible de se donner des points en bidouillant l'appli. |
+| **Droits par rôle** | Un membre ordinaire ne peut toucher qu'aux courses, repas, rappels et recettes. Les membres, tâches, cadeaux et barèmes sont réservés aux administrateurs. |
+
+Tout cela repose sur le fichier **`firestore.rules`**, à publier dans Firebase
+(étape 3 du guide). **Sans lui, aucune de ces protections n'existe.**
+
+### Les limites, dites franchement
+
+- **Tant que Firebase n'est pas configuré**, l'appli tourne en local : les
+  données sont dans le téléphone, et quiconque a le téléphone déverrouillé y
+  accède. Le chiffrement du code à 4 chiffres marche quand même.
+- **Un code à 4 chiffres reste un code à 4 chiffres.** Il empêche le petit frère
+  de valider ses tâches tout seul. Ce n'est pas un mot de passe de banque, et il
+  ne faut pas y mettre celui de votre carte bancaire.
+- **Un administrateur peut tout faire**, y compris s'ajouter des points. C'est
+  voulu : c'est le rôle du parent.
+- **Entre membres d'une même famille, tout est visible.** L'appli protège des
+  gens extérieurs, pas des curiosités entre frères et sœurs.
+
+## Lire les retours des utilisateurs
+
+Le bouton **« Signaler un problème / proposer une idée »** (dans *Mon profil*)
+envoie le message dans une collection **`retours`** de votre base Firebase.
+
+Pour les lire : console Firebase → **Firestore Database** → collection
+`retours`. Chaque message contient le type (problème / idée / autre), le titre,
+le détail, le prénom, le nom de la tribu, la version de l'application et le
+modèle de téléphone.
+
+Par sécurité, ces messages **ne sont lisibles que depuis la console** : personne
+ne peut les consulter — ni les modifier — depuis l'application.
 
 ## Bon à savoir
 
-- **Les codes à 4 chiffres ne sont pas du chiffrement.** Ils évitent que le petit
-  frère valide les tâches à votre place — pas plus. Ne réutilisez pas un code de
-  carte bancaire.
-- **Le code de famille est la vraie clé.** Toute personne qui le connaît peut
-  rejoindre la tribu. Ne le publiez pas.
 - **Pas de notification qui sonne.** Une application web ne peut pas envoyer de
   rappel quand elle est fermée. Les rappels s'affichent dans l'app (pastille
   orange sur l'onglet 🔔) mais ne feront pas vibrer le téléphone.
 - **Hors connexion**, l'application s'ouvre et s'affiche, mais les modifications
   ne partiront vers la famille qu'au retour du réseau.
+- **Changer de téléphone ?** Demandez une nouvelle invitation à un
+  administrateur : vous retrouverez votre profil, vos points et votre historique.

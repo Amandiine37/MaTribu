@@ -758,7 +758,9 @@ const Connexion = {
 
   /* --- 5. Nouveau profil (uniquement via invitation) --- */
   nouveauProfil(d) {
-    return this.entete("Créons votre profil dans <b>" + esc(d.donnees.famille.nom) + "</b>.") +
+    const nomFamille = (d.invitation && d.invitation.nomFamille) ||
+      (d.donnees && d.donnees.famille.nom) || "votre famille";
+    return this.entete("Créons votre profil dans <b>" + esc(nomFamille) + "</b>.") +
       '<form id="f-profil">' +
       '<label class="champ"><span>Votre prénom</span>' +
       '<input type="text" name="prenom" required maxlength="20"></label>' +
@@ -791,7 +793,10 @@ const Connexion = {
 
     const retour = el.querySelector("#b-retour");
     if (retour) retour.onclick = () => {
-      if (etape === "pin" || etape === "nouveauProfil") this.aller("profils", d);
+      /* Depuis une invitation on n'a pas de liste de profils à laquelle
+         revenir (la famille n'est pas encore lisible) : retour à l'accueil. */
+      const versProfils = (etape === "pin" || etape === "nouveauProfil") && d.donnees;
+      if (versProfils) this.aller("profils", d);
       else this.aller("accueil");
     };
 
@@ -848,6 +853,7 @@ const Connexion = {
           id: moiId, prenom: String(f.get("prenom")).trim(), emoji: emojiChoisi(),
           role: "admin", uids: [Store.uid], creeLe: new Date().toISOString()
         }, await champsPin(pin))];
+        donnees.appareils = { [Store.uid]: moiId };
         donnees.recettes = (window.RECETTES_DEPART || [])
           .map((r) => Object.assign({ id: id(), origine: "depart" }, r));
         donnees.taches = tachesDeDepart(moiId);
@@ -886,7 +892,16 @@ const Connexion = {
         const r = await Invitations.valider(jeton);
         bouton.disabled = false;
         if (!r.ok) { toast(r.message); return; }
-        this.aller("profils", { code: r.invitation.famille, donnees: r.donnees, jeton: jeton });
+
+        const inv = r.invitation;
+        const suite = { code: inv.famille, jeton: jeton, invitation: inv };
+        /* L'invitation dit pour qui elle est : soit on crée son profil,
+           soit on entre le code du profil qu'elle désigne. */
+        if (inv.pour && inv.pour !== "nouveau" && inv.profil) {
+          this.aller("pin", Object.assign({ membre: inv.profil }, suite));
+        } else {
+          this.aller("nouveauProfil", suite);
+        }
       };
     }
 
@@ -917,17 +932,24 @@ const Connexion = {
 
         const nouveau = Object.assign({
           id: id(), prenom: String(f.get("prenom")).trim(), emoji: emojiChoisi(),
-          role: "membre", uids: [Store.uid], creeLe: new Date().toISOString()
+          role: "membre", uids: [], creeLe: new Date().toISOString()
         }, await champsPin(pin));
 
-        appliquerDonnees(r.donnees);
-        etat.membres.push(nouveau);
-        recalculerIndex();
         Store.code = d.code;
-        const ok = await Store.rejoindre(d.code, d.jeton);
-        if (!ok) { toast("Invitation refusée par le serveur"); bouton.disabled = false; return; }
+        const ok = await Store.rejoindre(d.code, d.jeton, { nouveauMembre: nouveau });
+        if (!ok) {
+          toast("Invitation refusée par le serveur");
+          bouton.disabled = false;
+          return;
+        }
         await Store.consommerInvitation(d.jeton);
-        await entrerDansFamille(d.code, nouveau.id);
+        const entre = await entrerDansFamille(d.code, nouveau.id);
+        if (!entre) {
+          ecranPanne(Store.derniereErreur, "Presque !",
+            "Votre appareil a bien été inscrit, mais la famille n'a pas pu être " +
+            "chargée. Rechargez la page.");
+          return;
+        }
         toast("Bienvenue " + nouveau.prenom + " 👋");
       };
     }
@@ -957,23 +979,34 @@ const Connexion = {
         }
         const pinSaisi = saisie;
 
-        /* Arrivee par invitation : on inscrit cet appareil dans la famille. */
+        /* Arrivee par invitation : on inscrit cet appareil dans la famille.
+           On n'a pas le droit de lire la famille avant cette inscription,
+           donc on n'ajoute que ce qui nous concerne. */
         if (d.jeton) {
           const r = await Invitations.valider(d.jeton);
           if (!r.ok) { toast(r.message); occupe = false; return; }
-          appliquerDonnees(r.donnees);
-          const m = membre(d.membre.id);
-          if (!m) { toast("Profil introuvable"); occupe = false; return; }
-          m.uids = (m.uids || []).concat(Store.uid).filter((u, i, t) => t.indexOf(u) === i);
-          recalculerIndex();
           Store.code = d.code;
-          const ok = await Store.rejoindre(d.code, d.jeton);
-          if (!ok) { toast("Invitation refusée par le serveur"); occupe = false; return; }
+          const ok = await Store.rejoindre(d.code, d.jeton, {
+            membreId: d.membre.id,
+            admin: (d.membre.role || "membre") === "admin"
+          });
+          if (!ok) {
+            ecranPanne(Store.derniereErreur, "Invitation refusée",
+              "Le serveur a refusé l'inscription de cet appareil. Les règles de " +
+              "sécurité Firebase ne sont peut-être pas à jour.");
+            return;
+          }
           await Store.consommerInvitation(d.jeton);
         }
 
         const entre = await entrerDansFamille(d.code, d.membre.id);
         if (!entre) {
+          if (d.jeton) {
+            ecranPanne(Store.derniereErreur, "Presque !",
+              "Votre appareil a bien été inscrit, mais la famille n'a pas pu être " +
+              "chargée. Rechargez la page.");
+            return;
+          }
           toast("Cet appareil n'a pas accès à cette famille");
           occupe = false;
           return;

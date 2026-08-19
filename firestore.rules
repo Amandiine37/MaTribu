@@ -114,15 +114,22 @@ service cloud.firestore {
           .hasOnly(['courses', 'stock', 'repas', 'notes', 'recettes', 'echanges']);
       }
 
+      // Un appareil invite s'inscrit lui-meme. A cet instant il n'a PAS encore
+      // le droit de lire la famille : il ne peut donc qu'AJOUTER (arrayUnion),
+      // jamais recopier ni ecraser ce qui existe.
       function sInscritAvecInvitation() {
+        let jeton = request.resource.data.jetonUtilise;
         return connecte()
           && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['membres', 'membresUid', 'jetonUtilise'])
+               .hasOnly(['membres', 'membresUid', 'adminsUid', 'appareils', 'jetonUtilise'])
           && request.auth.uid in request.resource.data.membresUid
           && !(request.auth.uid in resource.data.membresUid)
           && request.resource.data.membresUid.size() == resource.data.membresUid.size() + 1
-          && request.resource.data.adminsUid == resource.data.adminsUid
-          && invitationValide(fid, request.resource.data.jetonUtilise);
+          && invitationValide(fid, jeton)
+          // seule une invitation visant un profil administrateur ouvre les droits d'admin
+          && (invitation(jeton).profilRole == 'admin'
+                ? request.resource.data.adminsUid.size() == resource.data.adminsUid.size() + 1
+                : request.resource.data.adminsUid == resource.data.adminsUid);
       }
 
       allow get: if estMembre(fid);

@@ -52,9 +52,9 @@ const FAMILLES_UNITES = {
 
 /* Rubriques rangees dans le document principal de la famille.
    `etats` et `journal` sont a part : ils ont leurs propres regles de securite. */
-const CLES_DOC = ["famille", "membres", "membresUid", "adminsUid", "taches", "bareme",
-  "courses", "stock", "recettes", "repas", "notes", "cadeaux", "tarifs", "echanges",
-  "reglages", "jetonUtilise"];
+const CLES_DOC = ["famille", "membres", "membresUid", "adminsUid", "appareils", "taches",
+  "bareme", "courses", "stock", "recettes", "repas", "notes", "cadeaux", "tarifs",
+  "echanges", "reglages", "jetonUtilise"];
 
 function id() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -260,7 +260,7 @@ async function migrerPinSiBesoin(m, pin) {
 function etatVide() {
   return {
     famille: { nom: "", code: "", creeLe: "", version: 2 },
-    membres: [], membresUid: [], adminsUid: [],
+    membres: [], membresUid: [], adminsUid: [], appareils: {},
     taches: [], bareme: {}, etats: {},
     courses: [], stock: [], recettes: [], repas: {}, notes: [],
     cadeaux: [], tarifs: {}, echanges: [], journal: [],
@@ -317,6 +317,12 @@ function estGere(idm) {
   return !!(m && m.sansAppareil);
 }
 function membresGeres() { return etat.membres.filter((m) => m.sansAppareil); }
+
+/* Combien d'appareils sont rattachés à ce profil dans le registre. */
+function registreAppareils(membreId) {
+  return Object.keys(etat.appareils || {})
+    .filter((u) => etat.appareils[u] === membreId).length;
+}
 function membresConnectables() { return etat.membres.filter((m) => !m.sansAppareil); }
 
 /* Les tâches en attente des enfants gérés, pour que le parent les coche. */
@@ -333,22 +339,37 @@ function classement() {
 
 /* Les listes que Firebase utilise pour verifier les droits et les montants.
    A recalculer des qu'on touche aux membres, aux taches ou aux cadeaux. */
-function recalculerIndex() {
+/* Recalcule les listes que Firebase utilise pour vérifier les droits et les
+   montants. Travaille sur n'importe quel document, pas seulement sur l'état
+   courant — indispensable pour le mode local, où l'appareil qui rejoint n'a
+   rien en mémoire. */
+function recalculerIndexSur(d) {
   const uids = [];
   const admins = [];
-  etat.membres.forEach((m) => {
-    (m.uids || []).forEach((u) => {
-      if (u && uids.indexOf(u) === -1) uids.push(u);
-      if (u && m.role === "admin" && admins.indexOf(u) === -1) admins.push(u);
-    });
+  const profil = (idm) => (d.membres || []).find((m) => m.id === idm) || null;
+  const ajoute = (u, estAdminDuProfil) => {
+    if (!u) return;
+    if (uids.indexOf(u) === -1) uids.push(u);
+    if (estAdminDuProfil && admins.indexOf(u) === -1) admins.push(u);
+  };
+  /* Deux sources : les appareils notés dans chaque profil (écrits par un
+     administrateur) et le registre `appareils`, rempli par ceux qui
+     rejoignent par invitation sans pouvoir lire le reste de la famille. */
+  (d.membres || []).forEach((m) => (m.uids || []).forEach((u) => ajoute(u, m.role === "admin")));
+  Object.keys(d.appareils || {}).forEach((u) => {
+    const m = profil(d.appareils[u]);
+    if (m) ajoute(u, m.role === "admin");
   });
-  etat.membresUid = uids;
-  etat.adminsUid = admins;
-  etat.bareme = {};
-  etat.taches.forEach((t) => { etat.bareme[t.id] = t.points || 0; });
-  etat.tarifs = {};
-  etat.cadeaux.forEach((c) => { etat.tarifs[c.id] = c.cout || 0; });
+  d.membresUid = uids;
+  d.adminsUid = admins;
+  d.bareme = {};
+  (d.taches || []).forEach((t) => { d.bareme[t.id] = t.points || 0; });
+  d.tarifs = {};
+  (d.cadeaux || []).forEach((c) => { d.tarifs[c.id] = c.cout || 0; });
+  return d;
 }
+
+function recalculerIndex() { return recalculerIndexSur(etat); }
 
 /* --- Taches --- */
 function participantsValides(t) {
@@ -671,12 +692,19 @@ const Store = {
   },
 
   async lireInvitation(jeton) {
+    this.derniereErreur = null;
     if (this.mode !== "nuage") {
       const t = JSON.parse(localStorage.getItem("tribu:invitations") || "{}");
       return t[jeton] || null;
     }
-    const d = await this._fs.getDoc(this._fs.doc(this._db, "invitations", jeton));
-    return d.exists() ? Object.assign({ jeton: jeton }, d.data()) : null;
+    try {
+      const d = await this._fs.getDoc(this._fs.doc(this._db, "invitations", jeton));
+      return d.exists() ? Object.assign({ jeton: jeton }, d.data()) : null;
+    } catch (err) {
+      console.warn("Lecture de l'invitation refusée :", err);
+      this.derniereErreur = err;
+      return null;
+    }
   },
 
   async consommerInvitation(jeton) {
@@ -690,20 +718,44 @@ const Store = {
       { utilisee: true, utiliseeLe: Date.now() }, { merge: true });
   },
 
-  /* Entree dans la famille : on ajoute cet appareil a la liste autorisee.
+  /* Entree dans la famille : on inscrit CET appareil dans la liste autorisee.
      C'est la seule ecriture qu'un non-membre a le droit de faire, et
-     uniquement en presentant un jeton d'invitation valide. */
-  async rejoindre(code, jeton) {
-    if (this.mode !== "nuage") { this._ecrireLocal(code, etat); return true; }
+     uniquement en presentant un jeton d'invitation valide.
+
+     Point important : a cet instant, l'appareil n'a PAS encore le droit de
+     lire la famille. On ne peut donc rien recopier de l'existant : on ajoute
+     seulement, avec arrayUnion et une fusion de map. Sinon on ecraserait
+     les autres membres. */
+  async rejoindre(code, jeton, opts) {
+    const nouveau = opts.nouveauMembre || null;
+    const membreId = nouveau ? nouveau.id : opts.membreId;
+
+    if (this.mode !== "nuage") {
+      /* On repart du document enregistré, surtout PAS de l'état en mémoire :
+         un appareil qui rejoint n'a encore rien chargé, et on effacerait la
+         famille entière. */
+      const d = this._lireLocal(code);
+      if (!d) return false;
+      if (nouveau) { d.membres = (d.membres || []).concat([nouveau]); }
+      d.appareils = Object.assign({}, d.appareils || {});
+      d.appareils[this.uid] = membreId;
+      recalculerIndexSur(d);
+      this._ecrireLocal(code, d);
+      return true;
+    }
     try {
-      await this._fs.setDoc(this._fs.doc(this._db, "familles", code), {
-        membres: propre(etat.membres),
-        membresUid: propre(etat.membresUid),
+      const morceau = {
+        membresUid: this._fs.arrayUnion(this.uid),
+        appareils: { [this.uid]: membreId },
         jetonUtilise: jeton
-      }, { merge: true });
+      };
+      if (nouveau) morceau.membres = this._fs.arrayUnion(propre(nouveau));
+      if (opts.admin) morceau.adminsUid = this._fs.arrayUnion(this.uid);
+      await this._fs.setDoc(this._fs.doc(this._db, "familles", code), morceau, { merge: true });
       return true;
     } catch (err) {
       console.warn("Invitation refusee :", err);
+      this.derniereErreur = err;
       return false;
     }
   }
@@ -752,7 +804,7 @@ function appliquerDonnees(d, portee) {
 
   ["membres", "taches", "courses", "stock", "recettes", "notes", "cadeaux", "echanges",
     "journal", "membresUid", "adminsUid"].forEach((c) => { if (!Array.isArray(etat[c])) etat[c] = []; });
-  ["etats", "repas", "reglages", "bareme", "tarifs"].forEach((c) => {
+  ["etats", "repas", "reglages", "bareme", "tarifs", "appareils"].forEach((c) => {
     if (!etat[c] || typeof etat[c] !== "object") etat[c] = {};
   });
   if (!etat.famille || typeof etat.famille !== "object") etat.famille = { nom: "", code: "" };
@@ -1107,12 +1159,26 @@ async function ajouterAuJournal(entree) {
 /* ============================ 7. Invitations ============================ */
 
 const Invitations = {
-  async creer(joursValidite) {
+
+  /* L'invitation embarque tout ce qu'il faut pour entrer : le nom de la tribu
+     et, si elle vise un profil existant, ce profil (avec l'empreinte de son
+     code, pour pouvoir le vérifier). C'est indispensable : tant qu'il n'est
+     pas inscrit, l'appareil invité n'a pas le droit de lire la famille. */
+  async creer(joursValidite, pourMembreId) {
     if (!estAdmin()) return null;
+    const cible = pourMembreId ? membre(pourMembreId) : null;
     const inv = {
       jeton: jetonAleatoire(24),
       famille: etat.famille.code,
       nomFamille: etat.famille.nom,
+      pour: cible ? cible.id : "nouveau",
+      profil: cible ? {
+        id: cible.id, prenom: cible.prenom, emoji: cible.emoji || "🙂",
+        role: cible.role || "membre",
+        pinHash: cible.pinHash || null, pinSel: cible.pinSel || null,
+        pin: cible.pinHash ? null : (cible.pin || null)
+      } : null,
+      profilRole: cible ? (cible.role || "membre") : "",
       creeePar: moi.id,
       creeeLe: Date.now(),
       expireLe: Date.now() + (joursValidite || 7) * 86400000,
@@ -1140,14 +1206,21 @@ const Invitations = {
     return /^[a-f0-9]{16,}$/i.test(t) ? t.toLowerCase() : null;
   },
 
+  /* On ne lit QUE l'invitation : la famille n'est pas encore lisible pour cet
+     appareil, et c'est justement ce qui la protège. */
   async valider(jeton) {
     const inv = await Store.lireInvitation(jeton);
-    if (!inv) return { ok: false, message: "Cette invitation n'existe pas." };
+    if (!inv) {
+      return {
+        ok: false,
+        message: Store.derniereErreur
+          ? "Impossible de lire l'invitation (connexion ?)."
+          : "Cette invitation n'existe pas ou a été supprimée."
+      };
+    }
     if (inv.utilisee) return { ok: false, message: "Cette invitation a déjà été utilisée." };
     if (inv.expireLe && inv.expireLe < Date.now()) return { ok: false, message: "Cette invitation a expiré." };
-    const donnees = await Store.charger(inv.famille);
-    if (!donnees) return { ok: false, message: "Famille introuvable." };
-    return { ok: true, invitation: inv, donnees: donnees };
+    return { ok: true, invitation: inv };
   }
 };
 

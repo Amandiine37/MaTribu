@@ -42,23 +42,29 @@ et voit les changements des autres en quelques secondes.
 1. Toujours dans **Firestore Database**, ouvrez l'onglet **« Règles »**.
 2. **Effacez tout** ce qui s'y trouve et collez exactement ceci :
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /familles/{code} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
-```
+**Le contenu à coller se trouve dans le fichier `firestore.rules`** de ce
+dossier. Ouvrez-le, sélectionnez tout, copiez, collez dans Firebase.
 
 3. Cliquez sur **Publier**.
 
-> **Ce que ça veut dire, en clair :** seules les personnes qui passent par
-> l'application peuvent lire et écrire, et uniquement dans la partie « familles ».
-> Ce qui protège vos données des autres familles, c'est **votre code de famille**,
-> qui sert de mot de passe commun. Ne le publiez nulle part.
+> ⚠️ **Cette étape n'est pas une formalité.** Ces règles sont ce qui empêche
+> réellement quelqu'un de lire vos données ou de se donner des points, même en
+> bidouillant l'application depuis son téléphone. Sans elles, tout le reste ne
+> sert à rien.
+
+**Ce qu'elles font, en clair :**
+
+| La règle | Ce qu'elle empêche |
+|---|---|
+| Seuls les **appareils inscrits** dans la famille peuvent la lire | Qu'un inconnu qui devine le nom de votre tribu voie vos données |
+| On n'entre que par une **invitation** valide, non expirée, non utilisée | Qu'un lien qui traîne serve deux fois |
+| Un membre ordinaire ne modifie que courses, repas, rappels, recettes | Qu'un enfant se nomme administrateur ou change les barèmes |
+| Seul un administrateur passe une tâche en « validée » | Qu'on valide ses propres tâches |
+| Les points sont en **écriture unique**, et Firebase vérifie le montant | Qu'on s'attribue 10 000 points depuis la console du navigateur |
+
+> **À retenir :** le repère de la famille (`MAISON-K4T9`) **ne donne aucun
+> accès**. Ce qui ouvre la porte, c'est une invitation, et elle ne sert qu'une
+> fois. Vous pouvez donc dire le nom de votre tribu sans risque.
 
 ---
 
@@ -144,9 +150,13 @@ Ouvrez l'application sur votre téléphone :
 - Sinon, appuyez sur votre avatar (en haut à gauche) : vous devez lire
   **« Partagé avec la famille »** avec un point vert. 🎉
 
-**Le test qui ne trompe pas :** créez la famille sur votre téléphone, puis
-rejoignez-la depuis un autre téléphone avec le code. Cochez une tâche d'un côté,
-elle doit apparaître de l'autre en quelques secondes.
+**Le test qui ne trompe pas :**
+
+1. Créez la famille sur votre téléphone.
+2. Allez dans **Administration → Créer une invitation**, envoyez-vous le lien.
+3. Ouvrez ce lien sur un **autre** téléphone, créez-y un profil.
+4. Cochez une tâche d'un côté : elle doit apparaître de l'autre en quelques secondes.
+5. Réessayez d'ouvrir **le même lien** : il doit être refusé (« déjà utilisée »).
 
 ---
 
@@ -155,9 +165,25 @@ elle doit apparaître de l'autre en quelques secondes.
 | Ce que vous voyez | Ce qu'il faut faire |
 |---|---|
 | Bandeau « Mode hors partage » qui reste | Un `A_REMPLIR` traîne encore dans `firebase-config.js`, ou le fichier n'a pas été redéposé sur GitHub. |
-| « Aucune famille avec ce code » alors que le code est bon | Vérifiez que les deux téléphones ouvrent bien **la même adresse** et que le code est écrit pareil (il est mis en majuscules automatiquement). |
+| « Invitation refusée par le serveur » | Les règles de l'étape 3 ne sont pas publiées, ou pas dans leur version complète (`firestore.rules`). |
+| « Cette invitation n'existe pas ou a été supprimée » | Le lien a été tronqué en route (SMS coupé). Recopiez-le en entier, ou passez par le bouton « Partager ». |
+| « Cette invitation a expiré / a déjà été utilisée » | Normal : créez-en une nouvelle. Il en faut une par personne **et par appareil**. |
+| « Points refusés par le serveur » | Les règles sont publiées mais la famille date d'avant : ouvrez **Administration**, modifiez une tâche et enregistrez — cela reconstruit le barème que les règles vérifient. |
 | Rien ne se synchronise | Étape 4 (connexion anonyme) probablement oubliée, ou étape 7 (domaine autorisé). |
-| « Enregistrement impossible » | Les règles de l'étape 3 ne sont pas publiées. |
+| Un téléphone dit « Cet appareil n'a plus accès » | Il a effacé les données du navigateur. Envoyez-lui une nouvelle invitation, il retrouvera son profil et ses points. |
+
+### ⚠️ Le seul vrai risque de blocage
+
+L'accès est lié à l'appareil. Si **tous les administrateurs** perdent le leur en
+même temps (téléphone cassé, données du navigateur effacées), plus personne ne
+peut créer d'invitation.
+
+Deux précautions, à prendre tout de suite :
+- **nommez un deuxième administrateur** dans la famille ;
+- en dernier recours, vous êtes propriétaire du projet Firebase : vous pouvez
+  toujours rouvrir l'accès à la main depuis la console (Firestore → votre
+  famille → champ `membresUid` et `adminsUid`, y ajouter l'identifiant du nouvel
+  appareil). C'est votre filet de sécurité.
 
 Pour voir l'erreur exacte : sur ordinateur, ouvrez l'application, appuyez sur
 `F12`, onglet **Console**. Le message est en anglais mais il suffit de me le
