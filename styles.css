@@ -437,3 +437,28 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:1.1rem 0;}
   font-size:.8rem;font-weight:800;
 }
 .etape.ok{background:var(--accent);color:var(--accent-ink);}
+
+/* ---------- entête de la liste de courses choisie ---------- */
+.entete-liste{
+  display:flex;align-items:center;gap:.6rem;
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:.55rem .75rem;margin-bottom:.8rem;
+}
+.entete-liste b{display:block;font-size:.92rem;}
+.entete-liste small{display:block;font-size:.74rem;color:var(--ink-muted);margin-top:.1rem;}
+.entete-liste > div:first-child{flex:1;min-width:0;}
+
+/* ---------- grille d'icônes : fournie, donc défilante ---------- */
+.grille-emojis{
+  max-height:132px;overflow-y:auto;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:.5rem;margin-bottom:1rem;
+  -webkit-overflow-scrolling:touch;
+}
+.grille-emojis .puce{
+  background:var(--surface);
+  padding:.34rem .5rem;font-size:1.05rem;line-height:1.15;
+}
+.grille-emojis .puce.on{background:var(--accent);border-color:var(--accent);}

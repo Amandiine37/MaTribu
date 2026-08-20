@@ -178,14 +178,24 @@ Vues.accueil = function () {
     prochains.length ? prochains.map(ligneNote).join("") : rienDu("😌", "Aucun rappel en attente."),
     "Tout voir", "aller", "notes"));
 
-  /* Courses */
-  const restants = etat.courses.filter((c) => !c.coche).length;
+  /* Courses : une ligne par liste, les listes du mois n'ont rien d'urgent */
+  const listes = listesCourses();
+  const lignesCourses = listes.map((l) => {
+    const restants = coursesDe(l.id).filter((c) => !c.coche);
+    if (!restants.length) return "";
+    const t = typeListe(l);
+    return '<button class="ligne" data-action="liste-choisir" data-valeur="' + l.id +
+      '" style="width:100%;background:none;border:none;border-top:1px solid var(--border);text-align:left">' +
+      '<span style="font-size:1.2rem">' + esc(l.emoji || t.emoji) + "</span>" +
+      '<span class="ligne-corps"><b>' + esc(l.nom) + " · " + restants.length + " article" +
+      (restants.length > 1 ? "s" : "") + "</b><small>" +
+      (t.alerte ? "" : "en préparation • ") +
+      esc(restants.slice(0, 3).map((c) => c.nom).join(", ")) +
+      (restants.length > 3 ? "…" : "") + "</small></span></button>";
+  }).filter(Boolean).join("");
+
   h.push(bloc("🛒 Courses",
-    restants
-      ? '<div class="ligne"><div class="ligne-corps"><b>' + restants + " article" + (restants > 1 ? "s" : "") +
-      " à acheter</b><small>" + esc(etat.courses.filter((c) => !c.coche).slice(0, 4).map((c) => c.nom).join(", ")) +
-      (restants > 4 ? "…" : "") + "</small></div></div>"
-      : rienDu("✨", "La liste de courses est vide."),
+    lignesCourses || rienDu("✨", "Rien à acheter pour le moment."),
     "Ouvrir", "aller", "courses"));
 
   /* Classement */
@@ -294,35 +304,69 @@ Vues.courses = function () {
   const surStock = ui.ongletCourses === "stock";
   const bas = stockSousMinimum().length;
 
-  h.push('<div class="puces" style="margin:.2rem 0 1rem">' +
+  h.push('<div class="puces" style="margin:.2rem 0 .7rem">' +
     '<button class="puce ' + (!surStock ? "on" : "") + '" data-action="courses-onglet" data-valeur="liste">' +
-    "🛒 Liste de courses</button>" +
+    "🛒 Mes listes</button>" +
     '<button class="puce ' + (surStock ? "on" : "") + '" data-action="courses-onglet" data-valeur="stock">' +
     "🥫 Ma réserve" + (bas ? " · " + bas : "") + "</button></div>");
 
   return h.join("") + (surStock ? vueReserve() : vueListeCourses());
 };
 
-/* ---------------------------- la liste de courses ---------------------------- */
+/* ---------------------------- les listes de courses ---------------------------- */
 
 function vueListeCourses() {
   const h = [];
+  const listes = listesCourses();
+  const active = listeCourante();
+  const t = typeListe(active);
+
+  /* Sélecteur de listes */
+  h.push('<div class="puces" style="margin-bottom:.8rem">' +
+    listes.map((l) => {
+      const restants = coursesDe(l.id).filter((c) => !c.coche).length;
+      return '<button class="puce ' + (l.id === active.id ? "on" : "") +
+        '" data-action="liste-choisir" data-valeur="' + l.id + '">' +
+        esc(l.emoji || typeListe(l).emoji) + " " + esc(l.nom) +
+        (restants ? " · " + restants : "") + "</button>";
+    }).join("") +
+    '<button class="puce" data-action="liste-nouvelle">＋</button></div>');
+
+  /* Entête de la liste choisie */
+  h.push('<div class="entete-liste">' +
+    "<div><b>" + esc(active.nom) + "</b><small>" + esc(t.nom) +
+    (active.magasin ? " • " + esc(active.magasin) : "") + "</small></div>" +
+    '<button class="btn mini" data-action="liste-editer">✏️</button></div>');
+
+  if (!t.alerte) {
+    h.push('<div class="bandeau info">📅<div>Liste préparée tranquillement : elle ne compte ' +
+      "pas dans les rappels de l'accueil.</div></div>");
+  }
+
   h.push('<form id="form-course-rapide" style="display:flex;gap:.5rem;margin:0 0 1rem">' +
     '<input type="text" id="champ-course" placeholder="Ajouter un article…" autocomplete="off">' +
     '<button class="btn principal" type="submit" style="flex-shrink:0">Ajouter</button></form>');
 
   const bas = stockSousMinimum();
-  if (bas.length) {
+  if (bas.length && t.alerte) {
     h.push('<div class="bandeau">🥫<div><b>' + bas.length + " article(s) sous le minimum</b> dans votre réserve. " +
-      '<button class="lien" data-action="stock-racheter">Les ajouter à la liste</button></div></div>');
+      '<button class="lien" data-action="stock-racheter">Les ajouter à cette liste</button></div></div>');
   }
 
-  const actifs = etat.courses.filter((c) => !c.coche);
-  const coches = etat.courses.filter((c) => c.coche);
+  const dansLaListe = coursesDe(active.id);
+  const actifs = dansLaListe.filter((c) => !c.coche);
+  const coches = dansLaListe.filter((c) => c.coche);
 
-  if (!etat.courses.length) {
-    h.push(rienDu("🛒", "La liste est vide.<br>Tapez un article ci-dessus, ou remplissez-la depuis l'onglet Menus."));
+  if (!dansLaListe.length) {
+    h.push(rienDu("🛒", "Cette liste est vide.<br>Tapez un article ci-dessus, ou remplissez-la " +
+      "depuis l'onglet Menus."));
     return h.join("");
+  }
+
+  const enVrac = actifs.filter((c) => c.vrac).length;
+  if (enVrac) {
+    h.push('<div class="bandeau">🫙<div><b>' + enVrac + " article(s) en vrac</b> : pensez aux " +
+      "bocaux et aux sacs réutilisables.</div></div>");
   }
 
   const parRayon = {};
@@ -346,10 +390,13 @@ function vueListeCourses() {
 
 function ligneCourse(c) {
   const q = formaterQte(c.qte, c.unite);
+  const details = [q, c.vrac ? "🫙 vrac" : ""].filter(Boolean).join(" • ");
   return '<div class="ligne' + (c.coche ? " fait" : "") + '">' +
     '<button class="coche' + (c.coche ? " on" : "") + '" data-action="course-toggle" data-id="' + c.id + '">✓</button>' +
     '<div class="ligne-corps"><b>' + esc(c.nom) + "</b>" +
-    (q ? "<small>" + esc(q) + "</small>" : "") + "</div>" +
+    (details ? "<small>" + esc(details) + "</small>" : "") + "</div>" +
+    (listesCourses().length > 1
+      ? '<button class="btn mini" data-action="course-deplacer" data-id="' + c.id + '">↔</button>' : "") +
     '<button class="btn mini" data-action="course-editer" data-id="' + c.id + '">✏️</button>' +
     '<button class="btn mini" data-action="course-suppr" data-id="' + c.id + '">🗑️</button></div>';
 }
@@ -395,7 +442,11 @@ function ligneStock(s) {
     '<div class="ligne-corps"><b>' + esc(s.nom) + "</b><small>" +
     esc(formaterQte(s.qte, s.unite) || "0") +
     (mini !== null && mini > 0 ? " • minimum " + esc(formaterQte(s.mini, s.unite)) : "") + "</small>" +
-    (manque ? '<span class="etiquettes"><span class="etiquette rouge">à racheter</span></span>' : "") +
+    (manque || s.vrac
+      ? '<span class="etiquettes">' +
+        (manque ? '<span class="etiquette rouge">à racheter</span>' : "") +
+        (s.vrac ? '<span class="etiquette">🫙 vrac</span>' : "") + "</span>"
+      : "") +
     "</div>" +
     '<button class="btn mini" data-action="stock-moins" data-id="' + s.id + '">−</button>' +
     '<button class="btn mini" data-action="stock-plus" data-id="' + s.id + '">+</button>' +
@@ -789,7 +840,7 @@ const Connexion = {
       '<label class="champ"><span>Votre prénom</span>' +
       '<input type="text" name="prenom" placeholder="Amandine" required maxlength="20"></label>' +
       '<label class="champ"><span>Votre avatar</span></label>' +
-      '<div class="puces" id="choix-emoji" style="margin:-.5rem 0 1rem">' +
+      '<div class="puces grille-emojis" id="choix-emoji">' +
       EMOJIS_MEMBRES.map((e, i) => '<button type="button" class="puce ' + (i === 0 ? "on" : "") +
         '" data-emoji="' + e + '">' + e + "</button>").join("") + "</div>" +
       '<label class="champ"><span>Votre code à 4 chiffres</span>' +
@@ -841,7 +892,7 @@ const Connexion = {
       '<label class="champ"><span>Votre prénom</span>' +
       '<input type="text" name="prenom" required maxlength="20"></label>' +
       '<label class="champ"><span>Votre avatar</span></label>' +
-      '<div class="puces" id="choix-emoji" style="margin:-.5rem 0 1rem">' +
+      '<div class="puces grille-emojis" id="choix-emoji">' +
       EMOJIS_MEMBRES.map((e, i) => '<button type="button" class="puce ' + (i === 0 ? "on" : "") +
         '" data-emoji="' + e + '">' + e + "</button>").join("") + "</div>" +
       '<label class="champ"><span>Votre code à 4 chiffres</span>' +

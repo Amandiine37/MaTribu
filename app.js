@@ -29,12 +29,42 @@ const $ = (sel) => document.querySelector(sel);
 const RAYONS = ["Fruits & légumes", "Boucherie", "Poissonnerie", "Crèmerie",
   "Boulangerie", "Épicerie", "Surgelés", "Boissons", "Entretien", "Autre"];
 const JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
-const EMOJIS_MEMBRES = ["😀", "😎", "🦊", "🐻", "🐼", "🦁", "🐨", "🐧", "🦉", "🐬",
-  "🌻", "🌷", "⭐", "🚀", "⚽", "🎸", "🎨", "📚", "🍀", "🐢"];
-const EMOJIS_TACHES = ["🧹", "🧽", "🍽️", "🧺", "🗑️", "🛏️", "🚿", "🪣", "🧴", "🌱",
-  "🐕", "🚗", "📬", "🧑‍🍳", "🪟", "👕", "♻️", "🧻", "🛋️", "🪥"];
-const EMOJIS_CADEAUX = ["🎁", "🍿", "🎮", "🍦", "🎬", "🎡", "🍕", "🧸", "🎨", "⚽",
-  "📱", "🚴", "🎧", "💤", "🏊", "🎳", "🍫", "🎟️", "🛍️", "🌟"];
+/* Les grilles d'icones. Elles sont volontairement fournies : c'est ce qui
+   permet a chacun de se reconnaitre du premier coup d'oeil dans les listes. */
+const EMOJIS_MEMBRES = [
+  "😀", "😄", "😎", "🥳", "🤓", "🙂", "😺", "🧑", "👦", "👧",
+  "🦊", "🐻", "🐼", "🦁", "🐨", "🐧", "🦉", "🐬", "🐢", "🦄",
+  "🐯", "🐰", "🐥", "🦋", "🐝", "🐙", "🐳", "🦖", "🐴", "🐶",
+  "🌻", "🌷", "🌺", "🍀", "🌵", "🍄", "🌈", "⭐", "🔥", "⚡",
+  "🚀", "⚽", "🏀", "🎾", "🎸", "🎹", "🎤", "🎨", "📚", "🎯",
+  "🎮", "🛹", "🏄", "🚲", "🧩", "💎", "👑", "🎩"];
+
+const EMOJIS_TACHES = [
+  "🧹", "🧽", "🧼", "🪣", "🧴", "🧻", "🪥", "🚿", "🛁", "🚽",
+  "🍽️", "🧑‍🍳", "🧊", "🗑️", "♻️", "📦", "🛏️", "🛋️", "🪑", "🪟",
+  "🧺", "👕", "🧦", "👟", "🖼️", "🕯️", "💡", "🔌", "🔋", "🚪",
+  "🌱", "🌳", "🍂", "🌾", "❄️", "🏡", "🚗", "🚲", "📬", "📮",
+  "🛒", "🐕", "🐈", "🐟", "🐹", "🔧", "🔨", "🪛", "🧰", "🧯"];
+
+const EMOJIS_CADEAUX = [
+  "🎁", "🌟", "🎟️", "🎫", "🛍️", "💶", "🧸", "🎲", "🃏", "🧩",
+  "🍿", "🍦", "🍫", "🍪", "🧁", "🎂", "🍭", "🥤", "🧋", "🍕",
+  "🍔", "🌮", "🥞", "🧇", "🎬", "🎮", "📱", "🎧", "📸", "🔭",
+  "🎡", "🎢", "🎪", "🎠", "🏕️", "🏖️", "🎣", "⚽", "🏊", "🎳",
+  "🚴", "🛼", "⛸️", "🎿", "🐴", "🎨", "🎻", "🪁", "💤", "🎈"];
+
+const EMOJIS_RECETTES = [
+  "🍽️", "🍲", "🥘", "🍜", "🍝", "🍚", "🍛", "🥣", "🫕", "🥫",
+  "🥗", "🥙", "🌯", "🥪", "🍔", "🌮", "🍕", "🥧", "🥟", "🧆",
+  "🍗", "🍖", "🥩", "🥓", "🍤", "🦐", "🐟", "🍣", "🍱", "🥚",
+  "🍳", "🥞", "🧇", "🧀", "🥔", "🍅", "🥦", "🥕", "🌽", "🍆",
+  "🥑", "🍄", "🫑", "🥬", "🧅", "🧄", "🫘", "🌿", "🍞", "🥖",
+  "🥐", "🍰", "🍮", "🍯", "🍋", "🍎", "☕"];
+
+const EMOJIS_LISTES = [
+  "🛒", "📅", "📝", "🛍️", "🧺", "🏪", "🥖", "🥕", "🍎", "🐟",
+  "🥩", "🧊", "🧽", "🧼", "🧴", "💊", "🎁", "🎂", "🎄", "🎒",
+  "✏️", "🏕️", "🌻", "🔧", "📦", "👶", "🐾", "🐶", "🍼", "🎨"];
 
 const VERSION = "0.9 bêta";
 
@@ -53,8 +83,21 @@ const FAMILLES_UNITES = {
 /* Rubriques rangees dans le document principal de la famille.
    `etats` et `journal` sont a part : ils ont leurs propres regles de securite. */
 const CLES_DOC = ["famille", "membres", "membresUid", "adminsUid", "appareils", "taches",
-  "bareme", "courses", "stock", "recettes", "repas", "notes", "cadeaux", "tarifs",
-  "echanges", "reglages", "jetonUtilise"];
+  "bareme", "courses", "listesCourses", "stock", "recettes", "repas", "notes", "cadeaux",
+  "tarifs", "echanges", "reglages", "jetonUtilise"];
+
+/* Types de liste de courses. « mensuelle » = on la remplit au fil de l'eau
+   sans acheter tout de suite : elle ne déclenche donc pas les rappels. */
+const TYPES_LISTE = [
+  { val: "semaine", nom: "Chaque semaine", emoji: "🛒", alerte: true },
+  { val: "mois", nom: "Une fois par mois", emoji: "📅", alerte: false },
+  { val: "ponctuelle", nom: "Ponctuelle", emoji: "📝", alerte: true }
+];
+/* Liste implicite des familles créées avant les listes multiples. */
+const LISTE_PRINCIPALE = {
+  id: "liste-principale", nom: "Mes courses", emoji: "🛒",
+  type: "semaine", magasin: ""
+};
 
 function id() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -274,7 +317,7 @@ function etatVide() {
     famille: { nom: "", code: "", creeLe: "", version: 2 },
     membres: [], membresUid: [], adminsUid: [], appareils: {},
     taches: [], bareme: {}, etats: {},
-    courses: [], stock: [], recettes: [], repas: {}, notes: [],
+    courses: [], listesCourses: [], stock: [], recettes: [], repas: {}, notes: [],
     cadeaux: [], tarifs: {}, echanges: [], journal: [],
     reglages: {}, jetonUtilise: null
   };
@@ -879,8 +922,9 @@ function appliquerDonnees(d, portee) {
   /* Reprise des donnees de la version 1 */
   if (d && d.etatsTaches && !Object.keys(etat.etats || {}).length) etat.etats = d.etatsTaches;
 
-  ["membres", "taches", "courses", "stock", "recettes", "notes", "cadeaux", "echanges",
-    "journal", "membresUid", "adminsUid"].forEach((c) => { if (!Array.isArray(etat[c])) etat[c] = []; });
+  ["membres", "taches", "courses", "listesCourses", "stock", "recettes", "notes", "cadeaux",
+    "echanges", "journal", "membresUid", "adminsUid"]
+    .forEach((c) => { if (!Array.isArray(etat[c])) etat[c] = []; });
   ["etats", "repas", "reglages", "bareme", "tarifs", "appareils"].forEach((c) => {
     if (!etat[c] || typeof etat[c] !== "object") etat[c] = {};
   });
@@ -1008,15 +1052,64 @@ const Actions = {
   },
 
   /* --- Courses --- */
-  ajouterCourse(nom, rayon, qte, unite) {
+  ajouterCourse(nom, rayon, qte, unite, opts) {
     nom = (nom || "").trim();
     if (!nom) return;
+    opts = opts || {};
+    /* Un article hérite du vrac de sa fiche de réserve : inutile de le
+       recocher à chaque fois, et on n'oublie pas le bocal. */
+    const enReserve = articleStock(nom);
     etat.courses.unshift({
       id: id(), nom: nom, qte: String(qte || "").trim(), unite: unite || "",
-      rayon: rayon || "Autre", coche: false, parQui: moi && moi.id,
-      creeLe: new Date().toISOString()
+      rayon: rayon || "Autre", coche: false,
+      listeId: opts.listeId || listeCourante().id,
+      vrac: opts.vrac !== undefined ? !!opts.vrac : !!(enReserve && enReserve.vrac),
+      parQui: moi && moi.id, creeLe: new Date().toISOString()
     });
     sauver("courses");
+  },
+
+  /* --- Listes de courses --- */
+  enregistrerListe(donnees, lid) {
+    assurerListes();
+    if (lid) {
+      const l = etat.listesCourses.find((x) => x.id === lid);
+      if (!l) return;
+      Object.assign(l, donnees);
+      ui.listeActive = l.id;
+    } else {
+      const nouvelle = Object.assign({ id: id(), creeLe: new Date().toISOString() }, donnees);
+      etat.listesCourses.push(nouvelle);
+      ui.listeActive = nouvelle.id;
+    }
+    sauver("listesCourses");
+  },
+
+  async supprimerListe(lid) {
+    const l = listesCourses().find((x) => x.id === lid);
+    if (!l) return;
+    if (listesCourses().length <= 1) { toast("Gardez au moins une liste"); return; }
+    const n = coursesDe(lid).length;
+    const ok = await confirmer("Supprimer « " + l.nom + " »" +
+      (n ? " et ses " + n + " article(s)" : "") + " ?",
+      { titre: "Supprimer la liste", ok: "Supprimer", danger: true });
+    if (!ok) return;
+    etat.courses = etat.courses.filter((c) => listeDe(c) !== lid);
+    etat.listesCourses = etat.listesCourses.filter((x) => x.id !== lid);
+    ui.listeActive = listeParDefaut().id;
+    sauver("courses", "listesCourses");
+    toast("Liste supprimée");
+  },
+
+  /* Déplacer un article d'une liste à l'autre (ex : du mois vers la semaine). */
+  deplacerCourse(cid, listeId) {
+    const c = etat.courses.find((x) => x.id === cid);
+    if (!c) return;
+    c.listeId = listeId;
+    c.coche = false;
+    sauver("courses");
+    const l = listesCourses().find((x) => x.id === listeId);
+    toast("Déplacé vers « " + (l ? l.nom : "?") + " »");
   },
   basculerCourse(cid) {
     const c = etat.courses.find((x) => x.id === cid);
@@ -1030,8 +1123,9 @@ const Actions = {
   },
   /* Les courses cochées sortent de la liste. Si l'article existe dans la
      réserve, on propose d'y ajouter ce qui vient d'être acheté. */
-  async viderCoches(rentrerEnStock) {
-    const achetes = etat.courses.filter((c) => c.coche);
+  async viderCoches(rentrerEnStock, listeId) {
+    const cible = listeId || listeCourante().id;
+    const achetes = etat.courses.filter((c) => c.coche && listeDe(c) === cible);
     if (!achetes.length) return;
     let rentres = 0;
     if (rentrerEnStock) {
@@ -1045,7 +1139,8 @@ const Actions = {
         rentres++;
       });
     }
-    etat.courses = etat.courses.filter((c) => !c.coche);
+    const gardes = new Set(achetes.map((c) => c.id));
+    etat.courses = etat.courses.filter((c) => !gardes.has(c.id));
     sauver("courses", "stock");
     toast(rentres ? "Liste nettoyée, " + rentres + " article(s) rentré(s) en réserve"
       : "Liste nettoyée");
@@ -1086,13 +1181,14 @@ const Actions = {
     const ok = await confirmer("Ajouter " + aAjouter.length + " article(s) à la liste de courses ?",
       { titre: "Réapprovisionner", ok: "Ajouter" });
     if (!ok) return;
+    const cible = listeCourante().id;
     aAjouter.slice().reverse().forEach((s) => {
       const mini = nombre(s.mini) || 0;
       const q = nombre(s.qte) || 0;
       etat.courses.unshift({
         id: id(), nom: s.nom, qte: texteNombre(Math.max(mini - q, mini)), unite: s.unite || "",
-        rayon: s.rayon || "Autre", coche: false, parQui: moi && moi.id,
-        creeLe: new Date().toISOString()
+        rayon: s.rayon || "Autre", coche: false, listeId: cible, vrac: !!s.vrac,
+        parQui: moi && moi.id, creeLe: new Date().toISOString()
       });
     });
     sauver("courses");
@@ -1468,6 +1564,37 @@ function ingredientsDeLaSemaine(cleSem) {
     RAYONS.indexOf(a.rayon) - RAYONS.indexOf(b.rayon) || a.nom.localeCompare(b.nom));
 }
 
+/* ======================= Les listes de courses ======================= */
+
+/* Tant que la famille n'a pas créé de listes, tout vit dans une liste
+   implicite. Elle n'est écrite dans les données qu'au moment où on en
+   ajoute une deuxième — inutile de bousculer les familles existantes. */
+function listesCourses() {
+  return etat.listesCourses.length ? etat.listesCourses : [LISTE_PRINCIPALE];
+}
+function listeParDefaut() { return listesCourses()[0]; }
+function listeDe(c) { return c.listeId || LISTE_PRINCIPALE.id; }
+function listeCourante() {
+  return listesCourses().find((l) => l.id === ui.listeActive) || listeParDefaut();
+}
+function coursesDe(listeId) {
+  return etat.courses.filter((c) => listeDe(c) === listeId);
+}
+function typeListe(l) {
+  return TYPES_LISTE.find((t) => t.val === (l && l.type)) || TYPES_LISTE[0];
+}
+/* Ce qui compte comme « à acheter » : les listes ponctuelles et hebdomadaires.
+   La liste du mois se remplit tranquillement, elle ne réclame rien. */
+function coursesUrgentes() {
+  const ids = listesCourses().filter((l) => typeListe(l).alerte).map((l) => l.id);
+  return etat.courses.filter((c) => !c.coche && ids.indexOf(listeDe(c)) !== -1);
+}
+/* Matérialise la liste implicite : nécessaire dès qu'il y en a une deuxième. */
+function assurerListes() {
+  if (etat.listesCourses.length) return;
+  etat.listesCourses = [Object.assign({}, LISTE_PRINCIPALE, { creeLe: new Date().toISOString() })];
+}
+
 /* ============================ Stock (la réserve) ============================ */
 
 function articleStock(nom) {
@@ -1544,7 +1671,7 @@ function rendre() {
 function majPastilles() {
   const compteurs = {
     taches: mesTachesAFaire().length + (estAdmin() ? tachesAValider().length : 0),
-    courses: etat.courses.filter((c) => !c.coche).length,
+    courses: coursesUrgentes().length,
     notes: notesUrgentes().length
   };
   document.querySelectorAll(".nav button").forEach((b) => {
@@ -1614,6 +1741,10 @@ document.addEventListener("click", (e) => {
     case "course-editer": Formulaires.course(v); break;
     case "courses-vider": Formulaires.viderCourses(); break;
     case "courses-onglet": ui.ongletCourses = b.dataset.valeur; rendre(); break;
+    case "liste-choisir": ui.listeActive = b.dataset.valeur; ui.ongletCourses = "liste"; rendre(); break;
+    case "liste-nouvelle": Formulaires.liste(null); break;
+    case "liste-editer": Formulaires.liste(listeCourante().id); break;
+    case "course-deplacer": Formulaires.deplacerCourse(v); break;
 
     /* réserve */
     case "stock-nouveau": Formulaires.stock(null); break;

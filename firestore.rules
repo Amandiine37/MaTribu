@@ -123,7 +123,7 @@ service cloud.firestore {
       function rubriquesLibres() {
         // ce qu'un membre ordinaire a le droit de modifier
         return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['courses', 'stock', 'repas', 'notes', 'recettes', 'echanges']);
+          .hasOnly(['courses', 'listesCourses', 'stock', 'repas', 'notes', 'recettes', 'echanges']);
       }
 
       // Un appareil invite s'inscrit lui-meme. A cet instant il n'a PAS encore

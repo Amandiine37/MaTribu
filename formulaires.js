@@ -7,7 +7,7 @@ const Formulaires = {};
 /* ---------- petits aides de formulaire ---------- */
 
 function grilleEmojis(liste, choisi) {
-  return '<div class="puces" data-role="emojis" style="margin-bottom:1rem">' +
+  return '<div class="puces grille-emojis" data-role="emojis">' +
     liste.map((e) => '<button type="button" class="puce ' + (e === choisi ? "on" : "") +
       '" data-emoji="' + e + '">' + e + "</button>").join("") + "</div>";
 }
@@ -160,7 +160,7 @@ Formulaires.tache = function (tid) {
 
 Formulaires.course = function (cid) {
   const c = cid ? etat.courses.find((x) => x.id === cid) : null;
-  const cour = c || { nom: "", qte: "", unite: "", rayon: "Épicerie" };
+  const cour = c || { nom: "", qte: "", unite: "", rayon: "Épicerie", vrac: false };
 
   const html = '<form id="f-course">' +
     '<label class="champ"><span>Article</span>' +
@@ -169,6 +169,9 @@ Formulaires.course = function (cid) {
     '<input type="text" name="qte" value="' + esc(cour.qte) + '" maxlength="10" inputmode="decimal" placeholder="2"></label>' +
     '<label class="champ"><span>Unité</span>' + selectUnite(cour.unite) + "</label></div>" +
     '<label class="champ"><span>Rayon</span>' + selectRayon(cour.rayon) + "</label>" +
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
+    '<input type="checkbox" name="vrac" style="width:auto"' + (cour.vrac ? " checked" : "") + ">" +
+    '<span style="margin:0">🫙 En vrac (prévoir un contenant)</span></label>' +
     boutonsFormulaire(c ? "Enregistrer" : "Ajouter", !!c) + "</form>";
 
   ouvrirFeuille(c ? "Modifier l'article" : "Ajouter aux courses", html, (f) => {
@@ -184,21 +187,93 @@ Formulaires.course = function (cid) {
         c.qte = String(d.get("qte")).trim();
         c.unite = String(d.get("unite"));
         c.rayon = String(d.get("rayon"));
+        c.vrac = !!d.get("vrac");
         sauver("courses");
         toast("Article modifié");
       } else {
         Actions.ajouterCourse(String(d.get("nom")), String(d.get("rayon")),
-          String(d.get("qte")), String(d.get("unite")));
+          String(d.get("qte")), String(d.get("unite")), { vrac: !!d.get("vrac") });
       }
     };
   });
+};
+
+/* ============================ LISTES DE COURSES ============================ */
+
+Formulaires.liste = function (lid) {
+  const l = lid ? listesCourses().find((x) => x.id === lid) : null;
+  const cour = l || { nom: "", emoji: "🛒", type: "semaine", magasin: "" };
+  const implicite = l && !etat.listesCourses.length;
+
+  const html = '<form id="f-liste">' +
+    '<label class="champ"><span>Nom de la liste</span>' +
+    '<input type="text" name="nom" value="' + esc(cour.nom) + '" required maxlength="30" ' +
+    'placeholder="Courses de la semaine"></label>' +
+    '<label class="champ"><span>Icône</span></label>' +
+    grilleEmojis(EMOJIS_LISTES, cour.emoji) +
+    '<label class="champ"><span>Rythme</span></label>' +
+    puceMultiple("type", TYPES_LISTE.map((t) => ({ val: t.val, html: t.emoji + " " + t.nom })),
+      [cour.type]) +
+    '<p class="aide" style="margin:-.5rem 0 1rem">Une liste <b>mensuelle</b> se remplit au fil ' +
+    "de l'eau sans rien réclamer : elle ne compte pas dans les rappels de l'accueil.</p>" +
+    '<label class="champ"><span>Magasin (facultatif)</span>' +
+    '<input type="text" name="magasin" value="' + esc(cour.magasin || "") + '" maxlength="30" ' +
+    'placeholder="Leclerc, marché, biocoop…"></label>' +
+    boutonsFormulaire(l ? "Enregistrer" : "Créer la liste",
+      !!l && !implicite && listesCourses().length > 1) + "</form>";
+
+  ouvrirFeuille(l ? "Modifier la liste" : "Nouvelle liste de courses", html, (f) => {
+    brancherEmojis(f);
+    brancherMulti(f, "type", true);
+    if (!l) f.querySelector('[name="nom"]').focus();
+
+    const bs = f.querySelector('[data-role="suppr"]');
+    if (bs) bs.onclick = () => { fermerFeuille(); Actions.supprimerListe(l.id); };
+
+    f.onsubmit = (ev) => {
+      ev.preventDefault();
+      const d = new FormData(ev.target);
+      const donnees = {
+        nom: String(d.get("nom")).trim(),
+        emoji: emojiChoisi(f, "🛒"),
+        type: valeursMulti(f, "type")[0] || "semaine",
+        magasin: String(d.get("magasin") || "").trim()
+      };
+      fermerFeuille();
+      Actions.enregistrerListe(donnees, l ? l.id : null);
+      toast(l ? "Liste enregistrée" : "Liste créée 🛒");
+    };
+  });
+};
+
+/* Déplacer un article vers une autre liste (du mois vers la semaine, etc.) */
+Formulaires.deplacerCourse = function (cid) {
+  const c = etat.courses.find((x) => x.id === cid);
+  if (!c) return;
+  const autres = listesCourses().filter((l) => l.id !== listeDe(c));
+  if (!autres.length) { toast("Il n'y a qu'une seule liste"); return; }
+
+  ouvrirFeuille("Déplacer « " + c.nom + " »",
+    '<div id="f-depl">' + autres.map((l) =>
+      '<button class="btn plein" data-liste="' + l.id + '" style="margin-bottom:.5rem">' +
+      esc((l.emoji || typeListe(l).emoji) + " " + l.nom) +
+      (l.magasin ? " — " + esc(l.magasin) : "") + "</button>").join("") +
+      '<button class="btn plein" data-action="fermer" style="margin-top:.5rem">Annuler</button></div>',
+    (f) => {
+      f.onclick = (ev) => {
+        const b = ev.target.closest("[data-liste]");
+        if (!b) return;
+        fermerFeuille();
+        Actions.deplacerCourse(cid, b.dataset.liste);
+      };
+    });
 };
 
 /* ================================ RÉSERVE ================================ */
 
 Formulaires.stock = function (sid) {
   const s = sid ? etat.stock.find((x) => x.id === sid) : null;
-  const cour = s || { nom: "", qte: "", unite: "", mini: "", rayon: "Épicerie" };
+  const cour = s || { nom: "", qte: "", unite: "", mini: "", rayon: "Épicerie", vrac: false };
 
   const html = '<form id="f-stock">' +
     '<label class="champ"><span>Article</span>' +
@@ -207,6 +282,10 @@ Formulaires.stock = function (sid) {
     '<div class="duo"><label class="champ"><span>J\'en ai</span>' +
     '<input type="text" name="qte" value="' + esc(cour.qte) + '" maxlength="10" inputmode="decimal" placeholder="3"></label>' +
     '<label class="champ"><span>Unité</span>' + selectUnite(cour.unite) + "</label></div>" +
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
+    '<input type="checkbox" name="vrac" style="width:auto;margin-top:.2rem"' + (cour.vrac ? " checked" : "") + ">" +
+    '<span style="margin:0">Acheté en vrac<br><small style="font-weight:400">Signalé dans la ' +
+    "liste de courses pour ne pas oublier bocaux et sacs réutilisables.</small></span></label>" +
     '<label class="champ"><span>Quantité minimum avant de racheter</span>' +
     '<input type="text" name="mini" value="' + esc(cour.mini) + '" maxlength="10" inputmode="decimal" placeholder="2"></label>' +
     '<p class="aide" style="margin:-.5rem 0 1rem">Laissez vide si vous ne voulez pas être prévenue. ' +
@@ -234,7 +313,8 @@ Formulaires.stock = function (sid) {
         qte: String(d.get("qte")).trim(),
         unite: String(d.get("unite")),
         mini: String(d.get("mini")).trim(),
-        rayon: String(d.get("rayon"))
+        rayon: String(d.get("rayon")),
+        vrac: !!d.get("vrac")
       }, s ? s.id : null);
       toast(s ? "Réserve mise à jour" : "Ajouté à la réserve 🥫");
     };
@@ -243,7 +323,8 @@ Formulaires.stock = function (sid) {
 
 /* Vider le panier, en proposant de rentrer les achats dans la réserve. */
 Formulaires.viderCourses = function () {
-  const achetes = etat.courses.filter((c) => c.coche);
+  const cible = listeCourante().id;
+  const achetes = etat.courses.filter((c) => c.coche && listeDe(c) === cible);
   if (!achetes.length) { toast("Aucun article coché"); return; }
   const connus = achetes.filter((c) => articleStock(c.nom)).length;
 
@@ -265,7 +346,7 @@ Formulaires.viderCourses = function () {
     f.querySelector('[data-role="ok"]').onclick = () => {
       const c = f.querySelector("#case-stock");
       fermerFeuille();
-      Actions.viderCoches(!!(c && c.checked));
+      Actions.viderCoches(!!(c && c.checked), cible);
     };
   });
 };
@@ -608,9 +689,17 @@ Formulaires.ingredientsVersCourses = function () {
   const couverts = lignes.filter((l) => l.couvert).length;
   const aCocher = (l) => !l.couvert && !l.dejaListe;
 
+  const listes = listesCourses();
   let html = '<div id="f-ing">' +
     '<p class="aide" style="margin-bottom:.8rem">Les quantités tiennent compte de votre réserve. ' +
-    "Décochez ce que vous ne voulez pas acheter.</p>";
+    "Décochez ce que vous ne voulez pas acheter.</p>" +
+    (listes.length > 1
+      ? '<label class="champ"><span>Dans quelle liste ?</span>' +
+        '<select id="choix-liste">' + listes.map((l) =>
+          '<option value="' + l.id + '"' + (l.id === listeCourante().id ? " selected" : "") + ">" +
+          esc((l.emoji || typeListe(l).emoji) + " " + l.nom) +
+          (l.magasin ? " — " + esc(l.magasin) : "") + "</option>").join("") + "</select></label>"
+      : "");
 
   if (couverts) {
     html += '<div class="bandeau info">🥫<div><b>' + couverts + " ingrédient(s)</b> sont déjà " +
@@ -649,15 +738,19 @@ Formulaires.ingredientsVersCourses = function () {
         .map((c) => lignes[Number(c.dataset.k)]);
       fermerFeuille();
       if (!choisis.length) return;
+      const champListe = f.querySelector("#choix-liste");
+      const cible = champListe ? champListe.value : listeCourante().id;
       choisis.slice().reverse().forEach((l) => {
         /* On achète ce qui manque vraiment ; si le calcul est impossible,
            on reprend le besoin complet plutôt que d'inventer un chiffre. */
         const qte = (l.connu && l.manque !== null && l.enStock !== null)
           ? texteNombre(l.manque)
           : (nombre(l.besoin) !== null ? texteNombre(nombre(l.besoin)) : l.besoin);
+        const enReserve = articleStock(l.nom);
         etat.courses.unshift({
           id: id(), nom: l.nom, qte: qte, unite: l.unite, rayon: l.rayon,
-          coche: false, parQui: moi && moi.id, creeLe: new Date().toISOString()
+          coche: false, listeId: cible, vrac: !!(enReserve && enReserve.vrac),
+          parQui: moi && moi.id, creeLe: new Date().toISOString()
         });
       });
       sauver("courses");
@@ -689,8 +782,7 @@ Formulaires.recette = function (rid) {
     '<label class="champ"><span>Nom du plat</span>' +
     '<input type="text" name="nom" value="' + esc(cour.nom || "") + '" required maxlength="50"></label>' +
     '<label class="champ"><span>Icône</span></label>' +
-    grilleEmojis(["🍽️", "🍲", "🥘", "🍝", "🍚", "🍛", "🥗", "🥣", "🍕", "🥧", "🐟", "🍗",
-      "🍖", "🥔", "🧀", "🥞", "🌮", "🥪", "🍳", "🌿"], cour.emoji) +
+    grilleEmojis(EMOJIS_RECETTES, cour.emoji) +
     '<label class="champ"><span>Type de plat</span></label>' +
     puceMultiple("type", [
       { val: "consistant", html: "Consistant" },

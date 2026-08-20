@@ -12,10 +12,10 @@ Application pour téléphone (à installer sur l'écran d'accueil) qui rassemble
 |---|---|
 | 🏡 **Accueil** | Ce qu'il y a à faire aujourd'hui : mes tâches, le menu du jour, les rappels, les courses, le classement. |
 | 🧹 **Tâches** | Les tâches ménagères, avec la personne assignée, les points, et la validation. |
-| 🛒 **Courses** | La liste de courses partagée, rangée par rayon. |
+| 🛒 **Courses** | Une ou plusieurs listes partagées (semaine, mois, magasin), rangées par rayon. |
 | 🍽️ **Menus** | Les repas midi et soir de la semaine, avec un générateur automatique. |
 | 🔔 **Rappels** | Les rendez-vous et pense-bêtes à ne pas oublier. |
-| 🥫 **Ma réserve** | Votre stock (épicerie, conserves…) avec les quantités minimum, dans l'onglet Courses. |
+| 🥫 **Ma réserve** | Votre stock (épicerie, conserves, vrac…) avec les quantités minimum, dans l'onglet Courses. |
 | 🌟 **Points & cadeaux** | Le score de chacun et la boutique de récompenses. |
 
 ---
@@ -84,18 +84,38 @@ et envoyez-lui une invitation : il garde ses points et son historique.
 
 ### La réserve et les courses
 
-L'onglet **Courses** contient deux listes, avec un sélecteur en haut :
+L'onglet **Courses** se partage en deux, avec un sélecteur en haut :
+**🛒 Mes listes** et **🥫 Ma réserve**.
 
-**🛒 Liste de courses** — ce qu'il faut acheter, rangé par rayon. Chaque article
-a une quantité et une unité (2 l de lait, 500 g de farine…).
+**🛒 Mes listes** — vous pouvez en avoir plusieurs, chacune avec son rythme et
+son magasin :
+
+| Rythme | À quoi ça sert |
+|---|---|
+| 🛒 **Chaque semaine** | Les courses courantes. Elles comptent dans les rappels de l'accueil. |
+| 📅 **Une fois par mois** | La liste qu'on remplit au fil de l'eau sans acheter tout de suite. **Elle ne déclenche aucun rappel** : la pastille orange de l'onglet Courses l'ignore. |
+| 📝 **Ponctuelle** | Une sortie précise : la fête, le pique-nique, le bricolage… |
+
+Chaque liste peut porter un **magasin** (Leclerc, le marché, la biocoop…), qui
+s'affiche en tête de liste. Le bouton **↔** déplace un article d'une liste à
+l'autre — pratique pour faire passer quelque chose du mois vers la semaine
+quand ça devient urgent.
+
+Les articles sont rangés par rayon, avec une quantité et une unité (2 l de lait,
+500 g de farine…).
 
 **🥫 Ma réserve** — ce que vous gardez en permanence à la maison : épicerie,
 conserves, produits d'entretien. Pour chaque article :
 
 - la quantité que vous avez, avec son unité ;
 - une **quantité minimum** facultative. Dès que vous passez en dessous,
-  l'article est signalé et un bouton l'ajoute à la liste de courses.
-- les boutons **−** et **+** ajustent la quantité en un geste.
+  l'article est signalé et un bouton l'ajoute à la liste de courses ;
+- les boutons **−** et **+** ajustent la quantité en un geste ;
+- une case **🫙 Acheté en vrac**. L'article est alors marqué « vrac » partout,
+  et quand il arrive dans une liste de courses, un bandeau rappelle en tête de
+  liste combien d'articles demandent un contenant : *« 3 articles en vrac :
+  pensez aux bocaux et aux sacs réutilisables »*. Le vrac se recopie tout seul
+  de la réserve vers les courses, inutile de le recocher.
 
 **Le lien avec les menus, c'est là que ça devient utile :** quand vous appuyez
 sur **🛒 Aux courses** depuis l'onglet Menus, l'application calcule pour chaque
