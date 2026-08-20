@@ -461,6 +461,7 @@ function recettesFiltrees() {
     if (f.includes("rapide") && !r.rapide) return false;
     if (f.includes("leger") && r.type !== "leger") return false;
     if (f.includes("saison") && !estDeSaison(r)) return false;
+    if (f.includes("thermomix") && !r.thermomix) return false;
     return true;
   }).sort((a, b) => a.nom.localeCompare(b.nom));
 }
@@ -1559,11 +1560,12 @@ function reparerRecettes() {
   etat.recettes.forEach((r) => {
     /* Saisons absentes : on reprend celles du plat de référence, s'il existe.
        Une recette maison reste « toute l'année » tant que rien n'est coché. */
+    const ref = reference.get(String(r.nom || "").toLowerCase().trim());
     if (r.saisons === undefined) {
-      const ref = reference.get(String(r.nom || "").toLowerCase().trim());
       r.saisons = ref ? (ref.saisons || []).slice() : [];
       if (r.saisons.length) saisonsAjoutees++;
     }
+    if (r.thermomix === undefined) r.thermomix = !!(ref && ref.thermomix);
     /* Quantité et unité collées : « 800 g » -> 800 + g. En cas de doute sur
        l'unité, on ne touche à rien : mieux vaut l'ancien format qu'une perte. */
     (r.ingredients || []).forEach((i) => {
@@ -1581,13 +1583,30 @@ function reparerRecettes() {
   return { saisons: saisonsAjoutees, unites: unitesSeparees };
 }
 
+/* Les plats fournis avec l'application que cette famille n'a pas (encore).
+   On ne les ajoute JAMAIS d'office : une famille a pu en supprimer exprès. */
+function recettesManquantes() {
+  const presentes = new Set(etat.recettes.map((r) => String(r.nom || "").toLowerCase().trim()));
+  return (window.RECETTES_DEPART || [])
+    .filter((r) => !presentes.has(r.nom.toLowerCase().trim()));
+}
+
+function ajouterRecettesManquantes() {
+  const aAjouter = recettesManquantes();
+  aAjouter.forEach((r) => {
+    etat.recettes.push(Object.assign({ id: id(), origine: "depart" }, JSON.parse(JSON.stringify(r))));
+  });
+  if (aAjouter.length) sauver("recettes");
+  return aAjouter.length;
+}
+
 /* Lancée une fois par famille, par un administrateur, au démarrage. */
 async function majRecettesSiBesoin() {
   if (!estAdmin()) return;
   const cle = "tribu:recettesMaj:" + (etat.famille.code || "?");
   if (localStorage.getItem(cle)) return;
   const besoin = etat.recettes.some((r) =>
-    r.saisons === undefined ||
+    r.saisons === undefined || r.thermomix === undefined ||
     (r.ingredients || []).some((i) => i.unite === undefined || i.unite === null));
   localStorage.setItem(cle, "1");
   if (!besoin) return;

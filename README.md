@@ -137,7 +137,7 @@ deviner.*
 ### Les menus
 
 - Appuyez sur **🎲 Générer** : l'application remplit la semaine en piochant dans
-  la bibliothèque de recettes, en évitant les plats servis les 3 dernières
+  la bibliothèque de recettes (118 plats fournis), en évitant ceux servis les 3 dernières
   semaines, en mettant des plats plus légers le soir et le nombre de repas
   végétariens que vous demandez.
 - Appuyez sur **🛒 Aux courses** : tous les ingrédients de la semaine sont
@@ -173,6 +173,16 @@ cuisine en ce moment.
 > considéré comme disponible toute l'année — mieux vaut ne rien dire que dire
 > une bêtise.
 
+#### Les plats fournis
+
+L'application arrive avec **118 plats**, dont **53 marqués 🍲 robot** : veloutés,
+risottos, sauces, plats mijotés et one-pot — tout ce que le Thermomix (ou un
+autre robot cuiseur) fait bien. Ils sont écrits maison : **aucune recette n'est
+recopiée d'un site**, on n'y trouve que le nom du plat et ses ingrédients. À
+vous de coller le lien vers la vraie recette dans le champ prévu.
+
+La case **🍲 Robot** existe aussi sur vos propres recettes.
+
 #### Si votre famille existait déjà
 
 Les 50 recettes sont **recopiées dans votre famille le jour de sa création** :
@@ -180,10 +190,17 @@ les améliorations apportées ensuite au fichier de recettes ne les atteignent
 pas toutes seules. Une famille créée avant l'arrivée des saisons se retrouve
 donc avec des recettes sans saison — et le filtre affiche alors tout.
 
+La même chose vaut pour les **nouveaux plats** ajoutés à l'application : ils
+n'apparaissent pas d'eux-mêmes dans un cahier déjà créé.
+
 L'application s'en occupe : à la première ouverture par un administrateur, elle
 complète ce qui manque et vous prévient (*« Recettes mises à jour : 33 saisons,
 242 unités »*). Vous pouvez aussi le déclencher à la main depuis
 *Administration → 📖 Recettes → **🔄 Mettre à jour les recettes fournies***.
+
+La fenêtre *Mettre à jour les recettes* propose en plus d'**ajouter les nouveaux
+plats**, avec une case à décocher : ils ne reviennent jamais d'office, au cas où
+vous en auriez supprimé exprès.
 
 Cette mise à jour **n'écrase jamais ce que vous avez saisi** : elle ne remplit
 que les champs absents. Vos propres recettes restent « toute l'année » tant que
@@ -201,6 +218,7 @@ En dessous, quatre filtres se combinent librement :
 | Filtre | Ce qu'il garde |
 |---|---|
 | ☀️ **De saison** | Ce qui se cuisine en ce moment (la saison affichée suit la date) |
+| 🍲 **Thermomix** | Les plats qui se prêtent bien au robot cuiseur (53 des 118 fournis) |
 | ✍️ **Mes recettes** | Uniquement celles que vous avez créées (pas les 50 fournies) |
 | 🌿 **Végé** | Les plats végétariens |
 | ⚡ **Rapide** | Moins de 30 minutes |
@@ -274,7 +292,7 @@ bandeau orange le rappelle sur l'accueil.
 | `app.js` | Le cœur : dates, points, rotation des tâches, stockage, connexion. |
 | `vues.js` | Le dessin de chaque écran. |
 | `formulaires.js` | Les fenêtres qui remontent du bas (ajouter, modifier…). |
-| `recettes.js` | Les 50 plats fournis au démarrage. Modifiable dans l'app. |
+| `recettes.js` | Les 118 plats fournis au démarrage. Modifiable dans l'app. |
 | `firebase-config.js` | **Le seul fichier à remplir** pour activer le partage. |
 | `firestore.rules` | Les règles de sécurité, **à copier dans Firebase**. Sans elles, rien n'est protégé. |
 | `manifest.webmanifest` | Permet d'installer l'app sur l'écran d'accueil. |

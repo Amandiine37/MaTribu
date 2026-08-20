@@ -516,6 +516,7 @@ Vues.recettes = function () {
   const s = infoSaison(saisonActuelle());
   const filtres = [
     ["saison", s.emoji + " De saison"],
+    ["thermomix", "🍲 Thermomix"],
     ["perso", "✍️ Mes recettes"],
     ["vege", "🌿 Végé"],
     ["rapide", "⚡ Rapide"],
@@ -553,6 +554,7 @@ Vues.recettes = function () {
     '<span class="etiquettes">' +
     (r.vegetarien ? '<span class="etiquette vert">végé</span>' : "") +
     (r.rapide ? '<span class="etiquette">rapide</span>' : "") +
+    (r.thermomix ? '<span class="etiquette chaud">🍲 robot</span>' : "") +
     (r.type === "leger" ? '<span class="etiquette">léger</span>' : "") +
     (r.lien ? '<span class="etiquette chaud">lien</span>' : "") +
     (r.saisons || []).map((v) => {
@@ -770,11 +772,16 @@ Vues.admin = function () {
     "Ajouter", "cadeau-nouveau"));
 
   const aCompleter = etat.recettes.filter((r) => r.saisons === undefined).length;
+  const nouvelles = recettesManquantes().length;
   h.push(bloc("📖 Recettes (" + etat.recettes.length + ")",
     '<p class="aide">La bibliothèque de plats sert au générateur de menus.</p>' +
     (aCompleter
       ? '<div class="bandeau" style="margin-top:.6rem">🔄<div><b>' + aCompleter +
         " recette(s) d'une version précédente</b> : saisons et unités incomplètes.</div></div>"
+      : "") +
+    (nouvelles
+      ? '<div class="bandeau info" style="margin-top:.6rem">✨<div><b>' + nouvelles +
+        " nouveau(x) plat(s) disponible(s)</b> dans la bibliothèque de l'application.</div></div>"
       : "") +
     '<button class="btn plein doux" data-action="aller" data-vue="recettes" style="margin-top:.6rem">Gérer les recettes</button>' +
     '<button class="btn plein" data-action="recettes-maj" style="margin-top:.5rem">🔄 Mettre à jour les recettes fournies</button>'));
