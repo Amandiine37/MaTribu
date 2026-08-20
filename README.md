@@ -173,6 +173,20 @@ cuisine en ce moment.
 > considéré comme disponible toute l'année — mieux vaut ne rien dire que dire
 > une bêtise.
 
+#### Consulter une recette
+
+Appuyez sur une recette dans la liste : sa fiche s'ouvre avec les **ingrédients**
+et le **déroulé numéroté**. Depuis l'onglet Menus, un bouton
+**📖 Consulter la recette** ouvre la même fiche pour le plat prévu ce jour-là.
+
+Les 118 plats fournis ont tous leur déroulé (4 à 5 étapes). Il est **écrit pour
+l'application** : aucune recette n'est recopiée d'un site. C'est indicatif —
+pour les temps exacts ou les vitesses d'un robot, collez le lien de la recette
+d'origine dans la fiche, un bouton l'ouvrira.
+
+Le bouton **Modifier** permet d'écrire ou de corriger le déroulé : **une étape
+par ligne**, les lignes vides sont ignorées.
+
 #### Les plats fournis
 
 L'application arrive avec **118 plats**, dont **53 marqués 🍲 robot** : veloutés,
@@ -197,6 +211,13 @@ L'application s'en occupe : à la première ouverture par un administrateur, ell
 complète ce qui manque et vous prévient (*« Recettes mises à jour : 33 saisons,
 242 unités »*). Vous pouvez aussi le déclencher à la main depuis
 *Administration → 📖 Recettes → **🔄 Mettre à jour les recettes fournies***.
+
+**Comment savoir qu'il y a du nouveau ?** Une **pastille orange** apparaît sur
+votre avatar, en haut à gauche. Appuyez dessus : le menu affiche en tête
+*« 🔄 N mises à jour disponibles »*, qui liste ce que l'application propose de
+reprendre. Rien ne s'applique sans votre accord, et la pastille disparaît une
+fois la mise à jour faite. Elle ne s'affiche que pour les administrateurs — eux
+seuls peuvent y donner suite.
 
 La fenêtre *Mettre à jour les recettes* propose en plus d'**ajouter les nouveaux
 plats**, avec une case à décocher : ils ne reviennent jamais d'office, au cas où
@@ -402,6 +423,9 @@ Par sécurité, ces messages **ne sont lisibles que depuis la console** : person
 ne peut les consulter — ni les modifier — depuis l'application.
 
 ## Bon à savoir
+
+- **L'onglet ouvert est retenu.** Si vous rechargez la page en consultant vos
+  recettes ou votre réserve, vous y revenez — plus de retour brutal à l'accueil.
 
 - **Pas de notification qui sonne.** Une application web ne peut pas envoyer de
   rappel quand elle est fermée. Les rappels s'affichent dans l'app (pastille

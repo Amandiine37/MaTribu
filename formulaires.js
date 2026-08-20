@@ -351,6 +351,33 @@ Formulaires.viderCourses = function () {
   });
 };
 
+/* ==================== MISES À JOUR DISPONIBLES ==================== */
+
+Formulaires.misesAJour = function () {
+  const liste = misesAJour();
+  if (!liste.length) {
+    ouvrirFeuille("Mises à jour",
+      '<div class="bandeau info">✅<div>Tout est à jour : rien de nouveau à reprendre.</div></div>' +
+      '<button class="btn plein" data-action="fermer">Fermer</button>');
+    return;
+  }
+  ouvrirFeuille("Mises à jour disponibles",
+    '<p class="aide" style="margin-bottom:.8rem">' +
+    "L'application a été enrichie depuis la création de votre famille. " +
+    "Rien n'est appliqué sans votre accord.</p>" +
+    '<div class="carte">' + liste.map((m) =>
+      '<div class="ligne ligne-maj" data-action="' + m.action + '">' +
+      '<span style="font-size:1.4rem">' + m.emoji + "</span>" +
+      '<div class="ligne-corps"><b>' + esc(m.titre) + "</b><small>" + esc(m.detail) + "</small></div>" +
+      '<span class="etiquette chaud">Voir</span></div>').join("") + "</div>" +
+    '<button class="btn plein" data-action="fermer" style="margin-top:.8rem">Plus tard</button>',
+    (f) => {
+      f.querySelectorAll("[data-action]").forEach((b) => {
+        if (b.dataset.action !== "fermer") b.addEventListener("click", fermerFeuille);
+      });
+    });
+};
+
 /* ============ REMETTRE À NIVEAU LES RECETTES D'UNE FAMILLE ============ */
 
 Formulaires.majRecettes = function () {
@@ -411,6 +438,59 @@ Formulaires.majRecettes = function () {
         if (ajoutees) parts.push(ajoutees + " nouveaux plats");
         toast(parts.length ? parts.join(", ") + " ✅" : "Rien à changer");
       };
+    });
+};
+
+/* ==================== CONSULTER UNE RECETTE ==================== */
+
+Formulaires.consulterRecette = function (rid) {
+  const r = etat.recettes.find((x) => x.id === rid);
+  if (!r) return;
+
+  const ing = (r.ingredients || []).map((i) => {
+    const q = formaterQte(i.qte, i.unite);
+    return '<div class="ligne"><div class="ligne-corps"><b>' + esc(i.nom) + "</b>" +
+      (q ? "<small>" + esc(q) + "</small>" : "") + "</div></div>";
+  }).join("");
+
+  const etapes = (r.etapes || []).map((e, k) =>
+    '<div class="ligne"><span class="etape">' + (k + 1) + "</span>" +
+    '<div class="ligne-corps"><b style="font-weight:400;line-height:1.5">' +
+    esc(e) + "</b></div></div>").join("");
+
+  const badges = [
+    r.vegetarien ? '<span class="etiquette vert">végé</span>' : "",
+    r.rapide ? '<span class="etiquette">rapide</span>' : "",
+    r.thermomix ? '<span class="etiquette chaud">🍲 robot</span>' : "",
+    r.type === "leger" ? '<span class="etiquette">léger</span>' : ""
+  ].concat((r.saisons || []).map((v) => {
+    const x = infoSaison(v);
+    return x ? '<span class="etiquette' + (v === saisonActuelle() ? " vert" : "") + '">' +
+      x.emoji + " " + x.nom.toLowerCase() + "</span>" : "";
+  })).filter(Boolean).join(" ");
+
+  ouvrirFeuille((r.emoji || "🍽️") + " " + r.nom,
+    (badges ? '<div class="puces" style="margin-bottom:1rem">' + badges + "</div>" : "") +
+    (r.origine === "importee" && r.deQui
+      ? '<p class="aide" style="margin-bottom:.8rem">Recette partagée par ' + esc(r.deQui) + ".</p>" : "") +
+    '<div class="sous-titre" style="margin-top:0"><h3>Ingrédients</h3>' +
+    '<span class="etiquette">' + (r.ingredients || []).length + "</span></div>" +
+    '<div class="carte">' + (ing || '<p class="aide">Aucun ingrédient noté.</p>') + "</div>" +
+    '<div class="sous-titre"><h3>Préparation</h3></div>' +
+    '<div class="carte">' + (etapes ||
+      '<p class="aide">Pas encore de déroulé. Appuyez sur « Modifier » pour en écrire un.</p>') + "</div>" +
+    '<p class="aide">' +
+    "Déroulé indicatif, écrit pour l'application. Pour la version exacte d'un site " +
+    "(temps, vitesses du robot…), utilisez le lien ci-dessous.</p>" +
+    (r.lien
+      ? '<a class="btn plein doux" href="' + esc(r.lien) + '" target="_blank" rel="noopener" ' +
+        'style="text-decoration:none;margin-top:.8rem">' + "Ouvrir la recette d'origine ↗</a>"
+      : "") +
+    '<div class="rangee-btn" style="margin-top:.8rem">' +
+    '<button class="btn" data-action="fermer">Fermer</button>' +
+    '<button class="btn principal" data-role="modifier">Modifier</button></div>',
+    (f) => {
+      f.querySelector('[data-role="modifier"]').onclick = () => Formulaires.recette(r.id);
     });
 };
 
@@ -518,6 +598,12 @@ Formulaires.apercuRecette = function (x) {
     (x.rapide ? '<span class="etiquette">rapide</span> ' : "") +
     '<span class="etiquette">' + (x.type === "leger" ? "léger" : "consistant") + "</span></div>" +
     '<div class="carte">' + (ing || '<p class="aide">Aucun ingrédient.</p>') + "</div>" +
+    ((x.etapes || []).length
+      ? '<div class="sous-titre"><h3>Préparation</h3></div><div class="carte">' +
+        x.etapes.map((e, k) => '<div class="ligne"><span class="etape">' + (k + 1) + "</span>" +
+        '<div class="ligne-corps"><b style="font-weight:400;line-height:1.5">' + esc(e) +
+        "</b></div></div>").join("") + "</div>"
+      : "") +
     (x.lien ? '<a class="btn plein doux" href="' + esc(x.lien) + '" target="_blank" rel="noopener" ' +
       'style="text-decoration:none;margin-bottom:.5rem">Ouvrir la recette ↗</a>' : "") +
     '<button class="btn plein principal" data-role="prendre">Ajouter à mes recettes</button>' +
@@ -645,6 +731,10 @@ Formulaires.repas = function (jour, moment) {
     '<label class="champ"><span>Ou écrire librement</span>' +
     '<input type="text" id="repas-libre" maxlength="60" placeholder="Restes du frigo, resto…" value="' +
     esc(actuel && actuel.texte ? actuel.texte : "") + '"></label>' +
+    ((actuel && actuel.recetteId)
+      ? '<button class="btn plein doux" data-role="consulter" style="margin-bottom:.6rem">' +
+        "📖 Consulter la recette</button>"
+      : "") +
     '<div class="rangee-btn">' +
     (actuel ? '<button class="btn danger" data-role="vider">Vider</button>' : "") +
     '<button class="btn" data-action="fermer">Annuler</button>' +
@@ -676,6 +766,8 @@ Formulaires.repas = function (jour, moment) {
         fermerFeuille();
         Actions.definirRepas(ui.semaine, jour, moment, { recetteId: b.dataset.recette, texte: "" });
       };
+      const bc = f.querySelector('[data-role="consulter"]');
+      if (bc) bc.onclick = () => Formulaires.consulterRecette(actuel.recetteId);
       const bv = f.querySelector('[data-role="vider"]');
       if (bv) bv.onclick = () => { fermerFeuille(); Actions.definirRepas(ui.semaine, jour, moment, null); };
       f.querySelector('[data-role="ok-libre"]').onclick = () => {
@@ -883,6 +975,13 @@ Formulaires.recette = function (rid) {
     '<div class="sous-titre" style="margin-top:0"><h3>Ingrédients</h3></div>' +
     '<div id="zone-ing">' + ings.map(ligneIng).join("") + "</div>" +
     '<button type="button" class="btn plein doux" data-role="ajout-ing" style="margin-top:.4rem">＋ Ajouter un ingrédient</button>' +
+    "<hr class=\"sep\">" +
+    '<div class="sous-titre" style="margin-top:0"><h3>Préparation</h3></div>' +
+    '<label class="champ"><span>Une étape par ligne</span>' +
+    '<textarea name="etapes" rows="8" style="min-height:150px" ' +
+    "placeholder=\"Coupez les légumes en cubes.&#10;Faites revenir l'oignon.&#10;" +
+    "Laissez mijoter 30 minutes.\">" +
+    esc((cour.etapes || []).join("\n")) + "</textarea></label>" +
     boutonsFormulaire(r ? "Enregistrer" : "Créer la recette", !!r) + "</form>";
 
   ouvrirFeuille(r ? "Modifier la recette" : "Nouvelle recette", html, (f) => {
@@ -949,6 +1048,8 @@ Formulaires.recette = function (rid) {
         thermomix: !!d.get("thermomix"),
         lien: String(d.get("lien") || "").trim(),
         saisons: valeursMulti(f, "saisons"),
+        etapes: String(d.get("etapes") || "").split(/\r?\n/)
+          .map((x) => x.trim()).filter(Boolean),
         ingredients: liste
       };
       if (r) Object.assign(r, donnees);
@@ -1357,7 +1458,13 @@ Formulaires.menuProfil = function () {
     "Cette page n'est pas servie en <b>https</b> : les codes à 4 chiffres ne peuvent pas " +
     "être chiffrés. À n'utiliser que pour des essais.</div></div>";
 
+  const maj = misesAJour();
   const html =
+    (maj.length
+      ? '<button class="btn plein principal" data-action="maj-liste" style="margin-bottom:.8rem">' +
+        "🔄 " + maj.length + " mise" + (maj.length > 1 ? "s" : "") + " à jour disponible" +
+        (maj.length > 1 ? "s" : "") + "</button>"
+      : "") +
     '<div class="ligne" style="padding-top:0">' +
     '<span class="avatar">' + esc(moi.emoji || "🙂") + "</span>" +
     '<div class="ligne-corps"><b>' + esc(moi.prenom) + "</b><small>" +
@@ -1383,7 +1490,7 @@ Formulaires.menuProfil = function () {
       if (estAdmin()) { Formulaires.membre(moi.id); return; }
       Formulaires.monProfilSimple();
     };
-    f.querySelectorAll('[data-action="aller"]').forEach((b) => {
+    f.querySelectorAll('[data-action="aller"], [data-action="maj-liste"]').forEach((b) => {
       b.addEventListener("click", fermerFeuille);
     });
   });

@@ -462,3 +462,17 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:1.1rem 0;}
   padding:.34rem .5rem;font-size:1.05rem;line-height:1.15;
 }
 .grille-emojis .puce.on{background:var(--accent);border-color:var(--accent);}
+
+/* ---------- pastille « il y a du nouveau » sur l'avatar ---------- */
+.topbar .avatar{position:relative;}
+.point-maj{
+  position:absolute;top:-2px;right:-2px;
+  width:12px;height:12px;border-radius:999px;
+  background:var(--warm);
+  box-shadow:0 0 0 2px var(--bg);
+}
+.ligne-maj{cursor:pointer;}
+
+/* ---------- une recette se consulte d'un simple appui ---------- */
+.ligne-recette{cursor:pointer;}
+.ligne-recette:active{background:var(--surface-2);}

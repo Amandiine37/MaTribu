@@ -1037,7 +1037,7 @@ function appliquerDonnees(d, portee) {
   if (moi) moi = membre(moi.id) || moi;
 }
 
-async function entrerDansFamille(code, membreId) {
+async function entrerDansFamille(code, membreId, opts) {
   const d = await Store.charger(code);
   if (!d) return false;
   appliquerDonnees(d);
@@ -1051,7 +1051,11 @@ async function entrerDansFamille(code, membreId) {
   majRecettesSiBesoin();         // idem : complète les recettes d'avant
   $("#ecran-connexion").hidden = true;
   $("#ecran-app").hidden = false;
+  /* Ouverture depuis une session déjà enregistrée : on reprend là où on
+     s'était arrêté. Après une vraie connexion, on repart de l'accueil. */
   ui.vue = "accueil";
+  if (opts && opts.reprendreVue) restaurerVue();
+  memoriserVue();
   rendre();
   return true;
 }
@@ -1566,6 +1570,7 @@ function reparerRecettes() {
       if (r.saisons.length) saisonsAjoutees++;
     }
     if (r.thermomix === undefined) r.thermomix = !!(ref && ref.thermomix);
+    if (r.etapes === undefined) r.etapes = ref ? (ref.etapes || []).slice() : [];
     /* Quantité et unité collées : « 800 g » -> 800 + g. En cas de doute sur
        l'unité, on ne touche à rien : mieux vaut l'ancien format qu'une perte. */
     (r.ingredients || []).forEach((i) => {
@@ -1600,13 +1605,38 @@ function ajouterRecettesManquantes() {
   return aAjouter.length;
 }
 
+/* ---------------------- Notifications de mise à jour ----------------------
+   Ce que l'application propose de nouveau et que cette famille n'a pas encore.
+   Réservé aux administrateurs : eux seuls peuvent y donner suite. */
+function misesAJour() {
+  if (!moi || !estAdmin()) return [];
+  const liste = [];
+
+  const aCompleter = etat.recettes.filter((r) =>
+    r.saisons === undefined || r.thermomix === undefined || r.etapes === undefined ||
+    (r.ingredients || []).some((i) => i.unite === undefined || i.unite === null)).length;
+  const nouvelles = recettesManquantes().length;
+
+  if (aCompleter || nouvelles) {
+    const details = [];
+    if (nouvelles) details.push(nouvelles + " nouveau" + (nouvelles > 1 ? "x" : "") +
+      " plat" + (nouvelles > 1 ? "s" : "") + " à ajouter");
+    if (aCompleter) details.push(aCompleter + " recette" + (aCompleter > 1 ? "s" : "") + " à compléter");
+    liste.push({
+      id: "recettes", emoji: "📖", titre: "Cahier de recettes",
+      detail: details.join(" • "), action: "recettes-maj"
+    });
+  }
+  return liste;
+}
+
 /* Lancée une fois par famille, par un administrateur, au démarrage. */
 async function majRecettesSiBesoin() {
   if (!estAdmin()) return;
   const cle = "tribu:recettesMaj:" + (etat.famille.code || "?");
   if (localStorage.getItem(cle)) return;
   const besoin = etat.recettes.some((r) =>
-    r.saisons === undefined || r.thermomix === undefined ||
+    r.saisons === undefined || r.thermomix === undefined || r.etapes === undefined ||
     (r.ingredients || []).some((i) => i.unite === undefined || i.unite === null));
   localStorage.setItem(cle, "1");
   if (!besoin) return;
@@ -1633,6 +1663,7 @@ const Partage = {
       vegetarien: !!r.vegetarien,
       rapide: !!r.rapide,
       saisons: (r.saisons || []).slice(0, 4),
+      etapes: (r.etapes || []).slice(0, 20),
       lien: r.lien || "",
       ingredients: (r.ingredients || []).slice(0, 40).map((i) => ({
         nom: i.nom, qte: i.qte || "", unite: i.unite || "", rayon: i.rayon || "Autre"
@@ -1682,7 +1713,8 @@ const Partage = {
       id: id(),
       nom: fiche.nom, emoji: fiche.emoji || "🍽️", type: fiche.type || "consistant",
       vegetarien: !!fiche.vegetarien, rapide: !!fiche.rapide,
-      saisons: (fiche.saisons || []).slice(0, 4), lien: fiche.lien || "",
+      saisons: (fiche.saisons || []).slice(0, 4),
+      etapes: (fiche.etapes || []).slice(0, 20), lien: fiche.lien || "",
       ingredients: (fiche.ingredients || []).map((i) => ({
         nom: i.nom, qte: i.qte || "", unite: i.unite || "", rayon: i.rayon || "Autre"
       })),
@@ -1872,7 +1904,11 @@ function rendre() {
   if (!moi) return;
   const v = ui.vue;
 
-  $("#btn-profil").textContent = moi.emoji || "🙂";
+  const maj = misesAJour();
+  $("#btn-profil").innerHTML = esc(moi.emoji || "🙂") +
+    (maj.length ? '<span class="point-maj"></span>' : "");
+  $("#btn-profil").title = maj.length
+    ? maj.length + " mise(s) à jour disponible(s)" : "Mon profil";
   $("#titre-vue").textContent = TITRES[v] ? TITRES[v][0] : "Tribu";
   $("#sous-titre-vue").textContent = v === "accueil" ? etat.famille.nom : (TITRES[v] ? TITRES[v][1] : "");
   $("#mes-points").textContent = pointsDe(moi.id);
@@ -1934,8 +1970,32 @@ function majFab() {
 
 function aller(vue) {
   ui.vue = vue;
+  memoriserVue();
   window.scrollTo({ top: 0 });
   rendre();
+}
+
+/* On retient l'onglet ouvert : recharger la page ne doit pas ramener
+   brutalement à l'accueil au milieu de ce qu'on était en train de faire. */
+function memoriserVue() {
+  try {
+    localStorage.setItem("tribu:vue", JSON.stringify({
+      vue: ui.vue,
+      ongletCourses: ui.ongletCourses,
+      listeActive: ui.listeActive || null
+    }));
+  } catch (e) { /* sans importance */ }
+}
+
+function restaurerVue() {
+  let v;
+  try { v = JSON.parse(localStorage.getItem("tribu:vue") || "null"); } catch (e) { return; }
+  if (!v || !v.vue || !Vues[v.vue]) return;
+  /* L'administration n'a pas de sens pour un membre ordinaire. */
+  if (v.vue === "admin" && !estAdmin()) return;
+  ui.vue = v.vue;
+  if (v.ongletCourses) ui.ongletCourses = v.ongletCourses;
+  if (v.listeActive) ui.listeActive = v.listeActive;
 }
 
 /* ============================ 10. Ecoute des clics ============================ */
@@ -1997,6 +2057,7 @@ document.addEventListener("click", (e) => {
 
     case "recette-nouvelle": Formulaires.recette(null); break;
     case "recette-editer": Formulaires.recette(v); break;
+    case "recette-voir": Formulaires.consulterRecette(v); break;
     case "recettes-partagees": Formulaires.catalogue(); break;
     case "recettes-maj": Formulaires.majRecettes(); break;
     case "recettes-filtre": {
@@ -2035,6 +2096,7 @@ document.addEventListener("click", (e) => {
       aller("accueil");
       break;
     case "menu-profil": Formulaires.menuProfil(); break;
+    case "maj-liste": Formulaires.misesAJour(); break;
     case "deconnexion": fermerFeuille(); deconnecter(); break;
 
     case "theme": {
@@ -2221,7 +2283,7 @@ async function demarrerVraiment() {
 
   const s = lireSession();
   if (s && s.code && s.membreId) {
-    const ok = await entrerDansFamille(s.code, s.membreId);
+    const ok = await entrerDansFamille(s.code, s.membreId, { reprendreVue: true });
     if (ok) return;
     /* Echec : soit la famille a disparu, soit Firebase refuse l'accès.
        Dans le second cas on l'explique au lieu de renvoyer bêtement au départ. */

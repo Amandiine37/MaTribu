@@ -547,9 +547,11 @@ Vues.recettes = function () {
     "</div>");
 
   h.push('<div class="carte">' + liste.map((r) =>
-    '<div class="ligne"><span style="font-size:1.4rem">' + esc(r.emoji || "🍽️") + "</span>" +
+    '<div class="ligne ligne-recette" data-action="recette-voir" data-id="' + r.id + '">' +
+    '<span style="font-size:1.4rem">' + esc(r.emoji || "🍽️") + "</span>" +
     '<div class="ligne-corps"><b>' + esc(r.nom) + "</b><small>" +
     (r.ingredients || []).length + " ingrédients" +
+    ((r.etapes || []).length ? " • " + r.etapes.length + " étapes" : "") +
     (r.origine === "importee" && r.deQui ? " • de " + esc(r.deQui) : "") + "</small>" +
     '<span class="etiquettes">' +
     (r.vegetarien ? '<span class="etiquette vert">végé</span>' : "") +
