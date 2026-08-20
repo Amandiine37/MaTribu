@@ -147,6 +147,32 @@ deviner.*
   L'application ne stocke que le nom du plat et ses ingrédients — pas le texte
   des recettes, qui appartient à leurs auteurs.
 
+### Les saisons
+
+Chaque recette peut porter une ou plusieurs **saisons** — 🌸 printemps, ☀️ été,
+🍂 automne, ❄️ hiver. Une recette sans saison cochée convient toute l'année.
+
+Les 50 plats fournis sont déjà renseignés : la ratatouille et le gratin de
+courgettes en été, la tartiflette et la soupe à l'oignon en hiver, les lasagnes
+toute l'année…
+
+**Le générateur en tient compte.** L'option **« Respecter les saisons »**, cochée
+par défaut, écarte les plats hors saison. Concrètement, en janvier il ne vous
+proposera pas de gratin de courgettes ; il ira chercher les poireaux, les
+endives et le potimarron.
+
+Quand vous créez une recette, le bouton **🔎 Deviner d'après les ingrédients**
+propose les saisons à partir d'un calendrier des fruits et légumes : tapez
+« courgettes, tomates, basilic » et il coche *Été*. C'est une suggestion, vous
+gardez la main.
+
+Enfin, le filtre **☀️ De saison** dans *Mes recettes* n'affiche que ce qui se
+cuisine en ce moment.
+
+> Le calendrier reste volontairement simple. Un produit qu'il ne connaît pas est
+> considéré comme disponible toute l'année — mieux vaut ne rien dire que dire
+> une bêtise.
+
 ### Retrouver une recette
 
 Dans **Mes recettes**, la barre de recherche cherche dans les noms de plats
@@ -157,6 +183,7 @@ En dessous, quatre filtres se combinent librement :
 
 | Filtre | Ce qu'il garde |
 |---|---|
+| ☀️ **De saison** | Ce qui se cuisine en ce moment (la saison affichée suit la date) |
 | ✍️ **Mes recettes** | Uniquement celles que vous avez créées (pas les 50 fournies) |
 | 🌿 **Végé** | Les plats végétariens |
 | ⚡ **Rapide** | Moins de 30 minutes |

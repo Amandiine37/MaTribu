@@ -86,6 +86,32 @@ const CLES_DOC = ["famille", "membres", "membresUid", "adminsUid", "appareils", 
   "bareme", "courses", "listesCourses", "stock", "recettes", "repas", "notes", "cadeaux",
   "tarifs", "echanges", "reglages", "jetonUtilise"];
 
+/* Les saisons, au sens cuisine : ce qu'on a envie de manger et ce qu'on
+   trouve sur l'étal. Une recette sans saison indiquée convient toute l'annee. */
+const SAISONS = [
+  { val: "printemps", nom: "Printemps", emoji: "🌸", mois: [3, 4, 5] },
+  { val: "ete", nom: "Été", emoji: "☀️", mois: [6, 7, 8] },
+  { val: "automne", nom: "Automne", emoji: "🍂", mois: [9, 10, 11] },
+  { val: "hiver", nom: "Hiver", emoji: "❄️", mois: [12, 1, 2] }
+];
+
+/* Calendrier des fruits et legumes, pour proposer les saisons d'une recette
+   a partir de ses ingredients. Volontairement court : les produits courants
+   suffisent, le reste est considere comme disponible toute l'annee. */
+const CALENDRIER = {
+  printemps: ["asperge", "radis", "épinard", "petit pois", "artichaut", "fraise", "rhubarbe",
+    "oseille", "blette", "navet", "laitue", "cresson", "carotte nouvelle", "oignon nouveau"],
+  ete: ["courgette", "tomate", "aubergine", "poivron", "concombre", "haricot vert", "melon",
+    "pastèque", "abricot", "pêche", "nectarine", "cerise", "framboise", "basilic", "maïs",
+    "fenouil", "prune", "figue", "laitue", "tomate cerise"],
+  automne: ["potiron", "potimarron", "courge", "champignon", "poireau", "chou", "brocoli",
+    "betterave", "raisin", "pomme", "poire", "noix", "châtaigne", "céleri", "panais",
+    "épinard", "fenouil", "figue"],
+  hiver: ["poireau", "chou", "endive", "carotte", "navet", "panais", "céleri", "potiron",
+    "courge", "orange", "clémentine", "mandarine", "pamplemousse", "kiwi", "poire", "pomme",
+    "salsifis", "topinambour", "mâche", "betterave"]
+};
+
 /* Types de liste de courses. « mensuelle » = on la remplit au fil de l'eau
    sans acheter tout de suite : elle ne déclenche donc pas les rappels. */
 const TYPES_LISTE = [
@@ -347,6 +373,79 @@ function estRecettePerso(r) {
   return !NOMS_DEPART.has(String(r.nom || "").toLowerCase().trim());
 }
 
+/* --- Saisons --- */
+
+function saisonActuelle(d) {
+  const m = (d || new Date()).getMonth() + 1;
+  return (SAISONS.find((s) => s.mois.indexOf(m) !== -1) || SAISONS[0]).val;
+}
+function infoSaison(val) {
+  return SAISONS.find((s) => s.val === val) || null;
+}
+/* Sans saison indiquée, une recette convient toute l'année. */
+function estDeSaison(r, d) {
+  const l = r.saisons || [];
+  if (!l.length) return true;
+  return l.indexOf(saisonActuelle(d)) !== -1;
+}
+function saisonsToutelAnnee(r) { return !(r.saisons || []).length; }
+
+/* Produits dont le nom contient celui d'un produit saisonnier sans en être un :
+   des pommes de terre ne sont pas des pommes. On les écarte du calendrier. */
+const PRODUITS_TOUTE_ANNEE = ["pomme de terre", "haricot rouge", "haricot blanc",
+  "haricot sec", "tomate pelee", "tomate concassee", "coulis de tomate"];
+
+/* Découpe un nom en mots comparables : sans accent, au singulier.
+   « Courgettes » → ["courgette"] ; « Pommes de terre » → ["pomme","de","terre"] */
+function motsDe(texte) {
+  return String(texte || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .split(/[^a-z]+/)
+    .filter(Boolean)
+    .map((m) => (m.length > 3 && /[sx]$/.test(m) ? m.slice(0, -1) : m));
+}
+
+/* Le produit figure-t-il dans ce nom ? On compare des MOTS ENTIERS : sinon
+   « courgette » déclencherait « courge », et « poireau » déclencherait
+   « poire ». C'est exactement le piège qu'on veut éviter. */
+function contientProduit(mots, produit) {
+  const p = motsDe(produit);
+  for (let i = 0; i + p.length <= mots.length; i++) {
+    let ok = true;
+    for (let j = 0; j < p.length; j++) { if (mots[i + j] !== p[j]) { ok = false; break; } }
+    if (ok) return true;
+  }
+  return false;
+}
+
+/* Propose des saisons d'après les ingrédients : si un ingrédient n'est de
+   saison qu'à un moment, la recette l'est aussi. Une aide, pas une vérité. */
+function devinerSaisons(ingredients) {
+  const scores = {};
+  SAISONS.forEach((s) => { scores[s.val] = 0; });
+  let trouves = 0;
+
+  (ingredients || []).forEach((ing) => {
+    const mots = motsDe(ing.nom);
+    if (!mots.length) return;
+    if (PRODUITS_TOUTE_ANNEE.some((p) => contientProduit(mots, p))) return;
+    const dedans = [];
+    for (const s in CALENDRIER) {
+      if (CALENDRIER[s].some((p) => contientProduit(mots, p))) dedans.push(s);
+    }
+    /* Un produit disponible partout (ou inconnu) ne dit rien d'utile. */
+    if (!dedans.length || dedans.length === SAISONS.length) return;
+    trouves++;
+    dedans.forEach((s) => { scores[s] += 1; });
+  });
+
+  if (!trouves) return [];
+  const max = Math.max.apply(null, Object.values(scores));
+  if (!max) return [];
+  return SAISONS.filter((s) => scores[s.val] >= max).map((s) => s.val);
+}
+
 function recettesFiltrees() {
   const q = ui.rechercheRecette.toLowerCase().trim();
   const f = ui.filtresRecettes;
@@ -357,6 +456,7 @@ function recettesFiltrees() {
     if (f.includes("vege") && !r.vegetarien) return false;
     if (f.includes("rapide") && !r.rapide) return false;
     if (f.includes("leger") && r.type !== "leger") return false;
+    if (f.includes("saison") && !estDeSaison(r)) return false;
     return true;
   }).sort((a, b) => a.nom.localeCompare(b.nom));
 }
@@ -1426,6 +1526,7 @@ const Partage = {
       type: r.type || "consistant",
       vegetarien: !!r.vegetarien,
       rapide: !!r.rapide,
+      saisons: (r.saisons || []).slice(0, 4),
       lien: r.lien || "",
       ingredients: (r.ingredients || []).slice(0, 40).map((i) => ({
         nom: i.nom, qte: i.qte || "", unite: i.unite || "", rayon: i.rayon || "Autre"
@@ -1474,7 +1575,8 @@ const Partage = {
     etat.recettes.push({
       id: id(),
       nom: fiche.nom, emoji: fiche.emoji || "🍽️", type: fiche.type || "consistant",
-      vegetarien: !!fiche.vegetarien, rapide: !!fiche.rapide, lien: fiche.lien || "",
+      vegetarien: !!fiche.vegetarien, rapide: !!fiche.rapide,
+      saisons: (fiche.saisons || []).slice(0, 4), lien: fiche.lien || "",
       ingredients: (fiche.ingredients || []).map((i) => ({
         nom: i.nom, qte: i.qte || "", unite: i.unite || "", rayon: i.rayon || "Autre"
       })),
@@ -1534,6 +1636,10 @@ function genererMenus(cleSem, opt) {
         if (r.vegetarien) s += (vegeRestants >= casesRestantes ? 30 : 6);
         else if (vegeRestants >= casesRestantes) s -= 30;
       }
+      /* Hors saison, on écarte franchement : un gratin de courgettes en
+         janvier, ce n'est pas une bonne idée. */
+      if (opt.saisons !== false && !estDeSaison(r)) s -= 25;
+      if (opt.saisons !== false && !saisonsToutelAnnee(r) && estDeSaison(r)) s += 3;
       if (opt.soirLeger && c.moment === "soir" && r.type === "leger") s += 4;
       if (opt.soirLeger && c.moment === "midi" && r.type === "consistant") s += 1.5;
       if (opt.rapideSemaine && c.jour !== "samedi" && c.jour !== "dimanche" && r.rapide) s += 2.5;

@@ -513,7 +513,9 @@ Vues.recettes = function () {
   h.push('<input type="text" id="champ-recherche-recette" placeholder="Rechercher un plat ou un ingrédient…" ' +
     'value="' + esc(ui.rechercheRecette) + '" autocomplete="off" style="margin-bottom:.7rem">');
 
+  const s = infoSaison(saisonActuelle());
   const filtres = [
+    ["saison", s.emoji + " De saison"],
     ["perso", "✍️ Mes recettes"],
     ["vege", "🌿 Végé"],
     ["rapide", "⚡ Rapide"],
@@ -553,6 +555,11 @@ Vues.recettes = function () {
     (r.rapide ? '<span class="etiquette">rapide</span>' : "") +
     (r.type === "leger" ? '<span class="etiquette">léger</span>' : "") +
     (r.lien ? '<span class="etiquette chaud">lien</span>' : "") +
+    (r.saisons || []).map((v) => {
+      const x = infoSaison(v);
+      return x ? '<span class="etiquette' + (v === saisonActuelle() ? " vert" : "") + '">' +
+        x.emoji + " " + x.nom.toLowerCase() + "</span>" : "";
+    }).join("") +
     (r.partageId ? '<span class="etiquette vert">🌍 partagée</span>' : "") +
     (r.origine === "importee" ? '<span class="etiquette">importée</span>' : "") +
     "</span></div>" +

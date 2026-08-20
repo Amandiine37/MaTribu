@@ -634,6 +634,12 @@ Formulaires.generateur = function () {
     '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
     '<input type="checkbox" name="remplacer" style="width:auto"><span style="margin:0">Remplacer les repas déjà prévus</span></label>' +
     "<hr class=\"sep\">" +
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
+    '<input type="checkbox" name="saisons" checked style="width:auto;margin-top:.2rem">' +
+    '<span style="margin:0">Respecter les saisons<br><small style="font-weight:400">' +
+    "Nous sommes en " + infoSaison(saisonActuelle()).emoji + " " +
+    infoSaison(saisonActuelle()).nom.toLowerCase() +
+    " : les plats des autres saisons seront écartés.</small></span></label>" +
     '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
     '<input type="checkbox" name="soirLeger" checked style="width:auto"><span style="margin:0">Plats plus légers le soir</span></label>' +
     '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
@@ -653,6 +659,7 @@ Formulaires.generateur = function () {
       const n = genererMenus(ui.semaine, {
         midi: !!d.get("midi"), soir: !!d.get("soir"), remplacer: !!d.get("remplacer"),
         soirLeger: !!d.get("soirLeger"), rapideSemaine: !!d.get("rapide"),
+        saisons: !!d.get("saisons"),
         vege: Number(d.get("vege")) || 0
       });
       if (n) toast(n + " repas proposés 🍽️");
@@ -791,6 +798,13 @@ Formulaires.recette = function (rid) {
     '<label class="puce"><input type="checkbox" name="vege" style="width:auto"' + (cour.vegetarien ? " checked" : "") + "> Végétarien</label>" +
     '<label class="puce"><input type="checkbox" name="rapide" style="width:auto"' + (cour.rapide ? " checked" : "") + "> Rapide</label>" +
     "</div>" +
+    '<label class="champ"><span>Saisons</span></label>' +
+    puceMultiple("saisons", SAISONS.map((x) => ({ val: x.val, html: x.emoji + " " + x.nom })),
+      cour.saisons || []) +
+    '<p class="aide" style="margin:-.5rem 0 .6rem">Aucune saison cochée = le plat convient ' +
+    "toute l'année. Sinon, le générateur de menus l'évitera hors saison.</p>" +
+    '<button type="button" class="btn plein doux" data-role="deviner" style="margin-bottom:1rem">' +
+    "🔎 Deviner d'après les ingrédients</button>" +
     '<label class="champ"><span>Lien vers la recette (Cookomix, blog…)</span>' +
     '<input type="url" name="lien" value="' + esc(cour.lien || "") + '" placeholder="https://…"></label>' +
     (cour.lien ? '<a class="btn plein doux" href="' + esc(cour.lien) + '" target="_blank" rel="noopener" ' +
@@ -810,7 +824,22 @@ Formulaires.recette = function (rid) {
   ouvrirFeuille(r ? "Modifier la recette" : "Nouvelle recette", html, (f) => {
     brancherEmojis(f);
     brancherMulti(f, "type", true);
+    brancherMulti(f, "saisons", false);
     const zone = f.querySelector("#zone-ing");
+
+    f.querySelector('[data-role="deviner"]').onclick = () => {
+      const liste = Array.from(zone.querySelectorAll("[data-ing]")).map((row) => ({
+        nom: row.querySelector('[data-c="nom"]').value.trim()
+      })).filter((i) => i.nom);
+      const trouvees = devinerSaisons(liste);
+      const g = f.querySelector('[data-role="saisons"]');
+      g.querySelectorAll(".puce").forEach((p) => {
+        p.classList.toggle("on", trouvees.indexOf(p.dataset.val) !== -1);
+      });
+      toast(trouvees.length
+        ? "Proposé : " + trouvees.map((v) => infoSaison(v).nom).join(", ")
+        : "Ces ingrédients se trouvent toute l'année");
+    };
 
     const bp = f.querySelector('[data-role="partager"]');
     if (bp) bp.onclick = () => Formulaires.publierRecette(r.id);
@@ -854,6 +883,7 @@ Formulaires.recette = function (rid) {
         vegetarien: !!d.get("vege"),
         rapide: !!d.get("rapide"),
         lien: String(d.get("lien") || "").trim(),
+        saisons: valeursMulti(f, "saisons"),
         ingredients: liste
       };
       if (r) Object.assign(r, donnees);
