@@ -371,22 +371,18 @@ Formulaires.misesAJour = function () {
       '<div class="ligne-corps"><b>' + esc(m.titre) + "</b><small>" + esc(m.detail) + "</small></div>" +
       '<span class="etiquette chaud">Voir</span></div>').join("") + "</div>" +
     '<button class="btn plein" data-action="fermer" style="margin-top:.8rem">Plus tard</button>',
-    (f) => {
-      f.querySelectorAll("[data-action]").forEach((b) => {
-        if (b.dataset.action !== "fermer") b.addEventListener("click", fermerFeuille);
-      });
-    });
+    );
+  /* Pas besoin de fermer la feuille à la main : l'action ouverte par la ligne
+     remplace elle-même son contenu. Fermer d'abord provoquait un aller-retour
+     pendant lequel on ne voyait rien. */
 };
 
 /* ============ REMETTRE À NIVEAU LES RECETTES D'UNE FAMILLE ============ */
 
 Formulaires.majRecettes = function () {
-  const sansSaison = etat.recettes.filter((r) => r.saisons === undefined).length;
-  const sansUnite = etat.recettes.reduce((n, r) =>
-    n + (r.ingredients || []).filter((i) => i.unite === undefined || i.unite === null).length, 0);
-  const nouvelles = recettesManquantes();
+  const d = diagnosticRecettes();
 
-  if (!sansSaison && !sansUnite && !nouvelles.length) {
+  if (d.rienAFaire) {
     ouvrirFeuille("Recettes à jour",
       '<div class="bandeau info">✅<div>Votre cahier est complet : rien à compléter, ' +
       "aucun nouveau plat disponible.</div></div>" +
@@ -394,19 +390,25 @@ Formulaires.majRecettes = function () {
     return;
   }
 
+  /* Le détail de ce qui manque, dans les mêmes termes que la notification. */
+  const manques = [];
+  if (d.saisons) manques.push(d.saisons + " sans saison");
+  if (d.etapes) manques.push(d.etapes + " sans déroulé");
+  if (d.unites) manques.push(d.unites + " quantité(s) au format ancien");
+
   const blocs = [];
-  if (sansSaison || sansUnite) {
-    blocs.push('<div class="ligne"><span class="etape">1</span><div class="ligne-corps">' +
-      "<b>Compléter " + sansSaison + " recette(s)</b><small>" +
-      "Saisons manquantes et " + sansUnite + " quantité(s) au format ancien (« 800 g » → 800 + g). " +
-      "Rien de ce que vous avez saisi ne sera écrasé.</small></div></div>");
+  if (d.aCompleter) {
+    blocs.push('<div class="ligne"><span class="etape">' + (blocs.length + 1) + "</span>" +
+      '<div class="ligne-corps"><b>Compléter ' + d.aCompleter + " recette(s)</b><small>" +
+      esc(manques.join(" • ")) +
+      ". Rien de ce que vous avez saisi ne sera écrasé.</small></div></div>");
   }
-  if (nouvelles.length) {
-    const apercu = nouvelles.slice(0, 4).map((r) => r.nom).join(", ");
-    blocs.push('<div class="ligne"><span class="etape">' + (blocs.length + 1) + '</span>' +
-      '<div class="ligne-corps"><b>Ajouter ' + nouvelles.length + " nouveau(x) plat(s)</b><small>" +
-      esc(apercu) + (nouvelles.length > 4 ? "…" : "") +
-      "<br>Dont " + nouvelles.filter((r) => r.thermomix).length +
+  if (d.nouvelles.length) {
+    const apercu = d.nouvelles.slice(0, 4).map((r) => r.nom).join(", ");
+    blocs.push('<div class="ligne"><span class="etape">' + (blocs.length + 1) + "</span>" +
+      '<div class="ligne-corps"><b>Ajouter ' + d.nouvelles.length + " nouveau(x) plat(s)</b><small>" +
+      esc(apercu) + (d.nouvelles.length > 4 ? "…" : "") +
+      "<br>Dont " + d.nouvelles.filter((r) => r.thermomix).length +
       " au robot cuiseur.</small></div></div>");
   }
 
@@ -415,7 +417,7 @@ Formulaires.majRecettes = function () {
     "L'application a été enrichie depuis la création de votre famille. " +
     "Voici ce qui peut être repris.</p>" +
     '<div class="carte">' + blocs.join("") + "</div>" +
-    (nouvelles.length
+    (d.nouvelles.length
       ? '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start;margin-top:.8rem">' +
         '<input type="checkbox" id="case-nouvelles" checked style="width:auto;margin-top:.2rem">' +
         '<span style="margin:0">Ajouter les nouveaux plats<br><small style="font-weight:400">' +
@@ -434,9 +436,10 @@ Formulaires.majRecettes = function () {
         sauver("recettes");
         const parts = [];
         if (bilan.saisons) parts.push(bilan.saisons + " saisons");
+        if (bilan.etapes) parts.push(bilan.etapes + " déroulés");
         if (bilan.unites) parts.push(bilan.unites + " unités");
         if (ajoutees) parts.push(ajoutees + " nouveaux plats");
-        toast(parts.length ? parts.join(", ") + " ✅" : "Rien à changer");
+        toast(parts.length ? parts.join(", ") + " ✅" : "Cahier déjà à jour");
       };
     });
 };

@@ -1560,6 +1560,7 @@ function reparerRecettes() {
     .map((r) => [r.nom.toLowerCase().trim(), r]));
   let saisonsAjoutees = 0;
   let unitesSeparees = 0;
+  let etapesAjoutees = 0;
 
   etat.recettes.forEach((r) => {
     /* Saisons absentes : on reprend celles du plat de référence, s'il existe.
@@ -1570,7 +1571,10 @@ function reparerRecettes() {
       if (r.saisons.length) saisonsAjoutees++;
     }
     if (r.thermomix === undefined) r.thermomix = !!(ref && ref.thermomix);
-    if (r.etapes === undefined) r.etapes = ref ? (ref.etapes || []).slice() : [];
+    if (r.etapes === undefined) {
+      r.etapes = ref ? (ref.etapes || []).slice() : [];
+      if (r.etapes.length) etapesAjoutees++;
+    }
     /* Quantité et unité collées : « 800 g » -> 800 + g. En cas de doute sur
        l'unité, on ne touche à rien : mieux vaut l'ancien format qu'une perte. */
     (r.ingredients || []).forEach((i) => {
@@ -1585,7 +1589,7 @@ function reparerRecettes() {
     });
   });
 
-  return { saisons: saisonsAjoutees, unites: unitesSeparees };
+  return { saisons: saisonsAjoutees, unites: unitesSeparees, etapes: etapesAjoutees };
 }
 
 /* Les plats fournis avec l'application que cette famille n'a pas (encore).
@@ -1608,26 +1612,45 @@ function ajouterRecettesManquantes() {
 /* ---------------------- Notifications de mise à jour ----------------------
    Ce que l'application propose de nouveau et que cette famille n'a pas encore.
    Réservé aux administrateurs : eux seuls peuvent y donner suite. */
+/* Ce qui manque au cahier de recettes de cette famille.
+   UNE SEULE fonction fait ce constat : la pastille de notification et la
+   fenêtre de mise à jour s'y réfèrent toutes les deux. Quand elles comptaient
+   chacune de leur côté, elles finissaient par se contredire — la pastille
+   restait allumée alors que la fenêtre annonçait « rien à faire ». */
+function diagnosticRecettes() {
+  const manqueChamp = (r) =>
+    r.saisons === undefined || r.thermomix === undefined || r.etapes === undefined;
+  const manqueUnite = (r) =>
+    (r.ingredients || []).some((i) => i.unite === undefined || i.unite === null);
+
+  const aCompleter = etat.recettes.filter((r) => manqueChamp(r) || manqueUnite(r));
+  const d = {
+    aCompleter: aCompleter.length,
+    saisons: etat.recettes.filter((r) => r.saisons === undefined).length,
+    etapes: etat.recettes.filter((r) => r.etapes === undefined).length,
+    unites: etat.recettes.reduce((n, r) =>
+      n + (r.ingredients || []).filter((i) => i.unite === undefined || i.unite === null).length, 0),
+    nouvelles: recettesManquantes()
+  };
+  d.rienAFaire = !d.aCompleter && !d.nouvelles.length;
+  return d;
+}
+
 function misesAJour() {
   if (!moi || !estAdmin()) return [];
-  const liste = [];
+  const d = diagnosticRecettes();
+  if (d.rienAFaire) return [];
 
-  const aCompleter = etat.recettes.filter((r) =>
-    r.saisons === undefined || r.thermomix === undefined || r.etapes === undefined ||
-    (r.ingredients || []).some((i) => i.unite === undefined || i.unite === null)).length;
-  const nouvelles = recettesManquantes().length;
+  const details = [];
+  if (d.nouvelles.length) details.push(d.nouvelles.length + " nouveau" +
+    (d.nouvelles.length > 1 ? "x" : "") + " plat" + (d.nouvelles.length > 1 ? "s" : "") + " à ajouter");
+  if (d.aCompleter) details.push(d.aCompleter + " recette" +
+    (d.aCompleter > 1 ? "s" : "") + " à compléter");
 
-  if (aCompleter || nouvelles) {
-    const details = [];
-    if (nouvelles) details.push(nouvelles + " nouveau" + (nouvelles > 1 ? "x" : "") +
-      " plat" + (nouvelles > 1 ? "s" : "") + " à ajouter");
-    if (aCompleter) details.push(aCompleter + " recette" + (aCompleter > 1 ? "s" : "") + " à compléter");
-    liste.push({
-      id: "recettes", emoji: "📖", titre: "Cahier de recettes",
-      detail: details.join(" • "), action: "recettes-maj"
-    });
-  }
-  return liste;
+  return [{
+    id: "recettes", emoji: "📖", titre: "Cahier de recettes",
+    detail: details.join(" • "), action: "recettes-maj"
+  }];
 }
 
 /* Lancée une fois par famille, par un administrateur, au démarrage. */
@@ -1635,16 +1658,18 @@ async function majRecettesSiBesoin() {
   if (!estAdmin()) return;
   const cle = "tribu:recettesMaj:" + (etat.famille.code || "?");
   if (localStorage.getItem(cle)) return;
-  const besoin = etat.recettes.some((r) =>
-    r.saisons === undefined || r.thermomix === undefined || r.etapes === undefined ||
-    (r.ingredients || []).some((i) => i.unite === undefined || i.unite === null));
+  const besoin = diagnosticRecettes().aCompleter > 0;
   localStorage.setItem(cle, "1");
   if (!besoin) return;
   const bilan = reparerRecettes();
-  if (bilan.saisons || bilan.unites) {
+  const parts = [];
+  if (bilan.saisons) parts.push(bilan.saisons + " saisons");
+  if (bilan.etapes) parts.push(bilan.etapes + " déroulés");
+  if (bilan.unites) parts.push(bilan.unites + " unités");
+  if (parts.length) {
     await Store.ecrire(["recettes"]);
     rendre();
-    toast("Recettes mises à jour : " + bilan.saisons + " saisons, " + bilan.unites + " unités");
+    toast("Recettes mises à jour : " + parts.join(", "));
   }
 }
 
