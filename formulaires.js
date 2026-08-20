@@ -351,6 +351,45 @@ Formulaires.viderCourses = function () {
   });
 };
 
+/* ============ REMETTRE À NIVEAU LES RECETTES D'UNE FAMILLE ============ */
+
+Formulaires.majRecettes = function () {
+  const sansSaison = etat.recettes.filter((r) => r.saisons === undefined).length;
+  const sansUnite = etat.recettes.reduce((n, r) =>
+    n + (r.ingredients || []).filter((i) => i.unite === undefined || i.unite === null).length, 0);
+
+  if (!sansSaison && !sansUnite) {
+    ouvrirFeuille("Recettes à jour",
+      '<div class="bandeau info">✅<div>Vos recettes sont déjà complètes : saisons ' +
+      "renseignées et unités séparées.</div></div>" +
+      '<button class="btn plein" data-action="fermer">Fermer</button>');
+    return;
+  }
+
+  ouvrirFeuille("Mettre à jour les recettes",
+    '<p style="margin:.2rem 0 1rem;line-height:1.5;font-size:.92rem">Vos recettes datent ' +
+    "d'une version précédente de l'application. Cette mise à jour complète ce qui manque, " +
+    "<b>sans jamais écraser ce que vous avez saisi</b>.</p>" +
+    '<div class="carte">' +
+    '<div class="ligne"><span class="etape">1</span><div class="ligne-corps">' +
+    "<b>" + sansSaison + " recette(s) sans saison</b><small>Les saisons des plats fournis " +
+    "seront rétablies. Vos propres recettes resteront « toute l'année ».</small></div></div>" +
+    '<div class="ligne"><span class="etape">2</span><div class="ligne-corps">' +
+    "<b>" + sansUnite + " ingrédient(s) sans unité</b><small>« 800 g » redeviendra " +
+    "800 + g, pour que le calcul avec la réserve fonctionne.</small></div></div></div>" +
+    '<div class="rangee-btn" style="margin-top:1rem">' +
+    '<button class="btn" data-action="fermer">Plus tard</button>' +
+    '<button class="btn principal" data-role="ok">Mettre à jour</button></div>',
+    (f) => {
+      f.querySelector('[data-role="ok"]').onclick = async () => {
+        const bilan = reparerRecettes();
+        fermerFeuille();
+        sauver("recettes");
+        toast(bilan.saisons + " saisons et " + bilan.unites + " unités rétablies ✅");
+      };
+    });
+};
+
 /* ==================== CATALOGUE PARTAGÉ ENTRE FAMILLES ==================== */
 
 Formulaires.catalogue = function () {

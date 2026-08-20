@@ -769,9 +769,15 @@ Vues.admin = function () {
       : rienDu("🎁", "Aucun cadeau."),
     "Ajouter", "cadeau-nouveau"));
 
+  const aCompleter = etat.recettes.filter((r) => r.saisons === undefined).length;
   h.push(bloc("📖 Recettes (" + etat.recettes.length + ")",
     '<p class="aide">La bibliothèque de plats sert au générateur de menus.</p>' +
-    '<button class="btn plein doux" data-action="aller" data-vue="recettes" style="margin-top:.6rem">Gérer les recettes</button>'));
+    (aCompleter
+      ? '<div class="bandeau" style="margin-top:.6rem">🔄<div><b>' + aCompleter +
+        " recette(s) d'une version précédente</b> : saisons et unités incomplètes.</div></div>"
+      : "") +
+    '<button class="btn plein doux" data-action="aller" data-vue="recettes" style="margin-top:.6rem">Gérer les recettes</button>' +
+    '<button class="btn plein" data-action="recettes-maj" style="margin-top:.5rem">🔄 Mettre à jour les recettes fournies</button>'));
 
   return h.join("");
 };

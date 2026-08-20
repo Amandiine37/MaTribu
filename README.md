@@ -173,6 +173,23 @@ cuisine en ce moment.
 > considéré comme disponible toute l'année — mieux vaut ne rien dire que dire
 > une bêtise.
 
+#### Si votre famille existait déjà
+
+Les 50 recettes sont **recopiées dans votre famille le jour de sa création** :
+les améliorations apportées ensuite au fichier de recettes ne les atteignent
+pas toutes seules. Une famille créée avant l'arrivée des saisons se retrouve
+donc avec des recettes sans saison — et le filtre affiche alors tout.
+
+L'application s'en occupe : à la première ouverture par un administrateur, elle
+complète ce qui manque et vous prévient (*« Recettes mises à jour : 33 saisons,
+242 unités »*). Vous pouvez aussi le déclencher à la main depuis
+*Administration → 📖 Recettes → **🔄 Mettre à jour les recettes fournies***.
+
+Cette mise à jour **n'écrase jamais ce que vous avez saisi** : elle ne remplit
+que les champs absents. Vos propres recettes restent « toute l'année » tant que
+vous ne cochez rien, et une quantité inhabituelle (« 2 briques ») est laissée
+telle quelle plutôt que mal découpée.
+
 ### Retrouver une recette
 
 Dans **Mes recettes**, la barre de recherche cherche dans les noms de plats

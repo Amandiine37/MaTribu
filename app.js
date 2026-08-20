@@ -150,8 +150,12 @@ function texteNombre(n) {
   return String(Math.round(n * 100) / 100).replace(".", ",");
 }
 function formaterQte(qte, unite) {
-  const n = nombre(qte);
-  const q = n === null ? String(qte || "") : texteNombre(n);
+  const brut = String(qte == null ? "" : qte).trim();
+  /* Ancien format, d'avant la séparation quantité / unité : « 800 g »,
+     « 2 briques »… On l'affiche tel quel plutôt que d'en perdre la moitié. */
+  if (!unite && /[a-zà-ÿ]/i.test(brut)) return brut;
+  const n = nombre(brut);
+  const q = n === null ? brut : texteNombre(n);
   if (!q) return unite || "";
   return unite ? q + " " + unite : q;
 }
@@ -1043,6 +1047,7 @@ async function entrerDansFamille(code, membreId) {
   ecrireSession({ code: code, membreId: membreId });
   localStorage.setItem("tribu:derniereFamille", code);
   verifierRepere(code);          // en arrière-plan, sans bloquer l'ouverture
+  majRecettesSiBesoin();         // idem : complète les recettes d'avant
   $("#ecran-connexion").hidden = true;
   $("#ecran-app").hidden = false;
   ui.vue = "accueil";
@@ -1512,6 +1517,88 @@ const Invitations = {
   }
 };
 
+/* ============ Remise à niveau des recettes d'une famille existante ============
+
+   Les 50 plats fournis sont recopiés dans la famille le jour de sa création :
+   les améliorations apportées ensuite au fichier `recettes.js` ne les
+   atteignent donc jamais. Cette fonction complète ce qui manque — et
+   UNIQUEMENT ce qui manque, sans jamais écraser ce que la famille a saisi. */
+
+const UNITES_CONNUES = {
+  "g": "g", "gr": "g", "gramme": "g", "grammes": "g",
+  "kg": "kg", "kilo": "kg", "kilos": "kg",
+  "ml": "ml", "cl": "cl", "l": "l", "litre": "l", "litres": "l",
+  "boite": "boîte(s)", "boites": "boîte(s)", "boîte": "boîte(s)", "boîtes": "boîte(s)",
+  "paquet": "paquet(s)", "paquets": "paquet(s)",
+  "pot": "pot(s)", "pots": "pot(s)",
+  "sachet": "sachet(s)", "sachets": "sachet(s)",
+  "tranche": "tranche(s)", "tranches": "tranche(s)",
+  "bouquet": "bouquet(s)", "bouquets": "bouquet(s)",
+  "branche": "branche(s)", "branches": "branche(s)",
+  "gousse": "gousse(s)", "gousses": "gousse(s)",
+  "tete": "tête(s)", "tête": "tête(s)", "têtes": "tête(s)",
+  "buche": "bûche(s)", "bûche": "bûche(s)", "bûches": "bûche(s)",
+  "morceau": "morceau(x)", "morceaux": "morceau(x)",
+  "pincee": "pincée(s)", "pincée": "pincée(s)", "pincées": "pincée(s)",
+  "c. à soupe": "c. à soupe", "c. a soupe": "c. à soupe",
+  "c. à café": "c. à café", "c. a cafe": "c. à café"
+};
+function normaliserUnite(txt) {
+  const t = String(txt || "").trim().toLowerCase();
+  if (!t) return "";
+  if (UNITES.indexOf(txt) !== -1) return txt;          // déjà au bon format
+  return UNITES_CONNUES[t] !== undefined ? UNITES_CONNUES[t] : null;
+}
+
+function reparerRecettes() {
+  const reference = new Map((window.RECETTES_DEPART || [])
+    .map((r) => [r.nom.toLowerCase().trim(), r]));
+  let saisonsAjoutees = 0;
+  let unitesSeparees = 0;
+
+  etat.recettes.forEach((r) => {
+    /* Saisons absentes : on reprend celles du plat de référence, s'il existe.
+       Une recette maison reste « toute l'année » tant que rien n'est coché. */
+    if (r.saisons === undefined) {
+      const ref = reference.get(String(r.nom || "").toLowerCase().trim());
+      r.saisons = ref ? (ref.saisons || []).slice() : [];
+      if (r.saisons.length) saisonsAjoutees++;
+    }
+    /* Quantité et unité collées : « 800 g » -> 800 + g. En cas de doute sur
+       l'unité, on ne touche à rien : mieux vaut l'ancien format qu'une perte. */
+    (r.ingredients || []).forEach((i) => {
+      if (i.unite !== undefined && i.unite !== null) return;
+      const m = String(i.qte || "").trim().match(/^([0-9]+(?:[.,][0-9]+)?)\s*(.*)$/);
+      if (!m) return;
+      const u = normaliserUnite(m[2]);
+      if (u === null) return;
+      i.qte = m[1];
+      i.unite = u;
+      unitesSeparees++;
+    });
+  });
+
+  return { saisons: saisonsAjoutees, unites: unitesSeparees };
+}
+
+/* Lancée une fois par famille, par un administrateur, au démarrage. */
+async function majRecettesSiBesoin() {
+  if (!estAdmin()) return;
+  const cle = "tribu:recettesMaj:" + (etat.famille.code || "?");
+  if (localStorage.getItem(cle)) return;
+  const besoin = etat.recettes.some((r) =>
+    r.saisons === undefined ||
+    (r.ingredients || []).some((i) => i.unite === undefined || i.unite === null));
+  localStorage.setItem(cle, "1");
+  if (!besoin) return;
+  const bilan = reparerRecettes();
+  if (bilan.saisons || bilan.unites) {
+    await Store.ecrire(["recettes"]);
+    rendre();
+    toast("Recettes mises à jour : " + bilan.saisons + " saisons, " + bilan.unites + " unités");
+  }
+}
+
 /* ==================== Partage de recettes entre familles ==================== */
 
 const Partage = {
@@ -1892,6 +1979,7 @@ document.addEventListener("click", (e) => {
     case "recette-nouvelle": Formulaires.recette(null); break;
     case "recette-editer": Formulaires.recette(v); break;
     case "recettes-partagees": Formulaires.catalogue(); break;
+    case "recettes-maj": Formulaires.majRecettes(); break;
     case "recettes-filtre": {
       const f = b.dataset.valeur;
       const i = ui.filtresRecettes.indexOf(f);
