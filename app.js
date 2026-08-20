@@ -942,11 +942,26 @@ async function entrerDansFamille(code, membreId) {
   Store.abonner(code, (nouv, portee) => { appliquerDonnees(nouv, portee); rendre(); });
   ecrireSession({ code: code, membreId: membreId });
   localStorage.setItem("tribu:derniereFamille", code);
+  verifierRepere(code);          // en arrière-plan, sans bloquer l'ouverture
   $("#ecran-connexion").hidden = true;
   $("#ecran-app").hidden = false;
   ui.vue = "accueil";
   rendre();
   return true;
+}
+
+/* Les familles créées avant l'annuaire des repères n'y figurent pas : leur nom
+   pourrait donc être proposé à quelqu'un d'autre, qui se heurterait alors à un
+   refus difficile à comprendre. On répare en douceur, une seule fois par
+   appareil et par famille, sans jamais bloquer l'ouverture de l'application. */
+async function verifierRepere(code) {
+  if (Store.mode !== "nuage") return;
+  const cle = "tribu:repereVerifie:" + code;
+  if (localStorage.getItem(cle)) return;
+  localStorage.setItem(cle, "1");
+  try {
+    if (await Store.repereLibre(code) === true) await Store.marquerRepere(code);
+  } catch (e) { /* sans importance : on réessaiera sur un autre appareil */ }
 }
 
 /* Deconnexion : l'appareil reste autorise, on revient juste au choix du profil. */
