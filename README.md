@@ -127,8 +127,28 @@ quantité réellement manquante.
 > et 1 kg de farine → l'application propose **4 pommes**, et laisse la farine de
 > côté. Les kilos et les grammes sont convertis tout seuls (idem ml / cl / l).
 
-Enfin, quand vous cochez vos achats et videz le panier, l'application vous
-propose de **rentrer les achats dans la réserve**. La boucle est bouclée.
+### Au magasin : terminer les courses
+
+C'est là que les deux listes se rejoignent. Vous cochez au fur et à mesure dans
+les rayons ; les articles cochés descendent dans **Dans le panier**. Un bouton
+apparaît alors :
+
+> **✅ Terminer les courses (7)**
+
+En une pression, les articles quittent la liste **et rejoignent votre réserve** :
+
+- ce qui y est **déjà** est réapprovisionné tout seul — *Riz : 1 kg → 3 kg* ;
+- ce qui n'y est **pas encore** vous est proposé, à cocher. Le gâteau
+  d'anniversaire n'a rien à faire dans une réserve : laissez-le décoché, il
+  disparaîtra simplement de la liste ;
+- si les unités ne correspondent pas (2 paquets achetés, une réserve en kilos),
+  l'application **ne bricole pas un chiffre faux** : elle vous le signale pour
+  que vous ajustiez à la main.
+
+Quand il n'y a que des articles déjà connus, **rien ne vous est demandé** : une
+pression suffit, et un message résume ce qui est rentré. C'est réglable —
+*« ne plus me demander »* dans le récapitulatif, ou le lien **changer** sous le
+bouton.
 
 *Les unités qui ne se convertissent pas entre elles (des grammes et des boîtes,
 par exemple) ne sont pas mélangées : l'application le signale au lieu de
@@ -137,15 +157,52 @@ deviner.*
 ### Les menus
 
 - Appuyez sur **🎲 Générer** : l'application remplit la semaine en piochant dans
-  la bibliothèque de recettes (118 plats fournis), en évitant ceux servis les 3 dernières
-  semaines, en mettant des plats plus légers le soir et le nombre de repas
-  végétariens que vous demandez.
+  la bibliothèque de recettes (118 plats fournis). Voir les réglages juste en
+  dessous.
+- Sous les boutons, une ligne récapitule ce que donne la semaine :
+  **🐟 2 · 🍗 3 · 🥦 2**.
 - Appuyez sur **🛒 Aux courses** : tous les ingrédients de la semaine sont
   proposés, vous décochez ce que vous avez déjà, et hop, dans la liste.
 - **📖 Recettes** : ajoutez vos propres plats. Chaque recette a un champ **lien** :
   collez-y l'adresse de la recette (Cookomix, un blog…) et un bouton l'ouvrira.
   L'application ne stocke que le nom du plat et ses ingrédients — pas le texte
   des recettes, qui appartient à leurs auteurs.
+
+### Les réglages du générateur
+
+La fenêtre **🎲 Générer** est rangée en trois parties. Vos choix sont gardés
+sur l'appareil : d'une semaine à l'autre, vous les retrouvez tels quels.
+
+**Quels repas remplir ?** — les midis, les soirs, et faut-il remplacer les
+repas déjà prévus (sinon seules les cases vides sont complétées).
+
+**Ce qu'on mange**
+
+- **Régime de la semaine** : *De tout*, *Sans viande (poisson autorisé)* ou
+  *Végétarien*. Ce n'est pas une préférence : les plats écartés le sont pour de
+  bon, ils ne peuvent pas ressortir faute de mieux.
+- **🐟 Poisson**, **🍗 Viande**, **🥦 Repas végétariens** : combien de fois dans
+  la semaine. Un nombre indiqué est respecté à la lettre — « 2 fois » donne
+  exactement deux poissons, et la catégorie ne réapparaît pas ailleurs.
+  *Peu importe* laisse la catégorie entièrement libre. *Aucun* la supprime.
+
+*Comment un plat est classé ?* D'abord par le rayon de ses ingrédients
+(Boucherie, Poissonnerie), puis par leur nom — un thon en boîte se range en
+épicerie. Un plat qui contient les deux compte comme poisson. Un bouillon de
+bœuf ne fait pas un repas de viande.
+
+**Comment choisir les plats**
+
+- **Respecter les saisons** — voir la section suivante.
+- **Utiliser d'abord ce que j'ai en réserve** : les plats dont vous avez déjà
+  les ingrédients passent devant. Moins de courses, moins de perte. Ça pèse
+  lourd sans écraser la saison ni les nombres demandés.
+- **Plats plus légers le soir**, **plats rapides du lundi au vendredi**.
+- **Privilégier les recettes Thermomix** (53 plats fournis s'y prêtent).
+- **Ne pas resservir un plat vu depuis…** 2, 3, 4 ou 6 semaines.
+
+Si vous demandez plus de repas qu'il n'y a de cases à remplir, l'application
+place ce qu'elle peut et vous le dit.
 
 ### Les saisons
 

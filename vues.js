@@ -382,8 +382,14 @@ function vueListeCourses() {
 
   if (coches.length) {
     h.push('<div class="sous-titre"><h3>Dans le panier</h3>' +
-      '<button class="lien" data-action="courses-vider">Retirer les ' + coches.length + "</button></div>");
+      '<span class="etiquette vert">' + coches.length + "</span></div>");
     h.push('<div class="carte">' + coches.map(ligneCourse).join("") + "</div>");
+    /* Au magasin, c'est le geste qu'on cherche : un bouton franc, pas un lien. */
+    h.push('<button class="btn principal plein" data-action="courses-vider" ' +
+      'style="margin-bottom:.5rem">✅ Terminer les courses (' + coches.length + ")</button>");
+    h.push('<p class="aide centre">Les articles cochés quittent la liste et ' +
+      (reserveAutomatique() ? "rejoignent votre réserve." : "vous serez consultée pour la réserve.") +
+      ' <button class="lien" data-action="reserve-auto">changer</button></p>');
   }
   return h.join("");
 }
@@ -472,6 +478,15 @@ Vues.menus = function () {
     '<button class="btn principal" data-action="menus-generer">🎲 Générer</button>' +
     '<button class="btn doux" data-action="menus-courses">🛒 Aux courses</button>' +
     '<button class="btn" data-action="aller" data-vue="recettes">📖 Recettes</button></div>');
+
+  /* Ce que donne la semaine, en un coup d'oeil : c'est le meilleur retour
+     sur les nombres demandés au générateur. */
+  const compo = compositionSemaine(ui.semaine);
+  if (compo.total) {
+    h.push('<p class="aide centre" style="margin:-.5rem 0 .9rem">' +
+      CATEGORIES_REPAS.map((c) => c.emoji + " " + (compo[c.val] || 0)).join(" &nbsp;·&nbsp; ") +
+      (compo.autre ? " &nbsp;·&nbsp; 🍳 " + compo.autre : "") + "</p>");
+  }
 
   const sem = etat.repas[ui.semaine] || {};
   const aujIso = isoDate(new Date());

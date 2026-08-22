@@ -321,346 +321,93 @@ Formulaires.stock = function (sid) {
   });
 };
 
-/* Vider le panier, en proposant de rentrer les achats dans la réserve. */
-Formulaires.viderCourses = function () {
+/* Fin des courses : ce qu'on vient d'acheter rejoint la réserve. */
+Formulaires.terminerCourses = function () {
   const cible = listeCourante().id;
   const achetes = etat.courses.filter((c) => c.coche && listeDe(c) === cible);
-  if (!achetes.length) { toast("Aucun article coché"); return; }
-  const connus = achetes.filter((c) => articleStock(c.nom)).length;
+  if (!achetes.length) { toast("Cochez d'abord ce que vous avez acheté"); return; }
 
-  const html = '<div id="f-vider">' +
-    '<p style="margin:.2rem 0 1rem;line-height:1.5;font-size:.92rem">Retirer les ' +
-    achetes.length + " article(s) coché(s) de la liste ?</p>" +
-    (connus
-      ? '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
-      '<input type="checkbox" id="case-stock" checked style="width:auto;margin-top:.2rem">' +
-      '<span style="margin:0">Ajouter à ma réserve<br><small style="font-weight:400">' +
-      connus + " de ces articles sont dans votre réserve : leurs quantités seront " +
-      "augmentées de ce que vous venez d'acheter.</small></span></label>"
-      : "") +
-    '<div class="rangee-btn" style="margin-top:1rem">' +
-    '<button class="btn" data-action="fermer">Annuler</button>' +
-    '<button class="btn principal" data-role="ok">Retirer</button></div></div>';
-
-  ouvrirFeuille("Nettoyer la liste", html, (f) => {
-    f.querySelector('[data-role="ok"]').onclick = () => {
-      const c = f.querySelector("#case-stock");
-      fermerFeuille();
-      Actions.viderCoches(!!(c && c.checked), cible);
-    };
+  const connus = [], nouveaux = [], douteux = [];
+  achetes.forEach((c) => {
+    const s = articleStock(c.nom);
+    if (!s) { nouveaux.push(c); return; }
+    const ajout = convertirUnite(c.qte, c.unite || "", s.unite || "");
+    if (ajout === null) { douteux.push({ c: c, s: s }); return; }
+    connus.push({ c: c, s: s, avant: nombre(s.qte) || 0, apres: (nombre(s.qte) || 0) + ajout });
   });
-};
 
-/* ==================== MISES À JOUR DISPONIBLES ==================== */
-
-Formulaires.misesAJour = function () {
-  const liste = misesAJour();
-  if (!liste.length) {
-    ouvrirFeuille("Mises à jour",
-      '<div class="bandeau info">✅<div>Tout est à jour : rien de nouveau à reprendre.</div></div>' +
-      '<button class="btn plein" data-action="fermer">Fermer</button>');
-    return;
-  }
-  ouvrirFeuille("Mises à jour disponibles",
-    '<p class="aide" style="margin-bottom:.8rem">' +
-    "L'application a été enrichie depuis la création de votre famille. " +
-    "Rien n'est appliqué sans votre accord.</p>" +
-    '<div class="carte">' + liste.map((m) =>
-      '<div class="ligne ligne-maj" data-action="' + m.action + '">' +
-      '<span style="font-size:1.4rem">' + m.emoji + "</span>" +
-      '<div class="ligne-corps"><b>' + esc(m.titre) + "</b><small>" + esc(m.detail) + "</small></div>" +
-      '<span class="etiquette chaud">Voir</span></div>').join("") + "</div>" +
-    '<button class="btn plein" data-action="fermer" style="margin-top:.8rem">Plus tard</button>',
-    );
-  /* Pas besoin de fermer la feuille à la main : l'action ouverte par la ligne
-     remplace elle-même son contenu. Fermer d'abord provoquait un aller-retour
-     pendant lequel on ne voyait rien. */
-};
-
-/* ============ REMETTRE À NIVEAU LES RECETTES D'UNE FAMILLE ============ */
-
-Formulaires.majRecettes = function () {
-  const d = diagnosticRecettes();
-
-  if (d.rienAFaire) {
-    ouvrirFeuille("Recettes à jour",
-      '<div class="bandeau info">✅<div>Votre cahier est complet : rien à compléter, ' +
-      "aucun nouveau plat disponible.</div></div>" +
-      '<button class="btn plein" data-action="fermer">Fermer</button>');
+  /* Rien de nouveau à proposer et le réglage est actif : on ne dérange pas. */
+  if (reserveAutomatique() && !nouveaux.length && !douteux.length) {
+    Actions.terminerCourses({ listeId: cible, enReserve: true, nouveaux: [] });
     return;
   }
 
-  /* Le détail de ce qui manque, dans les mêmes termes que la notification. */
-  const manques = [];
-  if (d.saisons) manques.push(d.saisons + " sans saison");
-  if (d.etapes) manques.push(d.etapes + " sans déroulé");
-  if (d.unites) manques.push(d.unites + " quantité(s) au format ancien");
+  const ligneConnu = (x) =>
+    '<div class="ligne"><span style="font-size:1.1rem">🥫</span>' +
+    '<div class="ligne-corps"><b>' + esc(x.c.nom) + "</b><small>" +
+    esc(formaterQte(x.avant, x.s.unite)) + " → <b>" +
+    esc(formaterQte(x.apres, x.s.unite)) + "</b></small></div></div>";
 
-  const blocs = [];
-  if (d.aCompleter) {
-    blocs.push('<div class="ligne"><span class="etape">' + (blocs.length + 1) + "</span>" +
-      '<div class="ligne-corps"><b>Compléter ' + d.aCompleter + " recette(s)</b><small>" +
-      esc(manques.join(" • ")) +
-      ". Rien de ce que vous avez saisi ne sera écrasé.</small></div></div>");
-  }
-  if (d.nouvelles.length) {
-    const apercu = d.nouvelles.slice(0, 4).map((r) => r.nom).join(", ");
-    blocs.push('<div class="ligne"><span class="etape">' + (blocs.length + 1) + "</span>" +
-      '<div class="ligne-corps"><b>Ajouter ' + d.nouvelles.length + " nouveau(x) plat(s)</b><small>" +
-      esc(apercu) + (d.nouvelles.length > 4 ? "…" : "") +
-      "<br>Dont " + d.nouvelles.filter((r) => r.thermomix).length +
-      " au robot cuiseur.</small></div></div>");
-  }
+  const ligneNouveau = (c) =>
+    '<label class="ligne" style="cursor:pointer">' +
+    '<input type="checkbox" data-nouveau="' + esc(c.nom) + '" style="width:auto">' +
+    '<span class="ligne-corps"><b>' + esc(c.nom) + "</b><small>" +
+    esc(formaterQte(c.qte, c.unite) || "quantité non précisée") + " • " + esc(c.rayon) +
+    "</small></span></label>";
 
-  ouvrirFeuille("Mettre à jour le cahier de recettes",
-    '<p style="margin:.2rem 0 1rem;line-height:1.5;font-size:.92rem">' +
-    "L'application a été enrichie depuis la création de votre famille. " +
-    "Voici ce qui peut être repris.</p>" +
-    '<div class="carte">' + blocs.join("") + "</div>" +
-    (d.nouvelles.length
-      ? '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start;margin-top:.8rem">' +
-        '<input type="checkbox" id="case-nouvelles" checked style="width:auto;margin-top:.2rem">' +
-        '<span style="margin:0">Ajouter les nouveaux plats<br><small style="font-weight:400">' +
-        "Décochez si vous préférez garder votre cahier tel quel — certains ont peut-être " +
-        "été supprimés exprès.</small></span></label>"
+  const ligneDouteux = (x) =>
+    '<div class="ligne"><span style="font-size:1.1rem">⚠️</span>' +
+    '<div class="ligne-corps"><b>' + esc(x.c.nom) + "</b><small>acheté " +
+    esc(formaterQte(x.c.qte, x.c.unite) || "?") + ", en réserve en " +
+    esc(x.s.unite || "unités") + " — à ajuster à la main</small></div></div>";
+
+  ouvrirFeuille("Terminer les courses",
+    '<p class="aide" style="margin-bottom:.8rem">' + achetes.length +
+    " article(s) coché(s). Ils vont quitter la liste.</p>" +
+
+    (connus.length
+      ? '<div class="sous-titre" style="margin-top:0"><h3>Rentrent en réserve</h3>' +
+        '<span class="etiquette vert">' + connus.length + "</span></div>" +
+        '<div class="carte">' + connus.map(ligneConnu).join("") + "</div>"
       : "") +
-    '<div class="rangee-btn" style="margin-top:1rem">' +
-    '<button class="btn" data-action="fermer">Plus tard</button>' +
-    '<button class="btn principal" data-role="ok">Mettre à jour</button></div>',
-    (f) => {
-      f.querySelector('[data-role="ok"]').onclick = () => {
-        const c = f.querySelector("#case-nouvelles");
-        const bilan = reparerRecettes();
-        const ajoutees = (c && c.checked) ? ajouterRecettesManquantes() : 0;
-        fermerFeuille();
-        sauver("recettes");
-        const parts = [];
-        if (bilan.saisons) parts.push(bilan.saisons + " saisons");
-        if (bilan.etapes) parts.push(bilan.etapes + " déroulés");
-        if (bilan.unites) parts.push(bilan.unites + " unités");
-        if (ajoutees) parts.push(ajoutees + " nouveaux plats");
-        toast(parts.length ? parts.join(", ") + " ✅" : "Cahier déjà à jour");
-      };
-    });
-};
 
-/* ==================== CONSULTER UNE RECETTE ==================== */
-
-Formulaires.consulterRecette = function (rid) {
-  const r = etat.recettes.find((x) => x.id === rid);
-  if (!r) return;
-
-  const ing = (r.ingredients || []).map((i) => {
-    const q = formaterQte(i.qte, i.unite);
-    return '<div class="ligne"><div class="ligne-corps"><b>' + esc(i.nom) + "</b>" +
-      (q ? "<small>" + esc(q) + "</small>" : "") + "</div></div>";
-  }).join("");
-
-  const etapes = (r.etapes || []).map((e, k) =>
-    '<div class="ligne"><span class="etape">' + (k + 1) + "</span>" +
-    '<div class="ligne-corps"><b style="font-weight:400;line-height:1.5">' +
-    esc(e) + "</b></div></div>").join("");
-
-  const badges = [
-    r.vegetarien ? '<span class="etiquette vert">végé</span>' : "",
-    r.rapide ? '<span class="etiquette">rapide</span>' : "",
-    r.thermomix ? '<span class="etiquette chaud">🍲 robot</span>' : "",
-    r.type === "leger" ? '<span class="etiquette">léger</span>' : ""
-  ].concat((r.saisons || []).map((v) => {
-    const x = infoSaison(v);
-    return x ? '<span class="etiquette' + (v === saisonActuelle() ? " vert" : "") + '">' +
-      x.emoji + " " + x.nom.toLowerCase() + "</span>" : "";
-  })).filter(Boolean).join(" ");
-
-  ouvrirFeuille((r.emoji || "🍽️") + " " + r.nom,
-    (badges ? '<div class="puces" style="margin-bottom:1rem">' + badges + "</div>" : "") +
-    (r.origine === "importee" && r.deQui
-      ? '<p class="aide" style="margin-bottom:.8rem">Recette partagée par ' + esc(r.deQui) + ".</p>" : "") +
-    '<div class="sous-titre" style="margin-top:0"><h3>Ingrédients</h3>' +
-    '<span class="etiquette">' + (r.ingredients || []).length + "</span></div>" +
-    '<div class="carte">' + (ing || '<p class="aide">Aucun ingrédient noté.</p>') + "</div>" +
-    '<div class="sous-titre"><h3>Préparation</h3></div>' +
-    '<div class="carte">' + (etapes ||
-      '<p class="aide">Pas encore de déroulé. Appuyez sur « Modifier » pour en écrire un.</p>') + "</div>" +
-    '<p class="aide">' +
-    "Déroulé indicatif, écrit pour l'application. Pour la version exacte d'un site " +
-    "(temps, vitesses du robot…), utilisez le lien ci-dessous.</p>" +
-    (r.lien
-      ? '<a class="btn plein doux" href="' + esc(r.lien) + '" target="_blank" rel="noopener" ' +
-        'style="text-decoration:none;margin-top:.8rem">' + "Ouvrir la recette d'origine ↗</a>"
+    (nouveaux.length
+      ? '<div class="sous-titre"><h3>Pas encore en réserve</h3>' +
+        '<button class="lien" data-role="tout">Tout cocher</button></div>' +
+        '<p class="aide" style="margin:-.3rem 0 .4rem">Cochez ce que vous gardez ' +
+        "habituellement à la maison. Le reste disparaîtra simplement de la liste.</p>" +
+        '<div class="carte">' + nouveaux.map(ligneNouveau).join("") + "</div>"
       : "") +
-    '<div class="rangee-btn" style="margin-top:.8rem">' +
-    '<button class="btn" data-action="fermer">Fermer</button>' +
-    '<button class="btn principal" data-role="modifier">Modifier</button></div>',
-    (f) => {
-      f.querySelector('[data-role="modifier"]').onclick = () => Formulaires.recette(r.id);
-    });
-};
 
-/* ==================== CATALOGUE PARTAGÉ ENTRE FAMILLES ==================== */
-
-Formulaires.catalogue = function () {
-  if (Store.mode !== "nuage") {
-    ouvrirFeuille("Recettes partagées",
-      '<div class="bandeau">⚠️<div>Le catalogue commun demande la connexion familiale ' +
-      "(Firebase). Tant qu'elle n'est pas configurée, vos recettes restent sur cet " +
-      "appareil.</div></div>" +
-      '<button class="btn plein" data-action="fermer">Fermer</button>');
-    return;
-  }
-
-  ouvrirFeuille("Recettes partagées",
-    '<div id="f-cat"><p class="aide">Chargement du catalogue…</p></div>', async (f) => {
-      const zone = f.querySelector("#f-cat");
-      const fiches = await Store.listerRecettesPartagees();
-
-      if (fiches === null) {
-        zone.innerHTML = '<div class="bandeau">⚠️<div>Catalogue inaccessible. Les règles de ' +
-          "sécurité Firebase ne sont peut-être pas à jour.</div></div>" +
-          '<button class="btn plein" data-action="fermer">Fermer</button>';
-        return;
-      }
-      if (!fiches.length) {
-        zone.innerHTML = rienDu("🌍",
-          "Le catalogue est vide pour le moment.<br>Publiez une de vos recettes " +
-          "pour l'ouvrir aux autres familles !") +
-          '<button class="btn plein" data-action="fermer">Fermer</button>';
-        return;
-      }
-
-      const dessiner = (q) => {
-        const l = fiches.filter((x) => !q ||
-          x.nom.toLowerCase().includes(q) ||
-          String(x.parFamille || "").toLowerCase().includes(q));
-        const dejaLa = new Set(etat.recettes.map((r) => r.nom.toLowerCase().trim()));
-
-        return l.length
-          ? l.map((x) => {
-            const possede = dejaLa.has(String(x.nom).toLowerCase().trim());
-            const aMoi = x.familleRef === etat.famille.code;
-            return '<div class="ligne"><span style="font-size:1.4rem">' + esc(x.emoji || "🍽️") + "</span>" +
-              '<div class="ligne-corps"><b>' + esc(x.nom) + "</b><small>" +
-              esc(x.parFamille || "?") + " • " + (x.ingredients || []).length + " ingrédients</small>" +
-              '<span class="etiquettes">' +
-              (x.vegetarien ? '<span class="etiquette vert">végé</span>' : "") +
-              (x.rapide ? '<span class="etiquette">rapide</span>' : "") +
-              (aMoi ? '<span class="etiquette chaud">votre publication</span>' : "") +
-              "</span></div>" +
-              '<button class="btn mini" data-voir="' + esc(x.id) + '">👁️</button>' +
-              (possede
-                ? '<span class="etiquette vert">déjà chez vous</span>'
-                : '<button class="btn mini principal" data-prendre="' + esc(x.id) + '">Ajouter</button>') +
-              "</div>";
-          }).join("")
-          : '<p class="aide">Aucun plat ne correspond.</p>';
-      };
-
-      zone.innerHTML =
-        '<input type="text" id="rech-cat" placeholder="Rechercher un plat ou une famille…" ' +
-        'autocomplete="off" style="margin-bottom:.8rem">' +
-        '<div id="liste-cat" style="max-height:52dvh;overflow-y:auto">' + dessiner("") + "</div>" +
-        '<p class="aide" style="margin-top:.8rem">Ces recettes sont publiées par d\'autres ' +
-        "familles utilisant Tribu. Elles n'ont pas été vérifiées : lisez-les avant de cuisiner.</p>" +
-        '<button class="btn plein" data-action="fermer" style="margin-top:.8rem">Fermer</button>';
-
-      const liste = zone.querySelector("#liste-cat");
-      zone.querySelector("#rech-cat").oninput = (ev) => {
-        liste.innerHTML = dessiner(ev.target.value.toLowerCase().trim());
-      };
-
-      liste.onclick = (ev) => {
-        const bVoir = ev.target.closest("[data-voir]");
-        if (bVoir) {
-          const x = fiches.find((y) => y.id === bVoir.dataset.voir);
-          Formulaires.apercuRecette(x);
-          return;
-        }
-        const bPrendre = ev.target.closest("[data-prendre]");
-        if (!bPrendre) return;
-        const x = fiches.find((y) => y.id === bPrendre.dataset.prendre);
-        if (Partage.importer(x)) {
-          fermerFeuille();
-          toast("« " + x.nom + " » ajoutée à vos recettes 📖");
-        }
-      };
-    });
-};
-
-/* Aperçu d'une recette du catalogue avant de la prendre. */
-Formulaires.apercuRecette = function (x) {
-  if (!x) return;
-  const ing = (x.ingredients || []).map((i) =>
-    '<div class="ligne"><div class="ligne-corps"><b>' + esc(i.nom) + "</b>" +
-    "<small>" + esc(formaterQte(i.qte, i.unite) || "—") + " • " + esc(i.rayon || "") + "</small></div></div>"
-  ).join("");
-
-  ouvrirFeuille(x.emoji + " " + x.nom,
-    '<p class="aide" style="margin-bottom:.8rem">Publiée par <b>' + esc(x.parFamille || "?") + "</b></p>" +
-    '<div class="puces" style="margin-bottom:1rem">' +
-    (x.vegetarien ? '<span class="etiquette vert">végé</span> ' : "") +
-    (x.rapide ? '<span class="etiquette">rapide</span> ' : "") +
-    '<span class="etiquette">' + (x.type === "leger" ? "léger" : "consistant") + "</span></div>" +
-    '<div class="carte">' + (ing || '<p class="aide">Aucun ingrédient.</p>') + "</div>" +
-    ((x.etapes || []).length
-      ? '<div class="sous-titre"><h3>Préparation</h3></div><div class="carte">' +
-        x.etapes.map((e, k) => '<div class="ligne"><span class="etape">' + (k + 1) + "</span>" +
-        '<div class="ligne-corps"><b style="font-weight:400;line-height:1.5">' + esc(e) +
-        "</b></div></div>").join("") + "</div>"
+    (douteux.length
+      ? '<div class="sous-titre"><h3>À vérifier</h3></div>' +
+        '<div class="carte">' + douteux.map(ligneDouteux).join("") + "</div>"
       : "") +
-    (x.lien ? '<a class="btn plein doux" href="' + esc(x.lien) + '" target="_blank" rel="noopener" ' +
-      'style="text-decoration:none;margin-bottom:.5rem">Ouvrir la recette ↗</a>' : "") +
-    '<button class="btn plein principal" data-role="prendre">Ajouter à mes recettes</button>' +
-    '<button class="btn plein" data-action="fermer" style="margin-top:.5rem">Fermer</button>',
-    (f) => {
-      f.querySelector('[data-role="prendre"]').onclick = () => {
-        if (Partage.importer(x)) {
-          fermerFeuille();
-          toast("« " + x.nom + " » ajoutée à vos recettes 📖");
-        }
-      };
-    });
-};
 
-/* Publier une de ses recettes dans le catalogue commun. */
-Formulaires.publierRecette = function (rid) {
-  const r = etat.recettes.find((x) => x.id === rid);
-  if (!r) return;
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:center;margin-top:.8rem">' +
+    '<input type="checkbox" id="case-auto" style="width:auto"' +
+    (reserveAutomatique() ? " checked" : "") + ">" +
+    '<span style="margin:0">Ne plus me demander pour les articles déjà en réserve</span></label>' +
 
-  if (r.partageId) {
-    ouvrirFeuille("Recette partagée",
-      '<p style="margin:.2rem 0 1rem;line-height:1.5;font-size:.92rem">« ' + esc(r.nom) +
-      " » est visible par les autres familles de Tribu.</p>" +
-      '<button class="btn plein danger" data-role="retirer" style="margin-bottom:.5rem">' +
-      "Retirer du catalogue</button>" +
-      '<button class="btn plein" data-action="fermer">Fermer</button>',
-      (f) => {
-        f.querySelector('[data-role="retirer"]').onclick = async () => {
-          const ok = await Partage.retirer(r.id);
-          fermerFeuille();
-          if (ok) toast("Retirée du catalogue");
-        };
-      });
-    return;
-  }
-
-  ouvrirFeuille("Partager cette recette",
-    '<p style="margin:.2rem 0 1rem;line-height:1.5;font-size:.92rem">' +
-    "Publier « <b>" + esc(r.nom) + "</b> » la rendra visible par <b>toutes les familles</b> " +
-    "qui utilisent Tribu. Chacune pourra la recopier dans sa propre liste.</p>" +
-    '<div class="bandeau">👀<div>Sont publiés : le nom du plat, ses ingrédients, le lien ' +
-    "éventuel, et le <b>nom de votre tribu</b> (« " + esc(etat.famille.nom) + " »).<br>" +
-    "Ne sont jamais publiés : vos prénoms, vos points, vos courses, ni le code de votre famille.</div></div>" +
-    '<p class="aide" style="margin-bottom:1rem">Vous pourrez la retirer à tout moment.</p>' +
-    '<div class="rangee-btn">' +
+    '<div class="rangee-btn" style="margin-top:.6rem">' +
     '<button class="btn" data-action="fermer">Annuler</button>' +
-    '<button class="btn principal" data-role="publier">Publier</button></div>',
+    '<button class="btn principal" data-role="ok">Terminer</button></div>',
+
     (f) => {
-      const b = f.querySelector('[data-role="publier"]');
-      b.onclick = async () => {
-        b.disabled = true;
-        const ok = await Partage.publier(r.id);
+      const bt = f.querySelector('[data-role="tout"]');
+      if (bt) bt.onclick = () => {
+        const cases = f.querySelectorAll("[data-nouveau]");
+        const tout = Array.from(cases).every((c) => c.checked);
+        cases.forEach((c) => { c.checked = !tout; });
+        bt.textContent = tout ? "Tout cocher" : "Tout décocher";
+      };
+      f.querySelector('[data-role="ok"]').onclick = () => {
+        const choisis = Array.from(f.querySelectorAll("[data-nouveau]:checked"))
+          .map((c) => c.dataset.nouveau);
+        const auto = f.querySelector("#case-auto");
+        localStorage.setItem("tribu:reserveAuto", auto && auto.checked ? "1" : "0");
         fermerFeuille();
-        if (ok) toast("Publiée ! Merci pour les autres familles 🌍");
+        Actions.terminerCourses({ listeId: cible, enReserve: true, nouveaux: choisis });
       };
     });
 };
@@ -783,44 +530,136 @@ Formulaires.repas = function (jour, moment) {
 
 /* ================================ GENERATEUR DE MENUS ================================ */
 
+/* Les réglages du générateur sont gardés sur l'appareil : d'une semaine à
+   l'autre, on retrouve sa façon de faire sans tout recocher. Sur l'appareil
+   et non dans la famille, car un membre ordinaire n'a pas le droit d'écrire
+   dans les réglages partagés. */
+const REGLAGES_GEN_DEFAUT = {
+  midi: true, soir: true, remplacer: false,
+  regime: "libre", poisson: "", viande: "", vege: "",
+  saisons: true, reserve: true, soirLeger: true, rapide: true, thermomix: false,
+  semaines: 3
+};
+function reglagesGenerateur() {
+  let lu = {};
+  try { lu = JSON.parse(localStorage.getItem("tribu:generateur") || "{}") || {}; } catch (e) { lu = {}; }
+  return Object.assign({}, REGLAGES_GEN_DEFAUT, lu);
+}
+
 Formulaires.generateur = function () {
-  const html = '<form id="f-gen">' +
-    '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
-    '<input type="checkbox" name="midi" checked style="width:auto"><span style="margin:0">Remplir les midis</span></label>' +
-    '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
-    '<input type="checkbox" name="soir" checked style="width:auto"><span style="margin:0">Remplir les soirs</span></label>' +
-    '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
-    '<input type="checkbox" name="remplacer" style="width:auto"><span style="margin:0">Remplacer les repas déjà prévus</span></label>' +
-    "<hr class=\"sep\">" +
+  const g = reglagesGenerateur();
+  const co = (n) => (g[n] ? " checked" : "");
+  const ligneCase = (nom, texte, aide) =>
     '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
-    '<input type="checkbox" name="saisons" checked style="width:auto;margin-top:.2rem">' +
-    '<span style="margin:0">Respecter les saisons<br><small style="font-weight:400">' +
-    "Nous sommes en " + infoSaison(saisonActuelle()).emoji + " " +
-    infoSaison(saisonActuelle()).nom.toLowerCase() +
-    " : les plats des autres saisons seront écartés.</small></span></label>" +
-    '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
-    '<input type="checkbox" name="soirLeger" checked style="width:auto"><span style="margin:0">Plats plus légers le soir</span></label>' +
-    '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
-    '<input type="checkbox" name="rapide" checked style="width:auto"><span style="margin:0">Plats rapides en semaine</span></label>' +
-    '<label class="champ"><span>Au moins combien de repas végétariens ?</span>' +
-    '<input type="number" name="vege" value="3" min="0" max="14"></label>' +
-    '<p class="aide">Le générateur évite les plats déjà servis lors des 3 dernières semaines.</p>' +
+    '<input type="checkbox" name="' + nom + '"' + co(nom) + ' style="width:auto;margin-top:.25rem">' +
+    '<span style="margin:0">' + texte +
+    (aide ? '<br><small style="font-weight:400">' + aide + "</small>" : "") +
+    "</span></label>";
+  /* « Peu importe » n'est pas zéro : c'est « je ne compte pas ». */
+  const combien = (nom, valeur) => {
+    let o = '<option value=""' + (valeur === "" ? " selected" : "") + ">Peu importe</option>";
+    for (let k = 0; k <= 10; k++) {
+      o += '<option value="' + k + '"' + (String(valeur) === String(k) ? " selected" : "") + ">" +
+        (k === 0 ? "Aucun" : k + " fois") + "</option>";
+    }
+    return '<select name="' + nom + '">' + o + "</select>";
+  };
+  const sais = infoSaison(saisonActuelle());
+  const nbStock = etat.stock.length;
+  const nbThermo = etat.recettes.filter((r) => r.thermomix).length;
+
+  let html = '<form id="f-gen">' +
+
+    '<div class="sous-titre"><h3>Quels repas remplir ?</h3></div>' +
+    ligneCase("midi", "Les midis") +
+    ligneCase("soir", "Les soirs") +
+    ligneCase("remplacer", "Remplacer les repas déjà prévus",
+      "Sinon, seules les cases vides sont complétées.") +
+
+    '<div class="sous-titre"><h3>Ce qu\'on mange</h3></div>' +
+    '<label class="champ"><span>Régime de la semaine</span><select name="regime">' +
+    '<option value="libre"' + (g.regime === "libre" ? " selected" : "") + ">🍽️ De tout</option>" +
+    '<option value="sansViande"' + (g.regime === "sansViande" ? " selected" : "") + ">🐟 Sans viande (poisson autorisé)</option>" +
+    '<option value="vege"' + (g.regime === "vege" ? " selected" : "") + ">🥦 Végétarien</option>" +
+    "</select></label>" +
+    '<div id="bloc-repartition">' +
+    '<p class="aide" style="margin:-.3rem 0 .7rem">Combien de fois dans la semaine ? ' +
+    "Un nombre indiqué est respecté à la lettre.</p>" +
+    '<div class="duo"><label class="champ"><span>🐟 Poisson</span>' + combien("poisson", g.poisson) + "</label>" +
+    '<label class="champ" id="champ-viande"><span>🍗 Viande</span>' + combien("viande", g.viande) + "</label></div>" +
+    '<label class="champ"><span>🥦 Repas végétariens</span>' + combien("vege", g.vege) + "</label>" +
+    "</div>" +
+    '<p class="aide" id="note-regime" hidden></p>' +
+
+    '<div class="sous-titre"><h3>Comment choisir les plats</h3></div>' +
+    ligneCase("saisons", "Respecter les saisons",
+      "Nous sommes en " + sais.emoji + " " + sais.nom.toLowerCase() +
+      " : les plats des autres saisons seront écartés.") +
+    ligneCase("reserve", "Utiliser d'abord ce que j'ai en réserve",
+      nbStock
+        ? "Les plats dont vous avez déjà les ingrédients passent devant (" + nbStock + " article(s) en réserve)."
+        : "Votre réserve est vide pour l'instant : cette option ne changera rien.") +
+    ligneCase("soirLeger", "Plats plus légers le soir") +
+    ligneCase("rapide", "Plats rapides du lundi au vendredi") +
+    ligneCase("thermomix", "Privilégier les recettes Thermomix",
+      nbThermo + " recette(s) de votre cahier s'y prêtent.") +
+    '<label class="champ"><span>Ne pas resservir un plat vu depuis…</span><select name="semaines">' +
+    [2, 3, 4, 6].map((k) =>
+      '<option value="' + k + '"' + (Number(g.semaines) === k ? " selected" : "") + ">" +
+      k + " semaines</option>").join("") +
+    "</select></label>" +
+
     '<div class="rangee-btn" style="margin-top:1.2rem">' +
     '<button type="button" class="btn" data-action="fermer">Annuler</button>' +
     '<button type="submit" class="btn principal">🎲 Générer</button></div></form>';
 
   ouvrirFeuille("Générer les menus de la semaine", html, (f) => {
+    const regime = f.querySelector('[name="regime"]');
+    const bloc = f.querySelector("#bloc-repartition");
+    const champViande = f.querySelector("#champ-viande");
+    const note = f.querySelector("#note-regime");
+
+    /* Un régime décide déjà de tout : inutile de laisser croire qu'on peut
+       en plus demander deux viandes. */
+    const majRegime = () => {
+      const v = regime.value;
+      bloc.hidden = (v === "vege");
+      champViande.hidden = (v !== "libre");
+      note.hidden = (v === "libre");
+      note.textContent = v === "vege"
+        ? "Toute la semaine sera végétarienne : seuls les plats marqués végétariens seront proposés."
+        : "Aucune viande cette semaine : il restera le poisson, les œufs et les plats végétariens.";
+    };
+    regime.onchange = majRegime;
+    majRegime();
+
     f.onsubmit = (ev) => {
       ev.preventDefault();
       const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
-      fermerFeuille();
-      const n = genererMenus(ui.semaine, {
+      const o = {
         midi: !!d.get("midi"), soir: !!d.get("soir"), remplacer: !!d.get("remplacer"),
-        soirLeger: !!d.get("soirLeger"), rapideSemaine: !!d.get("rapide"),
-        saisons: !!d.get("saisons"),
-        vege: Number(d.get("vege")) || 0
-      });
-      if (n) toast(n + " repas proposés 🍽️");
+        regime: d.get("regime") || "libre",
+        poisson: d.get("poisson") === null ? "" : d.get("poisson"),
+        viande: d.get("viande") === null ? "" : d.get("viande"),
+        vege: d.get("vege") === null ? "" : d.get("vege"),
+        saisons: !!d.get("saisons"), reserve: !!d.get("reserve"),
+        soirLeger: !!d.get("soirLeger"), rapide: !!d.get("rapide"),
+        thermomix: !!d.get("thermomix"),
+        semaines: Number(d.get("semaines")) || 3
+      };
+      try { localStorage.setItem("tribu:generateur", JSON.stringify(o)); } catch (e) { /* tant pis */ }
+      fermerFeuille();
+
+      const res = genererMenus(ui.semaine, Object.assign({}, o, { rapideSemaine: o.rapide }));
+      if (!res) return;
+      const detail = ["poisson", "viande", "vege"]
+        .filter((c) => res.bilan[c])
+        .map((c) => res.bilan[c] + " " + nomCategorie(c)).join(", ");
+      toast(res.n + " repas proposés 🍽️" + (detail ? " — " + detail : ""));
+      if (res.tropDemande) {
+        setTimeout(() => toast("Il y avait " + res.tropDemande +
+          " repas demandé(s) de plus que de cases à remplir"), 2800);
+      }
     };
   });
 };

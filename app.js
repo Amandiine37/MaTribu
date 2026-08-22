@@ -404,6 +404,7 @@ const PRODUITS_TOUTE_ANNEE = ["pomme de terre", "haricot rouge", "haricot blanc"
 function motsDe(texte) {
   return String(texte || "")
     .toLowerCase()
+    .replace(/œ/g, "oe").replace(/æ/g, "ae")   // sinon « bœuf » se coupe en deux
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .split(/[^a-z]+/)
     .filter(Boolean)
@@ -1248,27 +1249,52 @@ const Actions = {
   },
   /* Les courses cochées sortent de la liste. Si l'article existe dans la
      réserve, on propose d'y ajouter ce qui vient d'être acheté. */
-  async viderCoches(rentrerEnStock, listeId) {
-    const cible = listeId || listeCourante().id;
+  /* Fin des courses : les articles cochés quittent la liste et rejoignent la
+     réserve. `nouveaux` = les noms que l'on accepte d'y créer en plus. */
+  async terminerCourses(opts) {
+    opts = opts || {};
+    const cible = opts.listeId || listeCourante().id;
     const achetes = etat.courses.filter((c) => c.coche && listeDe(c) === cible);
-    if (!achetes.length) return;
-    let rentres = 0;
-    if (rentrerEnStock) {
+    if (!achetes.length) { toast("Aucun article coché"); return; }
+
+    const aCreer = new Set(opts.nouveaux || []);
+    let majes = 0, crees = 0, ignores = 0;
+
+    if (opts.enReserve !== false) {
       achetes.forEach((c) => {
         const s = articleStock(c.nom);
-        if (!s) return;
-        const ajout = convertirUnite(c.qte, c.unite || "", s.unite || "");
-        if (ajout === null) return;
-        s.qte = texteNombre((nombre(s.qte) || 0) + ajout);
-        s.majLe = new Date().toISOString();
-        rentres++;
+        if (s) {
+          const ajout = convertirUnite(c.qte, c.unite || "", s.unite || "");
+          /* Unités incompatibles (2 boîtes vs 500 g) : on ne bricole pas un
+             chiffre faux, on le signale. */
+          if (ajout === null) { ignores++; return; }
+          s.qte = texteNombre((nombre(s.qte) || 0) + ajout);
+          s.majLe = new Date().toISOString();
+          majes++;
+        } else if (aCreer.has(c.nom)) {
+          etat.stock.push({
+            id: id(), nom: c.nom, qte: String(c.qte || "").trim(), unite: c.unite || "",
+            mini: "", rayon: c.rayon || "Autre", vrac: !!c.vrac,
+            majLe: new Date().toISOString()
+          });
+          crees++;
+        }
       });
     }
-    const gardes = new Set(achetes.map((c) => c.id));
-    etat.courses = etat.courses.filter((c) => !gardes.has(c.id));
+
+    const partis = new Set(achetes.map((c) => c.id));
+    etat.courses = etat.courses.filter((c) => !partis.has(c.id));
     sauver("courses", "stock");
-    toast(rentres ? "Liste nettoyée, " + rentres + " article(s) rentré(s) en réserve"
-      : "Liste nettoyée");
+
+    const bilan = [];
+    if (majes) bilan.push(majes + " réapprovisionné" + (majes > 1 ? "s" : ""));
+    if (crees) bilan.push(crees + " ajouté" + (crees > 1 ? "s" : "") + " à la réserve");
+    toast(bilan.length
+      ? "Courses terminées : " + bilan.join(", ") + " ✅"
+      : achetes.length + " article(s) retiré(s) de la liste");
+    if (ignores) {
+      setTimeout(() => toast(ignores + " article(s) à vérifier : unités différentes"), 2800);
+    }
   },
 
   /* --- Stock --- */
@@ -1754,6 +1780,102 @@ const Partage = {
 
 /* ============================ 8. Generateur de menus ============================ */
 
+/* --- De quoi est fait un plat -------------------------------------------
+   Le rayon des ingrédients est ce qu'il y a de plus sûr (Boucherie,
+   Poissonnerie), mais un thon en boîte se range en épicerie : on regarde
+   donc aussi les noms, en MOTS ENTIERS pour ne pas confondre « échalotte »
+   et « lotte ». Un plat qui contient les deux compte comme poisson : c'est
+   celui-là qu'on cherche à placer dans la semaine. */
+const MOTS_POISSON = ["poisson", "saumon", "thon", "cabillaud", "colin", "merlu",
+  "lieu noir", "truite", "sardine", "maquereau", "anchois", "dorade", "sole",
+  "haddock", "crevette", "moule", "gambas", "crabe", "surimi", "calamar",
+  "encornet", "saint jacques", "bulot", "seiche", "eglefin", "rouget", "lotte",
+  "hareng", "poulpe", "espadon", "julienne de la mer", "fruits de mer"];
+const MOTS_VIANDE = ["viande", "boeuf", "poulet", "volaille", "dinde", "porc",
+  "veau", "agneau", "canard", "lapin", "jambon", "lardon", "saucisse", "saucisson",
+  "merguez", "chorizo", "bacon", "steak", "escalope", "magret", "roti", "gigot",
+  "paleron", "chipolata", "knacki", "andouille", "boudin", "pancetta",
+  "charcuterie", "gesier", "tripe", "onglet", "bavette", "cuisse", "aiguillette"];
+/* Un bouillon de bœuf ne fait pas un repas de viande : on ne le compte pas. */
+const INGREDIENTS_NEUTRES = ["bouillon", "cube", "fond"];
+
+function ingredientCompte(ing) {
+  const mots = motsDe(ing && ing.nom);
+  return !INGREDIENTS_NEUTRES.some((m) => contientProduit(mots, m));
+}
+function citeUnProduit(r, liste) {
+  return (r.ingredients || []).some((ing) => {
+    if (!ingredientCompte(ing)) return false;
+    const mots = motsDe(ing.nom);
+    return liste.some((p) => contientProduit(mots, p));
+  });
+}
+
+/* "vege" | "poisson" | "viande" | "autre" (œufs, fromage, pâtes...) */
+function categorieRepas(r) {
+  if (r.vegetarien) return "vege";
+  const ing = r.ingredients || [];
+  if (ing.some((i) => i.rayon === "Poissonnerie") || citeUnProduit(r, MOTS_POISSON)) return "poisson";
+  if (ing.some((i) => i.rayon === "Boucherie") || citeUnProduit(r, MOTS_VIANDE)) return "viande";
+  return "autre";
+}
+const CATEGORIES_REPAS = [
+  { val: "poisson", nom: "Poisson", emoji: "🐟" },
+  { val: "viande", nom: "Viande", emoji: "🍗" },
+  { val: "vege", nom: "Végétarien", emoji: "🥦" }
+];
+function nomCategorie(val) {
+  const c = CATEGORIES_REPAS.find((x) => x.val === val);
+  return c ? c.emoji + " " + c.nom.toLowerCase() : "autre";
+}
+
+/* Ce que contient une semaine déjà prévue. C'est le meilleur retour sur les
+   nombres demandés au générateur : on voit tout de suite ce qu'on mange. */
+function compositionSemaine(cleSem) {
+  const c = { poisson: 0, viande: 0, vege: 0, autre: 0, total: 0 };
+  Object.keys(etat.repas[cleSem] || {}).forEach((k) => {
+    const v = etat.repas[cleSem][k];
+    if (!v || !v.recetteId) return;
+    const r = etat.recettes.find((x) => x.id === v.recetteId);
+    if (!r) return;
+    c[categorieRepas(r)]++;
+    c.total++;
+  });
+  return c;
+}
+
+/* Part des ingrédients d'un plat que l'on a déjà dans la réserve (0 à 1).
+   Sert à proposer en premier ce qui ne demande presque pas de courses. */
+function couvertureReserve(r) {
+  const ing = (r.ingredients || []).filter((i) => i && i.nom);
+  if (!ing.length || !etat.stock.length) return 0;
+  let ok = 0;
+  ing.forEach((i) => {
+    const m = manquePour(i.nom, i.qte, i.unite || "");
+    if (m.enStock === null) return;               // pas du tout en réserve
+    if (m.connu && m.manque !== null && m.manque > 0) return;  // pas assez
+    ok++;
+  });
+  return ok / ing.length;
+}
+
+/* Une étiquette par repas de la semaine, mélangée : c'est ce qui garantit
+   « deux poissons » plutôt que « deux poissons si la chance le veut ». */
+function repartitionSouhaitee(nb, quotas) {
+  const l = [];
+  CATEGORIES_REPAS.forEach((c) => {
+    const n = quotas[c.val];
+    for (let k = 0; k < n && l.length < nb; k++) l.push(c.val);
+  });
+  const places = l.length;
+  while (l.length < nb) l.push("libre");
+  for (let i = l.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = l[i]; l[i] = l[j]; l[j] = t;
+  }
+  return { plan: l, places: places };
+}
+
 function recettesUtiliseesRecemment(cleSem, nbSemaines) {
   const vus = new Set();
   const lundi = lundiDeCle(cleSem);
@@ -1767,8 +1889,21 @@ function recettesUtiliseesRecemment(cleSem, nbSemaines) {
 }
 
 function genererMenus(cleSem, opt) {
-  const pool = etat.recettes.slice();
-  if (!pool.length) { toast("Ajoutez d'abord des recettes"); return 0; }
+  opt = opt || {};
+  const regime = opt.regime || "libre";
+  let pool = etat.recettes.slice();
+  if (!pool.length) { toast("Ajoutez d'abord des recettes"); return null; }
+
+  /* Le régime, lui, n'est pas une préférence : les plats écartés le sont
+     pour de bon, ils ne peuvent pas ressortir faute de mieux. */
+  if (regime === "vege") pool = pool.filter((r) => categorieRepas(r) === "vege");
+  else if (regime === "sansViande") pool = pool.filter((r) => categorieRepas(r) !== "viande");
+  if (!pool.length) {
+    toast(regime === "vege"
+      ? "Aucun plat végétarien dans votre cahier de recettes"
+      : "Aucun plat sans viande dans votre cahier de recettes");
+    return null;
+  }
 
   const semaine = etat.repas[cleSem] || {};
   const cases = [];
@@ -1780,25 +1915,41 @@ function genererMenus(cleSem, opt) {
       cases.push({ jour: j, moment: m });
     });
   });
-  if (!cases.length) { toast("Rien à remplir avec ces options"); return 0; }
+  if (!cases.length) { toast("Rien à remplir avec ces options"); return null; }
 
-  const recents = recettesUtiliseesRecemment(cleSem, 3);
+  /* Un nombre demandé (« 2 poissons ») est un nombre exact : la catégorie
+     ne réapparaît pas ailleurs dans la semaine. Une catégorie laissée sur
+     « peu importe » reste, elle, entièrement libre. */
+  const quotas = {};
+  const fixees = [];
+  CATEGORIES_REPAS.forEach((c) => {
+    let n = opt[c.val];
+    if (regime === "vege") n = (c.val === "vege" ? cases.length : 0);
+    else if (regime === "sansViande" && c.val === "viande") n = 0;
+    if (n === null || n === undefined || n === "") { quotas[c.val] = 0; return; }
+    quotas[c.val] = Math.max(0, Math.min(Number(n) || 0, cases.length));
+    fixees.push(c.val);
+  });
+  const demande = CATEGORIES_REPAS.reduce((s, c) => s + quotas[c.val], 0);
+  const plan = repartitionSouhaitee(cases.length, quotas).plan;
+
+  const recents = recettesUtiliseesRecemment(cleSem, Math.max(0, Number(opt.semaines) || 3));
   const utilises = new Set();
-  let vegeRestants = Math.min(opt.vege || 0, cases.length);
+  const bilan = { poisson: 0, viande: 0, vege: 0, autre: 0 };
 
   if (!etat.repas[cleSem]) etat.repas[cleSem] = {};
 
   cases.forEach((c, rang) => {
-    const casesRestantes = cases.length - rang;
+    const voulu = plan[rang];
     let meilleur = null, meilleurScore = -1e9;
     pool.forEach((r) => {
       let s = Math.random() * 1.5;
+      const cat = categorieRepas(r);
       if (utilises.has(r.id)) s -= 40;
       if (recents.has(r.id)) s -= 6;
-      if (vegeRestants > 0) {
-        if (r.vegetarien) s += (vegeRestants >= casesRestantes ? 30 : 6);
-        else if (vegeRestants >= casesRestantes) s -= 30;
-      }
+      /* La répartition demandée passe avant le reste. */
+      if (voulu !== "libre") s += (cat === voulu ? 30 : -30);
+      else if (fixees.indexOf(cat) !== -1) s -= 20;   // son compte est déjà fait
       /* Hors saison, on écarte franchement : un gratin de courgettes en
          janvier, ce n'est pas une bonne idée. */
       if (opt.saisons !== false && !estDeSaison(r)) s -= 25;
@@ -1806,16 +1957,20 @@ function genererMenus(cleSem, opt) {
       if (opt.soirLeger && c.moment === "soir" && r.type === "leger") s += 4;
       if (opt.soirLeger && c.moment === "midi" && r.type === "consistant") s += 1.5;
       if (opt.rapideSemaine && c.jour !== "samedi" && c.jour !== "dimanche" && r.rapide) s += 2.5;
+      if (opt.thermomix && r.thermomix) s += 3;
+      /* Ce dont on a déjà les ingrédients passe devant : moins de courses,
+         moins de perte. Ça pèse, sans écraser la saison ni la répartition. */
+      if (opt.reserve) s += couvertureReserve(r) * 10;
       if (s > meilleurScore) { meilleurScore = s; meilleur = r; }
     });
     if (!meilleur) return;
     utilises.add(meilleur.id);
-    if (meilleur.vegetarien && vegeRestants > 0) vegeRestants--;
+    bilan[categorieRepas(meilleur)]++;
     etat.repas[cleSem][c.jour + "-" + c.moment] = { recetteId: meilleur.id, texte: "" };
   });
 
   sauver("repas");
-  return cases.length;
+  return { n: cases.length, bilan: bilan, tropDemande: Math.max(0, demande - cases.length) };
 }
 
 /* Tous les ingredients des repas prevus, regroupes par nom et additionnes. */
@@ -1846,6 +2001,12 @@ function ingredientsDeLaSemaine(cleSem) {
     };
   }).sort((a, b) =>
     RAYONS.indexOf(a.rayon) - RAYONS.indexOf(b.rayon) || a.nom.localeCompare(b.nom));
+}
+
+/* Rentrer les achats en réserve sans confirmation : réglage de l'appareil,
+   activé par défaut — c'est le geste que l'on attend au retour du magasin. */
+function reserveAutomatique() {
+  return localStorage.getItem("tribu:reserveAuto") !== "0";
 }
 
 /* ======================= Les listes de courses ======================= */
@@ -2051,7 +2212,15 @@ document.addEventListener("click", (e) => {
     case "course-suppr": Actions.supprimerCourse(v); break;
     case "course-nouvelle": Formulaires.course(); break;
     case "course-editer": Formulaires.course(v); break;
-    case "courses-vider": Formulaires.viderCourses(); break;
+    case "courses-vider": Formulaires.terminerCourses(); break;
+    case "reserve-auto": {
+      const on = localStorage.getItem("tribu:reserveAuto") !== "0";
+      localStorage.setItem("tribu:reserveAuto", on ? "0" : "1");
+      rendre();
+      toast(on ? "Le récapitulatif sera affiché à chaque fois"
+               : "Les achats connus rentreront directement en réserve");
+      break;
+    }
     case "courses-onglet": ui.ongletCourses = b.dataset.valeur; rendre(); break;
     case "liste-choisir": ui.listeActive = b.dataset.valeur; ui.ongletCourses = "liste"; rendre(); break;
     case "liste-nouvelle": Formulaires.liste(null); break;
