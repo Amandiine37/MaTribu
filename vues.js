@@ -33,6 +33,17 @@ const Vues = {};
 
 /* ================================ ACCUEIL ================================ */
 
+/* La nouveauté doit se voir là où l'on regarde. Une pastille de 12 pixels sur
+   l'avatar, personne ne la remarque : on annonce donc en toutes lettres, sur
+   l'accueil et sur les recettes, ce qui attend d'être ajouté. */
+function bandeauMaj() {
+  const maj = misesAJour();
+  if (!maj.length) return "";
+  return '<div class="bandeau info ligne-maj" data-action="maj-liste">✨<div><b>' +
+    maj.map((m) => esc(m.detail)).join(" — ") + "</b><br>" +
+    "Appuyez ici pour voir ce qui est nouveau et le mettre à jour.</div></div>";
+}
+
 Vues.accueil = function () {
   const h = [];
   const heure = new Date().getHours();
@@ -46,6 +57,8 @@ Vues.accueil = function () {
   h.push('<div class="bandeau">🧪<div><b>Version d\'essai (' + esc(VERSION) + ').</b> ' +
     "Des bugs sont possibles et les données pourraient changer de forme. " +
     '<button class="lien" data-action="retour">Signaler un problème ou proposer une idée</button></div></div>');
+
+  h.push(bandeauMaj());
 
   if (Store.mode === "local") {
     h.push('<div class="bandeau">⚠️<div><b>Mode hors partage.</b> Les données restent sur cet appareil. ' +
@@ -545,6 +558,8 @@ Vues.recettes = function () {
 
   h.push('<button class="btn plein doux" data-action="recettes-partagees" style="margin-bottom:1rem">' +
     "🌍 Recettes partagées par d'autres familles</button>");
+
+  h.push(bandeauMaj());
 
   const liste = recettesFiltrees();
   const actif = ui.filtresRecettes.length || ui.rechercheRecette.trim();

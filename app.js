@@ -66,7 +66,7 @@ const EMOJIS_LISTES = [
   "🥩", "🧊", "🧽", "🧼", "🧴", "💊", "🎁", "🎂", "🎄", "🎒",
   "✏️", "🏕️", "🌻", "🔧", "📦", "👶", "🐾", "🐶", "🍼", "🎨"];
 
-const VERSION = "0.9.1 bêta";
+const VERSION = "0.9.2 bêta";
 
 /* Unites utilisables pour les ingredients, le stock et les courses.
    "" = pas d'unite, on compte simplement (4 carottes). */

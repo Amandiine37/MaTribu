@@ -306,6 +306,26 @@ En dessous, six filtres se combinent librement :
 | ⚡ **Rapide** | Moins de 30 minutes |
 | 🥗 **Léger** | Les plats marqués « léger » |
 
+### Quand l'application a du nouveau
+
+Les recettes fournies sont recopiées dans votre famille **le jour de sa
+création**. Celles ajoutées plus tard par une mise à jour de l'application
+n'arrivent donc pas toutes seules : il faut les accepter.
+
+Quand il y a quelque chose à ajouter, un bandeau apparaît **sur l'accueil et
+sur l'écran Mes recettes** :
+
+> ✨ **57 nouveaux plats à ajouter** — appuyez ici pour voir ce qui est nouveau
+> et le mettre à jour.
+
+Appuyez dessus : la fenêtre liste les plats concernés, et **rien n'est fait
+tant que vous n'avez pas appuyé sur *Mettre à jour***. Vos propres recettes et
+vos modifications ne sont jamais touchées.
+
+On y accède aussi par *Mon profil* (un point orange s'allume sur votre avatar)
+et, à tout moment, par *Administration → 📖 Recettes →
+**🔄 Mettre à jour les recettes fournies***.
+
 ### Ranger le cahier
 
 Juste au-dessus de la liste, trois façons de la trier :
