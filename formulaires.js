@@ -536,7 +536,7 @@ Formulaires.repas = function (jour, moment) {
    dans les réglages partagés. */
 const REGLAGES_GEN_DEFAUT = {
   midi: true, soir: true, remplacer: false,
-  regime: "libre", poisson: "", viande: "", vege: "",
+  regime: "libre", poisson: "", viande: "", vege: "", profil: "",
   saisons: true, reserve: true, soirLeger: true, rapide: true, thermomix: false,
   semaines: 3
 };
@@ -591,6 +591,16 @@ Formulaires.generateur = function () {
     "</div>" +
     '<p class="aide" id="note-regime" hidden></p>' +
 
+    '<label class="champ"><span>Façon de cuisiner (santé)</span><select name="profil">' +
+    '<option value=""' + (g.profil ? "" : " selected") + ">Aucune — tous les plats</option>" +
+    PROFILS_SANTE.map((p) =>
+      '<option value="' + p.val + '"' + (g.profil === p.val ? " selected" : "") + ">" +
+      p.emoji + " " + esc(p.nom) + "</option>").join("") +
+    "</select></label>" +
+    '<p class="aide" style="margin:-.4rem 0 .2rem">Écarte les plats qui ne suivent pas ' +
+    "cette façon de cuisiner. Se combine avec le régime ci-dessus. " +
+    '<button type="button" class="lien" data-action="sante-info">Ce que ça veut dire</button></p>' +
+
     '<div class="sous-titre"><h3>Comment choisir les plats</h3></div>' +
     ligneCase("saisons", "Respecter les saisons",
       "Nous sommes en " + sais.emoji + " " + sais.nom.toLowerCase() +
@@ -639,6 +649,7 @@ Formulaires.generateur = function () {
       const o = {
         midi: !!d.get("midi"), soir: !!d.get("soir"), remplacer: !!d.get("remplacer"),
         regime: d.get("regime") || "libre",
+        profil: d.get("profil") || "",
         poisson: d.get("poisson") === null ? "" : d.get("poisson"),
         viande: d.get("viande") === null ? "" : d.get("viande"),
         vege: d.get("vege") === null ? "" : d.get("vege"),
@@ -656,6 +667,10 @@ Formulaires.generateur = function () {
         .filter((c) => res.bilan[c])
         .map((c) => res.bilan[c] + " " + nomCategorie(c)).join(", ");
       toast(res.n + " repas proposés 🍽️" + (detail ? " — " + detail : ""));
+      if (res.choixCourt) {
+        setTimeout(() => toast("Seulement " + res.choixCourt.dispo + " plat(s) « " +
+          res.choixCourt.nom + " » : certains reviennent plusieurs fois"), 2800);
+      }
       if (res.tropDemande) {
         setTimeout(() => toast("Il y avait " + res.tropDemande +
           " repas demandé(s) de plus que de cases à remplir"), 2800);
@@ -795,7 +810,10 @@ Formulaires.recette = function (rid) {
     '<label class="puce"><input type="checkbox" name="vege" style="width:auto"' + (cour.vegetarien ? " checked" : "") + "> Végétarien</label>" +
     '<label class="puce"><input type="checkbox" name="rapide" style="width:auto"' + (cour.rapide ? " checked" : "") + "> Rapide</label>" +
     '<label class="puce"><input type="checkbox" name="thermomix" style="width:auto"' + (cour.thermomix ? " checked" : "") + "> 🍲 Robot</label>" +
+    '<label class="puce"><input type="checkbox" name="dessert" style="width:auto"' + (cour.plat === "dessert" ? " checked" : "") + "> 🍰 Dessert</label>" +
     "</div>" +
+    '<p class="aide" style="margin:-.6rem 0 1rem">Un dessert n’est jamais proposé ' +
+    "par le générateur de menus : il se range à part, dans le cahier.</p>" +
     '<label class="champ"><span>Saisons</span></label>' +
     puceMultiple("saisons", SAISONS.map((x) => ({ val: x.val, html: x.emoji + " " + x.nom })),
       cour.saisons || []) +
@@ -888,6 +906,7 @@ Formulaires.recette = function (rid) {
         vegetarien: !!d.get("vege"),
         rapide: !!d.get("rapide"),
         thermomix: !!d.get("thermomix"),
+        plat: d.get("dessert") ? "dessert" : "principal",
         lien: String(d.get("lien") || "").trim(),
         saisons: valeursMulti(f, "saisons"),
         etapes: String(d.get("etapes") || "").split(/\r?\n/)
@@ -917,6 +936,11 @@ Formulaires.note = function (nid) {
     '<input type="date" name="date" value="' + esc(cour.date || "") + '"></label>' +
     '<label class="champ"><span>Heure</span>' +
     '<input type="time" name="heure" value="' + esc(cour.heure || "") + '"></label></div>' +
+    '<p class="aide" style="margin:-.5rem 0 .9rem">Avec une date, le rappel part dans ' +
+    "l'<b>agenda</b>. Sans date, il reste dans les <b>pense-bêtes</b>.</p>" +
+    '<label class="champ"><span>Où ? (facultatif)</span>' +
+    '<input type="text" name="lieu" value="' + esc(cour.lieu || "") + '" maxlength="60" ' +
+    'placeholder="Cabinet du Dr Martin, école…"></label>' +
     '<label class="champ"><span>Qui est concerné ? (personne = toute la famille)</span></label>' +
     puceMultiple("qui", etat.membres.map((m) => ({ val: m.id, html: esc(m.emoji + " " + m.prenom) })),
       cour.concernes || []) +
@@ -946,6 +970,7 @@ Formulaires.note = function (nid) {
         titre: String(d.get("titre")).trim(),
         date: String(d.get("date") || ""),
         heure: String(d.get("heure") || ""),
+        lieu: String(d.get("lieu") || "").trim(),
         note: String(d.get("note") || "").trim(),
         concernes: valeursMulti(f, "qui"),
         repetition: String(d.get("repetition") || "aucune")
@@ -1468,6 +1493,21 @@ Formulaires.consulterRecette = function (rid) {
     '<div class="etiquettes" style="justify-content:center;margin-top:.5rem">' + etiquettes + "</div>" +
     "</div>";
 
+  /* Les façons de cuisiner, avec la raison en clair : « grâce à : poisson
+     gras, huile d'olive ». Une étiquette sans explication ne vaut rien. */
+  const sante = explicationProfils(r);
+  if (sante.length) {
+    html += '<div class="carte" style="margin-bottom:.75rem">' +
+      '<div class="carte-titre">Façons de cuisiner' +
+      '<button class="lien" data-action="sante-info">en savoir plus</button></div>' +
+      sante.map((x) =>
+        '<div class="ligne ligne-maj" data-action="sante-info" data-valeur="' + x.profil.val + '">' +
+        '<span style="font-size:1.2rem">' + x.profil.emoji + "</span>" +
+        '<div class="ligne-corps"><b>' + esc(x.profil.nom) + "</b>" +
+        (x.texte ? "<small>" + esc(x.texte) + "</small>" : "") + "</div></div>").join("") +
+      "</div>";
+  }
+
   html += '<div class="sous-titre" style="margin-top:.4rem"><h3>Ingrédients</h3>' +
     '<span class="etiquette">' + ings.length + "</span></div>";
   html += ings.length
@@ -1774,6 +1814,135 @@ Formulaires.majRecettes = function () {
       if (bilan.etapes) parts.push(bilan.etapes + " déroulé" + (bilan.etapes > 1 ? "s" : ""));
       if (bilan.unites) parts.push(bilan.unites + " unité" + (bilan.unites > 1 ? "s" : ""));
       toast(parts.length ? "Cahier à jour : " + parts.join(", ") + " ✅" : "Cahier déjà à jour");
+    };
+  });
+};
+
+/* ==================== LES FAÇONS DE CUISINER « SANTÉ » ====================
+
+   Cette fenêtre porte l'avertissement. Il n'est pas décoratif : ces profils
+   sont calculés à partir d'une liste d'ingrédients, pas à partir de vous.
+   Ils indiquent une direction de cuisine, ils ne soignent rien. */
+
+Formulaires.profilsSante = function (val) {
+  const choisi = val ? infoProfil(val) : null;
+
+  const avertissement =
+    '<div class="bandeau">⚕️<div><b>Ce ne sont pas des régimes médicaux.</b> ' +
+    "Ce sont des façons de cuisiner, déduites des ingrédients, qui suivent des " +
+    "recommandations nutritionnelles générales. L'application ne connaît ni vos " +
+    "quantités, ni le reste de votre journée, ni votre traitement. " +
+    "<b>Demandez à votre médecin ou à une diététicienne</b> avant d'en faire une " +
+    "règle — surtout si vous suivez un traitement.</div></div>";
+
+  if (choisi) {
+    const html = '<div id="f-sante">' + avertissement +
+      '<div class="carte"><div class="carte-titre">' + choisi.emoji + " " + esc(choisi.nom) + "</div>" +
+      '<p style="margin:0 0 .6rem;font-size:.9rem;line-height:1.55">' + esc(choisi.resume) + "</p>" +
+      '<p style="margin:0;font-size:.86rem;line-height:1.6;color:var(--ink-muted);white-space:pre-line">' +
+      esc(choisi.detail) + "</p></div>" +
+      '<div class="rangee-btn"><button class="btn" data-action="sante-info">Tous les profils</button>' +
+      '<button class="btn principal" data-action="fermer">Fermer</button></div></div>';
+    ouvrirFeuille("Façon de cuisiner", html);
+    return;
+  }
+
+  const html = '<div id="f-sante">' + avertissement +
+    '<p class="aide" style="margin-bottom:.8rem">Chaque plat est rangé tout seul, ' +
+    "d'après ses ingrédients. Vos propres recettes en profitent aussi : modifiez " +
+    "les ingrédients, le classement suit.</p>" +
+    '<div class="carte">' + PROFILS_SANTE.map((p) => {
+      const n = etat.recettes.filter((r) => aLeProfil(r, p.val)).length;
+      return '<div class="ligne ligne-maj" data-action="sante-info" data-valeur="' + p.val + '">' +
+        '<span style="font-size:1.4rem">' + p.emoji + "</span>" +
+        '<div class="ligne-corps"><b>' + esc(p.nom) + "</b><small>" + esc(p.resume) + "</small></div>" +
+        '<span class="etiquette' + (n ? " vert" : "") + '">' + n + "</span></div>";
+    }).join("") + "</div>" +
+    '<p class="aide">Deux profils cochés ensemble se cumulent : le plat doit tenir ' +
+    "les deux. Vous pouvez aussi les combiner avec le régime végétarien dans le " +
+    "générateur de menus.</p>" +
+    '<button class="btn plein" data-action="fermer" style="margin-top:.8rem">Fermer</button></div>';
+  ouvrirFeuille("Façons de cuisiner", html);
+};
+
+/* Pourquoi ce plat porte-t-il tel profil ? On montre le raisonnement plutôt
+   que d'asséner un verdict : c'est ce qui permet d'être en désaccord. */
+function explicationProfils(r) {
+  const NOMS = {
+    poissonGras: "poisson gras", poisson: "poisson", fruitsMer: "fruits de mer",
+    oeuf: "œufs", volaille: "volaille", viandeRouge: "viande rouge",
+    charcuterie: "charcuterie", legumineuses: "légumineuses",
+    cerealesCompletes: "céréales complètes", feculentsRaffines: "féculents raffinés",
+    sucres: "sucre", graissesSaturees: "graisses saturées", laitier: "produits laitiers",
+    huileOlive: "huile d'olive", oleagineux: "fruits à coque",
+    epicesAntiInflam: "épices", vegetalFrais: "légumes frais", selenium: "sélénium",
+    selRiche: "ingrédients salés"
+  };
+  const nom = (c) => NOMS[c] || c;
+  return PROFILS_SANTE.map((p) => {
+    const n = noterProfil(r, p);
+    if (!n.retenu) return null;
+    const bouts = [];
+    if (n.raisons.pour.length) bouts.push("grâce à : " + n.raisons.pour.map(nom).join(", "));
+    if (n.raisons.contre.length) bouts.push("malgré : " + n.raisons.contre.map(nom).join(", "));
+    if (p.val === "peuDeSel") bouts.length = 0;
+    return { profil: p, texte: bouts.join(" — ") };
+  }).filter(Boolean);
+}
+
+/* ======================== LES ONGLETS DE LA BARRE ========================
+
+   Toutes les familles ne se servent pas de tout : certaines ne veulent que
+   les recettes et les courses. Masquer un onglet ne supprime rien — les
+   données restent, elles sont simplement rangées hors de vue, et un
+   administrateur peut les faire revenir à tout moment. */
+
+Formulaires.onglets = function () {
+  if (!estAdmin()) { toast("Seul un administrateur peut changer les onglets"); return; }
+  const caches = ongletsMasques();
+
+  const html = '<div id="f-onglets">' +
+    '<p class="aide" style="margin-bottom:.9rem">Décochez ce que la famille n’utilise ' +
+    "pas. L’accueil reste toujours là : c’est le chemin de retour.</p>" +
+    '<div class="carte">' + ONGLETS.map((o) => {
+      const actif = o.obligatoire || caches.indexOf(o.vue) === -1;
+      return '<label class="ligne" style="cursor:pointer">' +
+        '<input type="checkbox" data-vue="' + o.vue + '"' +
+        (actif ? " checked" : "") + (o.obligatoire ? " disabled" : "") +
+        ' style="width:auto;flex:0 0 auto">' +
+        '<span style="font-size:1.3rem">' + o.emoji + "</span>" +
+        '<span class="ligne-corps"><b>' + esc(o.nom) + "</b>" +
+        (o.obligatoire ? "<small>toujours visible</small>" : "") + "</span></label>";
+    }).join("") + "</div>" +
+    '<p class="aide" id="onglets-note"></p>' +
+    '<div class="rangee-btn" style="margin-top:1rem">' +
+    '<button class="btn" data-action="fermer">Annuler</button>' +
+    '<button class="btn principal" data-role="ok">Enregistrer</button></div></div>';
+
+  ouvrirFeuille("Onglets visibles", html, (f) => {
+    const note = f.querySelector("#onglets-note");
+    const cases = () => Array.from(f.querySelectorAll("input[type=checkbox][data-vue]"));
+    const maj = () => {
+      const off = cases().filter((c) => !c.checked).map((c) => c.dataset.vue);
+      note.innerHTML = off.length
+        ? "Masqués : <b>" + off.map((v) =>
+          esc((ONGLETS.find((o) => o.vue === v) || {}).nom || v)).join(", ") + "</b>. " +
+          "Leur contenu n’est pas supprimé."
+        : "Tous les onglets sont visibles.";
+    };
+    cases().forEach((c) => { c.onchange = maj; });
+    maj();
+
+    f.querySelector('[data-role="ok"]').onclick = () => {
+      const off = cases().filter((c) => !c.checked).map((c) => c.dataset.vue);
+      if (!etat.reglages) etat.reglages = {};
+      etat.reglages.ongletsMasques = off;
+      /* Si on vient de masquer l'onglet ouvert, on ne laisse pas l'écran
+         dans un état impossible : retour à l'accueil. */
+      if (off.indexOf(ui.vue) !== -1) ui.vue = "accueil";
+      fermerFeuille();
+      sauver("reglages");
+      toast(off.length ? off.length + " onglet(s) masqué(s)" : "Tous les onglets sont visibles");
     };
   });
 };

@@ -89,13 +89,9 @@ setTimeout(function () {
   <button class="fab" id="fab" hidden>+</button>
 
   <nav class="nav">
-    <div class="nav-inner">
-      <button data-vue="accueil"><span class="ic">🏡</span>Accueil</button>
-      <button data-vue="taches"><span class="ic">🧹</span>Tâches</button>
-      <button data-vue="courses"><span class="ic">🛒</span>Courses</button>
-      <button data-vue="menus"><span class="ic">🍽️</span>Menus</button>
-      <button data-vue="notes"><span class="ic">🔔</span>Rappels</button>
-    </div>
+    <!-- Les onglets sont construits par l'application : un administrateur
+         peut en masquer (Administration > Onglets visibles). -->
+    <div class="nav-inner" id="nav-inner"></div>
   </nav>
 
 </div>

@@ -66,7 +66,7 @@ const EMOJIS_LISTES = [
   "🥩", "🧊", "🧽", "🧼", "🧴", "💊", "🎁", "🎂", "🎄", "🎒",
   "✏️", "🏕️", "🌻", "🔧", "📦", "👶", "🐾", "🐶", "🍼", "🎨"];
 
-const VERSION = "0.9.2 bêta";
+const VERSION = "0.11 bêta";
 
 /* Unites utilisables pour les ingredients, le stock et les courses.
    "" = pas d'unite, on compte simplement (4 carottes). */
@@ -379,7 +379,8 @@ const ui = {
   vue: "accueil",
   semaine: cleSemaine(new Date()),
   filtreTaches: "moi",
-  filtreNotes: "avenir",
+  filtreNotes: "agenda",         // "agenda", "pensebetes", "faits"
+  filtreQuiNotes: "",            // "" = tout le monde, sinon un id de membre
   ongletCourses: "liste",        // "liste" ou "stock"
   rechercheRecette: "",
   filtresRecettes: [],           // "perso", "vege", "rapide", "leger"
@@ -391,6 +392,10 @@ const ui = {
    toutes les familles les ont déjà. Le reste est considéré comme « à vous ». */
 const NOMS_DEPART = new Set((window.RECETTES_DEPART || [])
   .map((r) => r.nom.toLowerCase().trim()));
+
+/* Un dessert n'est pas un plat : il n'a rien à faire dans le générateur de
+   menus du midi et du soir. On le range à part, sans le cacher. */
+function estDessert(r) { return !!r && r.plat === "dessert"; }
 
 function estRecettePerso(r) {
   if (r.origine === "perso") return true;
@@ -436,7 +441,11 @@ function motsDe(texte) {
    « courgette » déclencherait « courge », et « poireau » déclencherait
    « poire ». C'est exactement le piège qu'on veut éviter. */
 function contientProduit(mots, produit) {
-  const p = motsDe(produit);
+  return suiteDeMots(mots, motsDe(produit));
+}
+/* Même chose, mais avec un produit DÉJÀ découpé : c'est ce qui permet de ne
+   pas redécouper « pomme de terre » des milliers de fois d'affilée. */
+function suiteDeMots(mots, p) {
   for (let i = 0; i + p.length <= mots.length; i++) {
     let ok = true;
     for (let j = 0; j < p.length; j++) { if (mots[i + j] !== p[j]) { ok = false; break; } }
@@ -484,6 +493,13 @@ function recettesFiltrees() {
     if (f.includes("leger") && r.type !== "leger") return false;
     if (f.includes("saison") && !estDeSaison(r)) return false;
     if (f.includes("thermomix") && !r.thermomix) return false;
+    if (f.includes("dessert") && !estDessert(r)) return false;
+    if (f.includes("plat") && estDessert(r)) return false;
+    /* Les profils santé voyagent dans la même liste, préfixés : « sante:coeur ».
+       Plusieurs profils cochés se cumulent — le plat doit tenir les deux. */
+    for (let k = 0; k < f.length; k++) {
+      if (f[k].indexOf("sante:") === 0 && !aLeProfil(r, f[k].slice(6))) return false;
+    }
     return true;
   }).sort(comparerRecettes(ui.triRecettes));
 }
@@ -645,6 +661,44 @@ function notesTriees() {
   return etat.notes.slice().sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
 }
 function notesAVenir() { return notesTriees().filter((n) => !n.fait); }
+
+/* --- L'agenda partagé ---
+   Un rappel avec une date est un rendez-vous, un rappel sans date est un
+   pense-bête. Même objet, deux usages : inutile d'inventer une deuxième
+   liste que la famille devrait tenir à jour en double. */
+function estRendezVous(n) { return !!(n && n.date); }
+
+/* Concerne-t-il cette personne ? Sans personne cochée, le rappel vaut pour
+   toute la famille — il apparaît donc dans le filtre de chacun. */
+function noteConcerne(n, membreId) {
+  if (!membreId) return true;
+  const l = (n && n.concernes) || [];
+  return !l.length || l.indexOf(membreId) !== -1;
+}
+
+/* Les rendez-vous à venir, regroupés par jour : c'est ce qui donne un agenda
+   lisible plutôt qu'une liste plate. */
+function agendaParJour(membreId, combienDeJours) {
+  const auj = isoDate(new Date());
+  const limite = combienDeJours ? decalerIso(auj, combienDeJours) : null;
+  const jours = new Map();
+  notesAVenir().forEach((n) => {
+    if (!estRendezVous(n) || !noteConcerne(n, membreId)) return;
+    if (limite && n.date > limite) return;
+    if (!jours.has(n.date)) jours.set(n.date, []);
+    jours.get(n.date).push(n);
+  });
+  /* Dans une journée, ce qui a une heure passe avant ce qui n'en a pas. */
+  jours.forEach((l) => l.sort((a, b) =>
+    String(a.heure || "99:99").localeCompare(String(b.heure || "99:99"))));
+  return Array.from(jours.entries()).map(([date, notes]) => ({ date: date, notes: notes }));
+}
+
+function decalerIso(iso, jours) {
+  const d = deIso(iso);
+  d.setDate(d.getDate() + jours);
+  return isoDate(d);
+}
 function notesUrgentes() {
   const auj = isoDate(new Date());
   return notesAVenir().filter((n) => n.date && n.date <= auj);
@@ -1887,6 +1941,312 @@ function nomCategorie(val) {
   return c ? c.emoji + " " + c.nom.toLowerCase() : "autre";
 }
 
+/* ======================= Profils de cuisine « santé » =======================
+
+   ATTENTION, ET C'EST DIT AUSSI DANS L'APPLICATION :
+   ce ne sont PAS des régimes médicaux. Ce sont des FAÇONS DE CUISINER,
+   déduites des ingrédients, qui suivent des recommandations nutritionnelles
+   générales et largement admises. Un plat « ❤️ cœur » n'est pas un
+   médicament, et une portion démesurée reste une portion démesurée.
+   Ce qui compte vraiment — les quantités, la journée entière, le traitement
+   en cours — l'application ne le connaît pas.
+
+   Le calcul est fait à partir des ingrédients, jamais saisi à la main : il
+   suit donc automatiquement vos propres recettes et celles que vous importez.
+   ========================================================================= */
+
+/* --- Le vocabulaire : à quels groupes appartient un ingrédient ---
+   `mots` se compare en MOTS ENTIERS (voir contientProduit) ; `sauf` sert aux
+   pièges — une « pâte de curry » n'est pas un féculent, un « bouillon de
+   bœuf » n'est pas de la viande. */
+const GROUPES_ALIMENTS = {
+  poissonGras: { mots: ["saumon", "sardine", "maquereau", "hareng", "truite", "anchois", "thon"] },
+  poisson: { mots: MOTS_POISSON },
+  fruitsMer: {
+    mots: ["crevette", "moule", "saint jacques", "calamar", "encornet", "crabe",
+      "gambas", "bulot", "seiche", "poulpe", "fruits de mer"]
+  },
+  oeuf: { mots: ["oeuf"] },
+  volaille: { mots: ["poulet", "dinde", "volaille"], sauf: ["bouillon", "cube", "fond"] },
+  viandeRouge: {
+    mots: ["boeuf", "agneau", "porc", "veau", "bavette", "steak", "paleron",
+      "onglet", "magret", "canard", "gigot", "jarret"],
+    sauf: ["bouillon", "cube", "fond"]
+  },
+  charcuterie: {
+    mots: ["lardon", "jambon", "saucisse", "saucisson", "chorizo", "bacon",
+      "merguez", "andouille", "boudin", "pancetta", "petit sale", "charcuterie"]
+  },
+  legumineuses: {
+    mots: ["lentille", "pois chiche", "haricot blanc", "haricot rouge", "flageolet",
+      "feve", "pois casse", "falafel", "houmous"]
+  },
+  cerealesCompletes: {
+    mots: ["boulgour", "quinoa", "riz complet", "pain complet", "farine complete",
+      "avoine", "sarrasin", "epeautre", "millet"]
+  },
+  feculentsRaffines: {
+    mots: ["riz", "pate", "spaghetti", "tagliatelle", "nouille", "vermicelle",
+      "semoule", "pain", "farine", "gnocchi", "lasagne", "chapelure",
+      "pomme de terre", "puree", "polenta", "tortilla", "wrap", "frite",
+      "couscous", "baguette", "chips"],
+    sauf: ["pate de curry", "pate de miso", "riz complet", "pain complet",
+      "farine complete", "pate a tartiner"]
+  },
+  sucres: { mots: ["sucre", "miel", "sirop", "confiture", "chocolat", "caramel"] },
+  graissesSaturees: {
+    mots: ["beurre", "creme", "fromage", "emmental", "gruyere", "parmesan",
+      "mozzarella", "feta", "chevre", "ricotta", "gorgonzola", "mascarpone",
+      "raclette", "reblochon", "comte", "lait de coco"]
+  },
+  laitier: {
+    mots: ["lait", "creme", "beurre", "fromage", "yaourt", "emmental", "gruyere",
+      "parmesan", "mozzarella", "feta", "chevre", "ricotta", "gorgonzola",
+      "mascarpone", "raclette", "reblochon", "comte"],
+    sauf: ["lait de coco", "lait de soja", "lait d amande"]
+  },
+  huileOlive: { mots: ["huile d olive"] },
+  oleagineux: { mots: ["noix", "amande", "noisette", "pignon", "cacahuete", "graine"] },
+  /* Volontairement court : le thym d'un bouquet garni ne fait pas un plat
+     anti-inflammatoire. On ne garde que ce qui est utilisé en quantité. */
+  epicesAntiInflam: { mots: ["curcuma", "gingembre", "cannelle"] },
+  /* Ce qui apporte beaucoup de sel sans qu'on y pense. */
+  selRiche: {
+    mots: ["charcuterie", "lardon", "jambon", "saucisse", "saucisson", "chorizo",
+      "bacon", "merguez", "andouille", "boudin", "pancetta", "petit sale",
+      "sauce soja", "bouillon", "cube", "olive", "cape", "anchois", "miso",
+      "morue", "surimi", "moutarde", "fromage", "feta", "parmesan", "emmental",
+      "gruyere", "roquefort", "raclette", "comte", "mozzarella", "chevre",
+      "gorgonzola", "reblochon", "bleu", "cheddar", "brie", "camembert",
+      "pecorino", "mimolette", "haddock", "saumon fume", "tapenade"],
+    sauf: ["huile d olive"]
+  },
+  iode: {
+    mots: MOTS_POISSON.concat(["algue", "nori", "lait", "yaourt", "oeuf", "fromage"])
+  },
+  selenium: {
+    mots: ["noix", "graine", "oeuf", "thon", "sardine", "champignon", "riz complet",
+      "lentille", "poisson", "saumon"]
+  },
+  cruciferes: {
+    mots: ["chou", "chou fleur", "brocoli", "navet", "radis", "roquette",
+      "cresson", "rutabaga", "colza"]
+  },
+  soja: { mots: ["tofu", "sauce soja", "lait de soja", "edamame", "miso"] },
+  /* Le gluten se cache : la sauce soja est faite de blé, les bouillons cubes
+     en contiennent presque toujours. Mieux vaut signaler de trop que de
+     rassurer à tort — c'est dit dans la fenêtre d'explication. */
+  gluten: {
+    mots: ["farine", "pain", "pate", "chapelure", "semoule", "boulgour", "couscous",
+      "spaghetti", "tagliatelle", "nouille", "lasagne", "gnocchi", "epeautre",
+      "biere", "tortilla", "wrap", "vermicelle", "sauce soja", "bouillon", "cube",
+      "seitan", "orge", "seigle", "biscuit", "biscotte", "brioche", "croissant",
+      "crepe", "gaufre", "genoise", "speculoos", "ravioles", "raviole"],
+    sauf: ["pate de curry", "pate de miso", "vermicelle de riz", "farine de riz",
+      "pate a tartiner", "bouillon de legumes maison"]
+  }
+};
+
+/* Les listes de produits, découpées une fois pour toutes au chargement. */
+const _MOTS_GROUPES = {};
+Object.keys(GROUPES_ALIMENTS).forEach((cle) => {
+  const g = GROUPES_ALIMENTS[cle];
+  _MOTS_GROUPES[cle] = { mots: (g.mots || []).map(motsDe), sauf: (g.sauf || []).map(motsDe) };
+});
+
+/* Tous les groupes d'un ingrédient en UN passage, gardés par nom : « Oignon »
+   revient dans quarante recettes, on ne l'analyse qu'une fois. Sans cela, le
+   classement des 175 plats prenait presque une demi-seconde. */
+const _cacheIngredient = new Map();
+function groupesDe(ing) {
+  const nom = String((ing && ing.nom) || "");
+  const vu = _cacheIngredient.get(nom);
+  if (vu) return vu;
+  const mots = motsDe(nom);
+  const trouves = new Set();
+  Object.keys(_MOTS_GROUPES).forEach((cle) => {
+    const g = _MOTS_GROUPES[cle];
+    if (g.sauf.some((p) => suiteDeMots(mots, p))) return;
+    if (g.mots.some((p) => suiteDeMots(mots, p))) trouves.add(cle);
+  });
+  _cacheIngredient.set(nom, trouves);
+  return trouves;
+}
+
+/* Le rayon dit parfois ce que le nom ne dit pas : tout ce qui vient du rayon
+   fruits et légumes est du végétal frais, sans avoir à lister le monde. */
+function ingredientEstDe(ing, cle) {
+  if (!ing || !ing.nom) return false;
+  return groupesDe(ing).has(cle);
+}
+function estVegetalFrais(ing) {
+  return !!ing && ing.rayon === "Fruits & légumes";
+}
+function compter(r, cle) {
+  return (r.ingredients || []).filter((i) => ingredientEstDe(i, cle)).length;
+}
+
+/* --- Les profils ---
+   `pour` = ce qui fait monter la note, `contre` = ce qui la fait descendre,
+   `interdit` = un seul ingrédient suffit à écarter le plat.
+   `seuil` = la note à atteindre. Les valeurs ont été réglées en regardant ce
+   que cela retenait vraiment dans le cahier : un profil qui garde tout ne
+   sert à rien, un profil qui ne garde rien non plus. */
+const PROFILS_SANTE = [
+  {
+    val: "coeur", nom: "Cœur & cholestérol", emoji: "❤️",
+    resume: "Moins de graisses saturées, plus de poisson, de légumineuses et d'huile d'olive.",
+    detail: "Ce qui est admis pour le cholestérol : remplacer les graisses saturées " +
+      "(beurre, crème, fromage en quantité, charcuterie) par des graisses insaturées " +
+      "(huile d'olive, oléagineux, poisson gras), et donner plus de place aux fibres " +
+      "— légumineuses, légumes, céréales complètes.",
+    pour: { poissonGras: 2, poisson: 1, legumineuses: 1.5, cerealesCompletes: 1, huileOlive: 1, oleagineux: 1, vegetalFrais: 0.4 },
+    contre: { charcuterie: 2.5, viandeRouge: 1.5, graissesSaturees: 1.2 },
+    seuil: 2
+  },
+  {
+    val: "glycemie", nom: "Glycémie", emoji: "🩸",
+    resume: "Des fibres et des protéines plutôt que des féculents raffinés et du sucre.",
+    detail: "Ce qui fait monter la glycémie, ce sont les glucides rapides pris seuls. " +
+      "Les légumineuses, les légumes et les céréales complètes ralentissent l'absorption ; " +
+      "une protéine dans l'assiette aussi. Le sucre ajouté et les féculents raffinés " +
+      "servis seuls font l'inverse. Attention : la QUANTITÉ compte autant que le plat.",
+    pour: { legumineuses: 2, cerealesCompletes: 1.5, vegetalFrais: 0.5, poisson: 1, volaille: 1, oeuf: 1 },
+    contre: { sucres: 2.5, feculentsRaffines: 1.2 },
+    seuil: 2
+  },
+  {
+    val: "antiinflam", nom: "Anti-inflammatoire", emoji: "🌿",
+    resume: "Cuisine méditerranéenne : poisson gras, huile d'olive, légumes, épices.",
+    detail: "L'alimentation de type méditerranéen est celle qui est le plus souvent " +
+      "conseillée en cas d'arthrose : poisson gras (oméga-3), huile d'olive, légumes, " +
+      "fruits à coque, curcuma et gingembre ; moins de charcuterie, de viande rouge et " +
+      "de sucre. Les preuves sont réelles sur le plan général, plus modestes sur " +
+      "l'arthrose elle-même : c'est une aide, pas un traitement.",
+    pour: { poissonGras: 2.5, huileOlive: 1.2, oleagineux: 1, epicesAntiInflam: 1.2, vegetalFrais: 0.5, legumineuses: 1 },
+    contre: { charcuterie: 2.5, viandeRouge: 1.5, sucres: 1.5, graissesSaturees: 0.8 },
+    seuil: 2
+  },
+  {
+    val: "iodeSelenium", nom: "Iode & sélénium", emoji: "🦋",
+    resume: "Les plats riches en iode et en sélénium, les deux minéraux de la thyroïde.",
+    detail: "La thyroïde a besoin d'iode pour fabriquer ses hormones, et de sélénium " +
+      "pour les transformer. Ce profil met en avant les plats qui en apportent : " +
+      "poisson, fruits de mer, œufs, produits laitiers, fruits à coque.\n\n" +
+      "⚠️ Ce n'est PAS un régime « thyroïde ». Une hypothyroïdie et une hyperthyroïdie " +
+      "demandent des choses opposées sur l'iode. Demandez à votre médecin dans quel " +
+      "sens vous en servir. À signaler aussi : les crucifères crus en grande quantité " +
+      "et le soja peuvent interférer — un point à évoquer avec lui, pas de quoi " +
+      "supprimer un chou du menu.",
+    /* Le poisson et les fruits de mer d'abord : ce sont eux qui en apportent
+       vraiment. Les laitiers comptent peu, sinon un gratin dauphinois
+       ressortirait comme un plat de la thyroïde — ce serait ridicule. */
+    pour: { poisson: 2, fruitsMer: 2, oeuf: 1.2, laitier: 0.4, oleagineux: 0.8, selenium: 0.6 },
+    contre: {},
+    /* Il faut une vraie source, pas seulement un fond de crème : sans poisson,
+       fruits de mer ni œuf, un plat n'entre pas dans ce profil. */
+    requis: ["poisson", "fruitsMer", "oeuf"],
+    seuil: 2.6
+  },
+  {
+    val: "peuDeSel", nom: "Peu de sel", emoji: "🧂", famille: "eviter",
+    resume: "Aucun ingrédient naturellement très salé : ni charcuterie, ni fromage, ni bouillon cube.",
+    detail: "Le sel de la salière n'est qu'une petite part de ce qu'on avale : " +
+      "l'essentiel vient de la charcuterie, des fromages, des bouillons cubes, " +
+      "de la sauce soja, des olives et des conserves. Ce profil ne retient que les " +
+      "plats qui n'en contiennent aucun — à vous de saler raisonnablement ensuite.",
+    pour: {}, contre: {}, interdit: ["selRiche"], seuil: 0
+  },
+  {
+    val: "sansGluten", nom: "Sans gluten", emoji: "🌾", famille: "eviter",
+    resume: "Aucun ingrédient à base de blé, d'orge ou de seigle.",
+    detail: "Écarte tout ce qui contient du blé, de l'orge ou du seigle : farine, " +
+      "pain, pâtes, semoule, boulgour, chapelure, pâte à tarte…\n\n" +
+      "⚠️ Ce tri se fait sur le NOM des ingrédients. Il ne remplace pas la lecture " +
+      "des étiquettes : la sauce soja est faite de blé, les bouillons cubes en " +
+      "contiennent presque toujours, et beaucoup de produits industriels en " +
+      "renferment sans le dire dans leur nom. En cas de maladie cœliaque, " +
+      "vérifiez toujours l'emballage.",
+    pour: {}, contre: {}, interdit: ["gluten"], seuil: 0
+  },
+  {
+    val: "sansLactose", nom: "Sans lactose", emoji: "🥛", famille: "eviter",
+    resume: "Aucun produit laitier : ni lait, ni beurre, ni crème, ni fromage.",
+    detail: "Écarte tous les produits laitiers. C'est plus strict que « sans " +
+      "lactose » au sens propre : le beurre et les fromages affinés (parmesan, " +
+      "comté) n'en contiennent presque plus. Si vous les tolérez, ce filtre vous " +
+      "privera de plats que vous pourriez manger.\n\n" +
+      "⚠️ Comme pour le gluten, le tri se fait sur le nom des ingrédients : " +
+      "vérifiez les étiquettes des produits tout prêts.",
+    pour: {}, contre: {}, interdit: ["laitier"], seuil: 0
+  }
+];
+/* Deux rangées à l'écran : ce qu'on cherche, et ce qu'on évite. */
+function profilsDeFamille(f) {
+  return PROFILS_SANTE.filter((p) => (p.famille || "cuisine") === f);
+}
+
+function infoProfil(val) {
+  return PROFILS_SANTE.find((p) => p.val === val) || null;
+}
+
+/* La note d'un plat pour un profil, et les raisons de cette note : c'est ce
+   qui permet d'expliquer « pourquoi ce plat » plutôt que de l'asséner. */
+function noterProfil(r, profil) {
+  const raisons = { pour: [], contre: [], bloque: null };
+  let note = 0;
+
+  /* Un dessert n'entre pas dans une façon de cuisiner : des œufs et des
+     amandes suffiraient à faire passer un brownie pour un plat de la
+     thyroïde. En revanche « sans gluten », « sans lactose » et « peu de
+     sel » gardent tout leur sens sur un gâteau — ce sont des faits. */
+  if (estDessert(r) && (profil.famille || "cuisine") === "cuisine") {
+    return { note: -99, retenu: false, raisons: raisons };
+  }
+
+  if ((profil.requis || []).length &&
+    !profil.requis.some((cle) => compter(r, cle))) {
+    return { note: -99, retenu: false, raisons: raisons };
+  }
+
+  (profil.interdit || []).forEach((cle) => {
+    const t = (r.ingredients || []).filter((i) => ingredientEstDe(i, cle));
+    if (t.length) raisons.bloque = t.map((i) => i.nom);
+  });
+  if (raisons.bloque) return { note: -99, retenu: false, raisons: raisons };
+
+  Object.keys(profil.pour || {}).forEach((cle) => {
+    const n = cle === "vegetalFrais"
+      ? (r.ingredients || []).filter(estVegetalFrais).length
+      : compter(r, cle);
+    if (n) { note += n * profil.pour[cle]; raisons.pour.push(cle); }
+  });
+  Object.keys(profil.contre || {}).forEach((cle) => {
+    const n = compter(r, cle);
+    if (n) { note -= n * profil.contre[cle]; raisons.contre.push(cle); }
+  });
+
+  return { note: note, retenu: note >= profil.seuil, raisons: raisons };
+}
+
+/* Les profils d'un plat. Le calcul coûte cher pour rien si on le refait à
+   chaque affichage : on le garde en mémoire tant que les ingrédients ne
+   changent pas. La table est associée aux OBJETS recettes, elle disparaît
+   donc toute seule quand la famille est rechargée. */
+const _cacheProfils = new WeakMap();
+function profilsDe(r) {
+  if (!r) return [];
+  const cle = (r.ingredients || []).map((i) => i && i.nom).join("|");
+  const enCache = _cacheProfils.get(r);
+  if (enCache && enCache.cle === cle) return enCache.profils;
+  const profils = PROFILS_SANTE.filter((p) => noterProfil(r, p).retenu).map((p) => p.val);
+  _cacheProfils.set(r, { cle: cle, profils: profils });
+  return profils;
+}
+function aLeProfil(r, val) {
+  return profilsDe(r).indexOf(val) !== -1;
+}
+
 /* Ce que contient une semaine déjà prévue. C'est le meilleur retour sur les
    nombres demandés au générateur : on voit tout de suite ce qu'on mange. */
 function compositionSemaine(cleSem) {
@@ -1949,7 +2309,8 @@ function recettesUtiliseesRecemment(cleSem, nbSemaines) {
 function genererMenus(cleSem, opt) {
   opt = opt || {};
   const regime = opt.regime || "libre";
-  let pool = etat.recettes.slice();
+  /* Les desserts restent en dehors : on remplit des midis et des soirs. */
+  let pool = etat.recettes.filter((r) => !estDessert(r));
   if (!pool.length) { toast("Ajoutez d'abord des recettes"); return null; }
 
   /* Le régime, lui, n'est pas une préférence : les plats écartés le sont
@@ -1961,6 +2322,18 @@ function genererMenus(cleSem, opt) {
       ? "Aucun plat végétarien dans votre cahier de recettes"
       : "Aucun plat sans viande dans votre cahier de recettes");
     return null;
+  }
+
+  /* Le profil santé écarte franchement, comme le régime : quand on cuisine
+     pour la glycémie de quelqu'un, on ne veut pas d'exception « faute de
+     mieux ». Si le choix devient trop court, on le dit plus bas. */
+  const profil = opt.profil ? infoProfil(opt.profil) : null;
+  if (profil) {
+    pool = pool.filter((r) => aLeProfil(r, profil.val));
+    if (!pool.length) {
+      toast("Aucun plat « " + profil.nom + " » avec ces réglages");
+      return null;
+    }
   }
 
   const semaine = etat.repas[cleSem] || {};
@@ -2028,7 +2401,13 @@ function genererMenus(cleSem, opt) {
   });
 
   sauver("repas");
-  return { n: cases.length, bilan: bilan, tropDemande: Math.max(0, demande - cases.length) };
+  return {
+    n: cases.length, bilan: bilan,
+    tropDemande: Math.max(0, demande - cases.length),
+    /* Moins de plats disponibles que de repas à remplir : il y aura forcément
+       des répétitions. Mieux vaut l'annoncer que de laisser croire au hasard. */
+    choixCourt: profil && pool.length < cases.length ? { nom: profil.nom, dispo: pool.length } : null
+  };
 }
 
 /* Tous les ingredients des repas prevus, regroupes par nom et additionnes. */
@@ -2162,9 +2541,7 @@ function rendre() {
   cible.classList.add("active");
   cible.innerHTML = Vues[v]();
 
-  document.querySelectorAll(".nav button").forEach((b) => {
-    b.classList.toggle("active", b.dataset.vue === v);
-  });
+  majBarre();
   majPastilles();
   majFab();
 
@@ -2173,6 +2550,23 @@ function rendre() {
     if (el) { el.focus(); if (el.setSelectionRange) { const n = el.value.length; el.setSelectionRange(n, n); } }
     ui.focus = null;
   }
+}
+
+/* La barre du bas se redessine à chaque affichage : les onglets masqués par
+   l'administrateur disparaissent, et le libellé actif suit la vue. */
+function majBarre() {
+  const nav = $("#nav-inner");
+  const visibles = ongletsVisibles();
+  const signature = visibles.map((o) => o.vue).join(",");
+  if (nav.dataset.signature !== signature) {
+    nav.innerHTML = visibles.map((o) =>
+      '<button data-vue="' + o.vue + '"><span class="ic">' + o.emoji + "</span>" +
+      esc(o.nom) + "</button>").join("");
+    nav.dataset.signature = signature;
+  }
+  nav.querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.vue === ui.vue);
+  });
 }
 
 function majPastilles() {
@@ -2194,6 +2588,29 @@ function majPastilles() {
   });
 }
 
+/* --- Les onglets que la famille a choisi de cacher ---
+   Réglage d'administration : certaines familles ne se servent que des recettes
+   et des courses, la barre du bas n'a pas à leur imposer le reste.
+   L'accueil ne se masque jamais : il faut toujours un chemin de retour. */
+const ONGLETS = [
+  { vue: "accueil", nom: "Accueil", emoji: "🏡", obligatoire: true },
+  { vue: "taches", nom: "Tâches", emoji: "🧹" },
+  { vue: "courses", nom: "Courses", emoji: "🛒" },
+  { vue: "menus", nom: "Menus", emoji: "🍽️" },
+  { vue: "recettes", nom: "Recettes", emoji: "📖" },
+  { vue: "notes", nom: "Rappels", emoji: "🔔" }
+];
+function ongletsMasques() {
+  const l = (etat.reglages && etat.reglages.ongletsMasques) || [];
+  return Array.isArray(l) ? l : [];
+}
+function ongletMasque(vue) {
+  return ongletsMasques().indexOf(vue) !== -1;
+}
+function ongletsVisibles() {
+  return ONGLETS.filter((o) => o.obligatoire || !ongletMasque(o.vue));
+}
+
 const FAB = {
   taches: { admin: true, action: "tache-nouvelle" },
   courses: { admin: false, action: "course-nouvelle" },
@@ -2213,6 +2630,9 @@ function majFab() {
 }
 
 function aller(vue) {
+  /* Un onglet masqué ne doit pas rester atteignable par un vieux raccourci
+     ou par la vue mémorisée : on retombe sur l'accueil, jamais sur du vide. */
+  if (vue !== "accueil" && vue !== "admin" && ongletMasque(vue)) vue = "accueil";
   ui.vue = vue;
   memoriserVue();
   window.scrollTo({ top: 0 });
@@ -2321,11 +2741,14 @@ document.addEventListener("click", (e) => {
     }
     case "recettes-filtre-vider": ui.filtresRecettes = []; ui.rechercheRecette = ""; rendre(); break;
     case "recettes-tri": ui.triRecettes = b.dataset.valeur; rendre(); break;
+    case "sante-info": Formulaires.profilsSante(b.dataset.valeur || null); break;
 
     case "note-toggle": Actions.basculerNote(v); break;
     case "note-nouvelle": Formulaires.note(null); break;
     case "note-editer": Formulaires.note(v); break;
     case "notes-filtre": ui.filtreNotes = b.dataset.valeur; rendre(); break;
+    case "notes-qui": ui.filtreQuiNotes = b.dataset.valeur || ""; rendre(); break;
+    case "admin-onglets": Formulaires.onglets(); break;
 
     case "cadeau-demander": Actions.demanderCadeau(v); break;
     case "cadeau-nouveau": Formulaires.cadeau(null); break;

@@ -16,6 +16,9 @@ function nomDe(idm) {
   return m ? m.prenom : "quelqu'un";
 }
 function bloc(titre, contenu, lienTexte, lienAction, lienVue) {
+  /* Une carte qui renvoie vers un onglet masqué n'a plus lieu d'être : sinon
+     son bouton « Tout voir » ramènerait bêtement à l'accueil. */
+  if (lienVue && lienVue !== "accueil" && ongletMasque(lienVue)) return "";
   return '<div class="carte"><div class="carte-titre">' + titre +
     (lienTexte ? '<button class="lien" data-action="' + lienAction +
       (lienVue ? '" data-vue="' + lienVue : "") + '">' + esc(lienTexte) + "</button>" : "") +
@@ -141,14 +144,14 @@ Vues.accueil = function () {
           '<button class="btn mini principal" data-action="echange-accorder" data-id="' + e.id + '">Accorder</button>' +
           "</div>");
       });
-      h.push(bloc("✅ À valider", l.join("")));
+      if (!ongletMasque("taches")) h.push(bloc("✅ À valider", l.join("")));
     }
   }
 
   /* Tâches des enfants sans téléphone : c'est le parent qui coche */
   if (estAdmin()) {
     const enfants = tachesDesEnfants();
-    if (enfants.length) {
+    if (enfants.length && !ongletMasque("taches")) {
       h.push(bloc("🧒 À faire pour les enfants" +
         ' <span class="etiquette chaud">' + enfants.length + "</span>",
         enfants.map((x) => {
@@ -185,11 +188,39 @@ Vues.accueil = function () {
       : rienDu("🤷", "Aucun repas prévu aujourd'hui."),
     "Voir la semaine", "aller", "menus"));
 
-  /* Rappels */
-  const prochains = notesAVenir().slice(0, 3);
-  h.push(bloc("🔔 Rappels",
-    prochains.length ? prochains.map(ligneNote).join("") : rienDu("😌", "Aucun rappel en attente."),
-    "Tout voir", "aller", "notes"));
+  /* Agenda : la question « qu'est-ce qu'on a cette semaine ? » se pose tous
+     les jours, on y répond donc sur l'accueil, sans avoir à ouvrir l'onglet. */
+  if (!ongletMasque("notes")) {
+    const auj = isoDate(new Date());
+    const retard = notesAVenir().filter((n) => estRendezVous(n) && n.date < auj);
+    const jours = agendaParJour("", 14).filter((j) => j.date >= auj).slice(0, 4);
+    const libres = notesAVenir().filter((n) => !estRendezVous(n)).slice(0, 3);
+
+    let corps = "";
+    if (retard.length) {
+      corps += '<div class="ligne" style="border:none;padding-bottom:.2rem">' +
+        '<span class="etiquette rouge">' + retard.length + " en retard</span></div>" +
+        retard.slice(0, 2).map(ligneNote).join("");
+    }
+    jours.forEach((j) => {
+      const dj = joursEntre(auj, j.date);
+      corps += '<div class="ligne" style="border:none;padding:.5rem 0 .1rem">' +
+        '<small style="font-weight:700;letter-spacing:.05em;text-transform:uppercase;' +
+        'color:var(--ink-muted);font-size:.68rem">' +
+        esc(dj === 0 ? "Aujourd’hui" : dj === 1 ? "Demain" : dateJolie(j.date)) +
+        "</small></div>" + j.notes.map((n) => ligneNote(n, true)).join("");
+    });
+    if (libres.length) {
+      corps += '<div class="ligne" style="border:none;padding:.5rem 0 .1rem">' +
+        '<small style="font-weight:700;letter-spacing:.05em;text-transform:uppercase;' +
+        'color:var(--ink-muted);font-size:.68rem">Pense-bêtes</small></div>' +
+        libres.map(ligneNote).join("");
+    }
+    h.push(bloc("🔔 Agenda & rappels",
+      corps || rienDu("😌", "Rien de prévu.<br>Appuyez sur <b>Tout voir</b> pour " +
+        "noter un rendez-vous."),
+      "Tout voir", "aller", "notes"));
+  }
 
   /* Courses : une ligne par liste, les listes du mois n'ont rien d'urgent */
   const listes = listesCourses();
@@ -548,7 +579,9 @@ Vues.recettes = function () {
     ["perso", "✍️ Mes recettes"],
     ["vege", "🌿 Végé"],
     ["rapide", "⚡ Rapide"],
-    ["leger", "🥗 Léger"]
+    ["leger", "🥗 Léger"],
+    ["plat", "🍽️ Plats"],
+    ["dessert", "🍰 Desserts"]
   ];
   h.push('<div class="puces" style="margin-bottom:.8rem">' +
     filtres.map(([v, l]) =>
@@ -560,6 +593,21 @@ Vues.recettes = function () {
     "🌍 Recettes partagées par d'autres familles</button>");
 
   h.push(bandeauMaj());
+
+  /* Les profils santé sur leur propre rangée, avec le lien qui explique ce
+     qu'ils veulent dire — et surtout ce qu'ils ne veulent pas dire. */
+  h.push('<div class="sous-titre" style="margin:.2rem 0 .45rem"><h3>Façons de cuisiner</h3>' +
+    '<button class="lien" data-action="sante-info">Ça veut dire quoi ?</button></div>');
+  const rangeeProfils = (f) => '<div class="puces" style="margin-bottom:.7rem">' +
+    profilsDeFamille(f).map((p) => {
+      const cle = "sante:" + p.val;
+      return '<button class="puce ' + (ui.filtresRecettes.includes(cle) ? "on" : "") +
+        '" data-action="recettes-filtre" data-valeur="' + cle + '" title="' + esc(p.resume) + '">' +
+        p.emoji + " " + esc(p.nom) + "</button>";
+    }).join("") + "</div>";
+  h.push(rangeeProfils("cuisine"));
+  h.push('<div class="sous-titre" style="margin:.2rem 0 .45rem"><h3>Ce qu’on évite</h3></div>');
+  h.push(rangeeProfils("eviter"));
 
   const liste = recettesFiltrees();
   const actif = ui.filtresRecettes.length || ui.rechercheRecette.trim();
@@ -603,6 +651,10 @@ Vues.recettes = function () {
       return x ? '<span class="etiquette' + (v === saisonActuelle() ? " vert" : "") + '">' +
         x.emoji + " " + x.nom.toLowerCase() + "</span>" : "";
     }).join("") +
+    profilsDe(r).map((v) => {
+      const p = infoProfil(v);
+      return p ? '<span class="etiquette vert">' + p.emoji + "</span>" : "";
+    }).join("") +
     (r.partageId ? '<span class="etiquette vert">🌍 partagée</span>' : "") +
     (r.origine === "importee" ? '<span class="etiquette">importée</span>' : "") +
     "</span></div>" +
@@ -635,26 +687,35 @@ Vues.recettes = function () {
 
 /* ================================ RAPPELS ================================ */
 
-function ligneNote(n) {
+/* `sansQuand` : dans l'agenda, le jour est déjà écrit en titre de section.
+   Répéter « demain » sur chaque ligne n'apprend rien et alourdit. */
+function ligneNote(n, sansQuand) {
   const auj = isoDate(new Date());
   let badge = "";
   if (n.fait) badge = '<span class="etiquette vert">fait</span>';
+  else if (sansQuand) badge = "";
   else if (n.date) {
     const dj = joursEntre(auj, n.date);
-    if (dj < 0) badge = '<span class="etiquette rouge">en retard</span>';
+    if (dj < 0) badge = '<span class="etiquette rouge">' + dateJolie(n.date) + "</span>";
     else if (dj === 0) badge = '<span class="etiquette chaud">aujourd\'hui</span>';
     else if (dj === 1) badge = '<span class="etiquette chaud">demain</span>';
     else if (dj <= 7) badge = '<span class="etiquette">dans ' + dj + " jours</span>";
   }
   const qui = (n.concernes || []).map((i) => membre(i)).filter(Boolean);
+  /* L'heure d'abord : dans un agenda, c'est ce qu'on cherche du regard.
+     La date n'est répétée que hors agenda, où elle n'est plus en titre. */
   const sous = [
-    n.date ? dateJolie(n.date, true) + (n.heure ? " à " + n.heure : "") : "sans date",
+    n.heure || "",
+    n.lieu || "",
     qui.length ? qui.map((m) => m.prenom).join(", ") : "toute la famille"
-  ].join(" • ");
+  ].filter(Boolean).join(" • ");
 
   return '<div class="ligne' + (n.fait ? " fait" : "") + '">' +
     '<button class="coche' + (n.fait ? " on" : "") + '" data-action="note-toggle" data-id="' + n.id + '">✓</button>' +
-    '<div class="ligne-corps"><b>' + esc(n.titre) + "</b><small>" + esc(sous) + "</small>" +
+    '<div class="ligne-corps"><b>' + esc(n.titre) + "</b><small>" +
+    (qui.length
+      ? qui.map((m) => '<span class="avatar xs">' + esc(m.emoji || "🙂") + "</span>").join("")
+      : "") + esc(sous) + "</small>" +
     (badge || n.note ? '<span class="etiquettes">' + badge +
       (n.repetition && n.repetition !== "aucune" ? '<span class="etiquette">↻</span>' : "") + "</span>" : "") +
     "</div>" +
@@ -663,22 +724,69 @@ function ligneNote(n) {
 
 Vues.notes = function () {
   const h = [];
-  h.push('<div class="puces" style="margin:.2rem 0 1rem">' +
-    '<button class="puce ' + (ui.filtreNotes === "avenir" ? "on" : "") + '" data-action="notes-filtre" data-valeur="avenir">À venir</button>' +
-    '<button class="puce ' + (ui.filtreNotes === "faits" ? "on" : "") + '" data-action="notes-filtre" data-valeur="faits">Terminés</button>' +
+
+  /* Trois usages, trois onglets : l'agenda des rendez-vous datés, les
+     pense-bêtes sans date, et ce qui est fait. */
+  h.push('<div class="puces" style="margin:.2rem 0 .7rem">' +
+    [["agenda", "📅 Agenda"], ["pensebetes", "📝 Pense-bêtes"], ["faits", "✅ Terminés"]]
+      .map(([v, l]) => '<button class="puce ' + (ui.filtreNotes === v ? "on" : "") +
+        '" data-action="notes-filtre" data-valeur="' + v + '">' + l + "</button>").join("") +
     "</div>");
 
-  const liste = ui.filtreNotes === "avenir"
-    ? notesTriees().filter((n) => !n.fait)
-    : notesTriees().filter((n) => n.fait).reverse();
+  /* Qui est concerné : la question qu'on se pose vraiment devant un agenda
+     de famille. « Toute la famille » comprend les rappels sans personne. */
+  const qui = ui.filtreQuiNotes;
+  h.push('<div class="puces" style="margin-bottom:1rem">' +
+    '<button class="puce ' + (qui ? "" : "on") + '" data-action="notes-qui" data-valeur="">' +
+    "👨‍👩‍👧 Tout le monde</button>" +
+    etat.membres.map((m) =>
+      '<button class="puce ' + (qui === m.id ? "on" : "") +
+      '" data-action="notes-qui" data-valeur="' + m.id + '">' +
+      esc((m.emoji || "🙂") + " " + m.prenom) + "</button>").join("") +
+    "</div>");
 
-  if (!liste.length) {
-    h.push(rienDu("🔔", ui.filtreNotes === "avenir"
-      ? "Aucun rappel.<br>Appuyez sur <b>+</b> pour noter un rendez-vous."
-      : "Rien de terminé pour l'instant."));
+  const pourQui = (n) => noteConcerne(n, qui);
+
+  if (ui.filtreNotes === "faits") {
+    const faits = notesTriees().filter((n) => n.fait && pourQui(n)).reverse();
+    h.push(faits.length
+      ? '<div class="carte">' + faits.map(ligneNote).join("") + "</div>"
+      : rienDu("✅", "Rien de terminé pour l'instant."));
     return h.join("");
   }
-  h.push('<div class="carte">' + liste.map(ligneNote).join("") + "</div>");
+
+  if (ui.filtreNotes === "pensebetes") {
+    const libres = notesAVenir().filter((n) => !estRendezVous(n) && pourQui(n));
+    h.push(libres.length
+      ? '<div class="carte">' + libres.map(ligneNote).join("") + "</div>"
+      : rienDu("📝", "Aucun pense-bête.<br>Appuyez sur <b>+</b> : un rappel " +
+        "<b>sans date</b> arrive ici, avec une date il part dans l'agenda."));
+    return h.join("");
+  }
+
+  /* --- L'agenda --- */
+  const auj = isoDate(new Date());
+  const enRetard = notesAVenir().filter((n) => estRendezVous(n) && n.date < auj && pourQui(n));
+  if (enRetard.length) {
+    h.push('<div class="sous-titre" style="margin-top:0"><h3>En retard</h3>' +
+      '<span class="etiquette rouge">' + enRetard.length + "</span></div>");
+    h.push('<div class="carte">' + enRetard.map((n) => ligneNote(n)).join("") + "</div>");
+  }
+
+  const jours = agendaParJour(qui).filter((j) => j.date >= auj);
+  if (!jours.length && !enRetard.length) {
+    h.push(rienDu("📅", "Aucun rendez-vous prévu.<br>Appuyez sur <b>+</b> pour en " +
+      "ajouter un : donnez-lui une date, une heure et dites qui est concerné."));
+    return h.join("");
+  }
+
+  jours.forEach((j) => {
+    const dj = joursEntre(auj, j.date);
+    const quand = dj === 0 ? "Aujourd'hui" : dj === 1 ? "Demain" : dateJolie(j.date, dj > 300);
+    h.push('<div class="sous-titre"><h3>' + esc(quand) + "</h3>" +
+      (dj > 1 ? '<span class="etiquette">dans ' + dj + " jours</span>" : "") + "</div>");
+    h.push('<div class="carte">' + j.notes.map((n) => ligneNote(n, true)).join("") + "</div>");
+  });
   return h.join("");
 };
 
@@ -848,6 +956,21 @@ Vues.admin = function () {
       : "") +
     '<button class="btn plein doux" data-action="aller" data-vue="recettes" style="margin-top:.6rem">Gérer les recettes</button>' +
     '<button class="btn plein" data-action="recettes-maj" style="margin-top:.5rem">🔄 Mettre à jour les recettes fournies</button>'));
+
+  /* Onglets visibles : toutes les familles ne se servent pas de tout. */
+  const caches = ongletsMasques();
+  h.push(bloc("📱 Onglets visibles",
+    '<p class="aide">Ce que la famille voit dans la barre du bas. Masquer un onglet ' +
+    "ne supprime rien : le contenu est simplement rangé hors de vue.</p>" +
+    '<div class="puces" style="margin-top:.7rem">' +
+    ONGLETS.map((o) =>
+      '<span class="puce ' + (o.obligatoire || caches.indexOf(o.vue) === -1 ? "on" : "") + '">' +
+      o.emoji + " " + esc(o.nom) + "</span>").join("") + "</div>" +
+    (caches.length
+      ? '<p class="aide" style="margin-top:.6rem">' + caches.length +
+        " onglet(s) masqué(s) pour toute la famille.</p>"
+      : "") +
+    '<button class="btn plein doux" data-action="admin-onglets" style="margin-top:.7rem">Choisir les onglets</button>'));
 
   return h.join("");
 };
