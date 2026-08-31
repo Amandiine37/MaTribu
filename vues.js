@@ -561,12 +561,21 @@ Vues.recettes = function () {
     (actif ? '<button class="lien" data-action="recettes-filtre-vider">Tout afficher</button>' : "") +
     "</div>");
 
-  h.push('<div class="carte">' + liste.map((r) =>
+  /* Le tri. Avec près de deux cents plats, l'ordre du cahier compte autant
+     que les filtres : on le met à portée, juste au-dessus de la liste. */
+  h.push('<div class="puces" style="margin-bottom:.7rem">' +
+    [["alpha", "🔤 A → Z"], ["recent", "🕐 Récentes"], ["saison", "☀️ De saison"]].map(([v, l]) =>
+      '<button class="puce ' + (ui.triRecettes === v ? "on" : "") +
+      '" data-action="recettes-tri" data-valeur="' + v + '">' + l + "</button>").join("") +
+    "</div>");
+
+  const ligneRecette = (r) =>
     '<div class="ligne ligne-recette" data-action="recette-voir" data-id="' + r.id + '">' +
     '<span style="font-size:1.4rem">' + esc(r.emoji || "🍽️") + "</span>" +
     '<div class="ligne-corps"><b>' + esc(r.nom) + "</b><small>" +
-    (r.ingredients || []).length + " ingrédients" +
-    ((r.etapes || []).length ? " • " + r.etapes.length + " étapes" : "") +
+    (r.ingredients || []).length + " ingrédient" + ((r.ingredients || []).length > 1 ? "s" : "") +
+    ((r.etapes || []).length ? " • " + r.etapes.length + " étape" +
+      (r.etapes.length > 1 ? "s" : "") : "") +
     (r.origine === "importee" && r.deQui ? " • de " + esc(r.deQui) : "") + "</small>" +
     '<span class="etiquettes">' +
     (r.vegetarien ? '<span class="etiquette vert">végé</span>' : "") +
@@ -582,8 +591,30 @@ Vues.recettes = function () {
     (r.partageId ? '<span class="etiquette vert">🌍 partagée</span>' : "") +
     (r.origine === "importee" ? '<span class="etiquette">importée</span>' : "") +
     "</span></div>" +
-    '<button class="btn mini" data-action="recette-editer" data-id="' + r.id + '">✏️</button></div>').join("") +
-    "</div>");
+    '<button class="btn mini" data-action="recette-editer" data-id="' + r.id + '">✏️</button></div>';
+
+  if (ui.triRecettes !== "alpha") {
+    h.push('<div class="carte">' + liste.map(ligneRecette).join("") + "</div>");
+    return h.join("");
+  }
+
+  /* En ordre alphabétique, une carte par lettre : ce sont les repères qui
+     permettent de retrouver un plat en faisant défiler, sans chercher. */
+  let lettre = null;
+  let bloc = [];
+  const vider = () => {
+    if (!bloc.length) return;
+    h.push('<div class="sous-titre" style="margin:.9rem 0 .4rem"><h3>' + lettre + "</h3>" +
+      '<span class="etiquette">' + bloc.length + "</span></div>");
+    h.push('<div class="carte">' + bloc.join("") + "</div>");
+    bloc = [];
+  };
+  liste.forEach((r) => {
+    const l = lettreRecette(r);
+    if (l !== lettre) { vider(); lettre = l; }
+    bloc.push(ligneRecette(r));
+  });
+  vider();
   return h.join("");
 };
 
@@ -838,12 +869,33 @@ const Connexion = {
       ? '<div class="bandeau" style="margin-top:1.4rem">⚠️<div>Le partage familial n\'est pas encore configuré : ' +
       "l'application fonctionnera <b>uniquement sur cet appareil</b>. Voir le guide <b>GUIDE-FIREBASE.md</b>.</div></div>"
       : "";
+    /* Le piège de l'icône sur l'écran d'accueil : sur iPhone (et sur beaucoup
+       d'Android), cette icône lance une application À PART, avec sa propre
+       mémoire. Elle ne connaît donc pas la famille ouverte dans le navigateur,
+       et propose d'en créer une — ce qui ferait une deuxième famille, vide.
+       On le dit avant, franchement, plutôt que de laisser le piège se refermer. */
+    const iconeMaison = !derniere && (
+      window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches));
+    const avertissement = iconeMaison
+      ? '<div class="bandeau" style="margin-bottom:1.2rem">📱<div>' +
+      "<b>Vous ouvrez Tribu depuis l'icône de l'écran d'accueil.</b><br>" +
+      "Le téléphone la traite comme une application séparée : elle ne connaît pas " +
+      "la famille déjà ouverte dans votre navigateur.<br><br>" +
+      "<b>Ne créez pas une deuxième famille</b> — elle serait vide. " +
+      "Demandez plutôt un <b>code d'invitation</b> : dans le navigateur (ou sur le " +
+      "téléphone d'un administrateur), <b>Mon profil ▸ 📱 Connecter un appareil</b>. " +
+      "Puis revenez ici et appuyez sur <b>J'ai reçu une invitation</b>." +
+      "</div></div>"
+      : "";
+
     return this.entete("L'organisation de la maison, à partager en famille.") +
+      avertissement +
       (derniere
         ? '<button class="btn principal plein" id="b-reprendre" style="margin-bottom:.6rem">Continuer sur cet appareil</button>'
         : "") +
-      '<button class="btn ' + (derniere ? "" : "principal ") + 'plein" id="b-creer" style="margin-bottom:.6rem">Créer ma famille</button>' +
-      '<button class="btn plein" id="b-invitation">J\'ai reçu une invitation</button>' +
+      '<button class="btn ' + (derniere || iconeMaison ? "" : "principal ") + 'plein" id="b-creer" style="margin-bottom:.6rem">Créer ma famille</button>' +
+      '<button class="btn ' + (iconeMaison ? "principal " : "") + 'plein" id="b-invitation">J\'ai reçu une invitation</button>' +
 
       '<div class="carte" style="margin-top:1.4rem">' +
       '<div class="carte-titre">Comment ça marche ?</div>' +
@@ -856,6 +908,11 @@ const Connexion = {
       '<div class="ligne"><span class="etape">3</span><div class="ligne-corps">' +
       "<b>Chacun ouvre son lien</b><small>Il choisit son prénom, son avatar et un code à " +
       "4 chiffres personnel.</small></div></div>" +
+      '<div class="ligne"><span class="etape">4</span><div class="ligne-corps">' +
+      "<b>Une icône sur l'écran d'accueil compte comme un appareil de plus</b>" +
+      "<small>Elle a sa propre mémoire : il lui faut sa propre invitation. " +
+      "Une invitation peut se coller <b>ou se taper</b>, c'est un code court.</small>" +
+      "</div></div>" +
       "</div>" + local;
   },
 
@@ -891,11 +948,15 @@ const Connexion = {
 
   /* --- 3. Ouvrir une invitation --- */
   invitation(d) {
-    return this.entete("Collez le lien d'invitation que vous avez reçu.") +
+    return this.entete("Tapez le code d'invitation reçu — ou collez le lien.") +
       '<form id="f-invitation">' +
-      '<label class="champ"><span>Lien ou code d\'invitation</span>' +
-      '<input type="text" name="jeton" required autocomplete="off" placeholder="https://…?invitation=…" ' +
+      '<label class="champ"><span>Code ou lien d\'invitation</span>' +
+      '<input type="text" name="jeton" required autocomplete="off" autocapitalize="characters" ' +
+      'spellcheck="false" placeholder="ABCD-EFGH-JKLM" ' +
+      'style="letter-spacing:.06em;text-align:center;font-weight:700" ' +
       'value="' + esc(d.jetonPreRempli || "") + '"></label>' +
+      '<p class="aide" style="margin:-.4rem 0 1rem">12 caractères, les tirets sont facultatifs. ' +
+      "Vous pouvez aussi coller le lien reçu par message.</p>" +
       '<button class="btn principal plein" type="submit">Continuer</button>' +
       '<p class="aide centre" style="margin-top:1rem">Une invitation ne sert qu\'une fois et expire. ' +
       "Demandez-en une nouvelle à l'administrateur de la famille si celle-ci ne marche plus.</p>" +

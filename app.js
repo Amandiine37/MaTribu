@@ -66,7 +66,7 @@ const EMOJIS_LISTES = [
   "🥩", "🧊", "🧽", "🧼", "🧴", "💊", "🎁", "🎂", "🎄", "🎒",
   "✏️", "🏕️", "🌻", "🔧", "📦", "👶", "🐾", "🐶", "🍼", "🎨"];
 
-const VERSION = "0.9 bêta";
+const VERSION = "0.9.1 bêta";
 
 /* Unites utilisables pour les ingredients, le stock et les courses.
    "" = pas d'unite, on compte simplement (4 carottes). */
@@ -293,6 +293,26 @@ function jetonAleatoire(octets) {
   return octetsVersHex(crypto.getRandomValues(new Uint8Array(octets || 24)));
 }
 
+/* Code d'invitation : 12 caracteres tires au sort, sans I, O, 0 ni 1 pour
+   qu'il puisse etre LU, DICTE et RETAPE. C'est indispensable : sur iPhone,
+   l'icone de l'ecran d'accueil est une application separee, sans barre
+   d'adresse — un lien n'y suffit pas, il faut pouvoir taper le code.
+   32^12 ≈ un milliard de milliards de combinaisons : le deviner est hors
+   de portee, et l'invitation ne sert qu'une fois. */
+const LETTRES_CODE = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function codeInvitation() {
+  const alea = crypto.getRandomValues(new Uint8Array(12));
+  let s = "";
+  for (let i = 0; i < 12; i++) s += LETTRES_CODE[alea[i] % LETTRES_CODE.length];
+  return s;
+}
+/* Presentation en trois groupes : plus facile a relire et a dicter. */
+function codeLisible(jeton) {
+  const t = String(jeton || "");
+  if (!/^[A-Z2-9]{12}$/.test(t)) return t;
+  return t.slice(0, 4) + "-" + t.slice(4, 8) + "-" + t.slice(8);
+}
+
 /* Repere de famille tire au sort. Il sert d'identifiant du dossier : deux
    familles ne peuvent pas porter le meme. Comme on n'a pas le droit de lire
    les familles des autres, impossible de verifier a l'avance qu'il est libre
@@ -363,10 +383,11 @@ const ui = {
   ongletCourses: "liste",        // "liste" ou "stock"
   rechercheRecette: "",
   filtresRecettes: [],           // "perso", "vege", "rapide", "leger"
+  triRecettes: "alpha",          // "alpha", "recent", "saison"
   focus: null
 };
 
-/* Les 50 plats fournis avec l'application : on ne les propose pas au partage,
+/* Les plats fournis avec l'application : on ne les propose pas au partage,
    toutes les familles les ont déjà. Le reste est considéré comme « à vous ». */
 const NOMS_DEPART = new Set((window.RECETTES_DEPART || [])
   .map((r) => r.nom.toLowerCase().trim()));
@@ -464,7 +485,37 @@ function recettesFiltrees() {
     if (f.includes("saison") && !estDeSaison(r)) return false;
     if (f.includes("thermomix") && !r.thermomix) return false;
     return true;
-  }).sort((a, b) => a.nom.localeCompare(b.nom));
+  }).sort(comparerRecettes(ui.triRecettes));
+}
+
+/* Les trois façons de ranger le cahier. « recent » se fie d'abord à la date
+   de création ; les plats fournis n'en ont pas, on retombe alors sur leur
+   ordre d'arrivée dans la liste — ce qui met bien en tête ceux que la
+   dernière mise à jour vient d'ajouter. */
+function comparerRecettes(tri) {
+  const rang = new Map();
+  etat.recettes.forEach((r, k) => rang.set(r.id, k));
+  const alpha = (a, b) => a.nom.localeCompare(b.nom, "fr");
+
+  if (tri === "recent") {
+    return (a, b) => String(b.creeLe || "").localeCompare(String(a.creeLe || "")) ||
+      (rang.get(b.id) - rang.get(a.id));
+  }
+  if (tri === "saison") {
+    return (a, b) => (estDeSaison(b) ? 1 : 0) - (estDeSaison(a) ? 1 : 0) ||
+      /* à saison égale, les plats vraiment de saison passent devant ceux
+         qui conviennent toute l'année : ce sont eux qu'on cherche. */
+      (saisonsToutelAnnee(a) ? 1 : 0) - (saisonsToutelAnnee(b) ? 1 : 0) ||
+      alpha(a, b);
+  }
+  return alpha;
+}
+
+/* La lettre sous laquelle ranger un plat : sans accent, en majuscule.
+   « Œufs cocotte » et « Omelette » se retrouvent ainsi au même endroit. */
+function lettreRecette(r) {
+  const m = motsDe(r.nom)[0] || "";
+  return (m.charAt(0) || "#").toUpperCase();
 }
 
 function membre(idm) { return etat.membres.find((m) => m.id === idm) || null; }
@@ -1492,7 +1543,7 @@ const Invitations = {
     if (!estAdmin()) return null;
     const cible = pourMembreId ? membre(pourMembreId) : null;
     const inv = {
-      jeton: jetonAleatoire(24),
+      jeton: codeInvitation(),
       famille: etat.famille.code,
       nomFamille: etat.famille.nom,
       pour: cible ? cible.id : "nouveau",
@@ -1522,12 +1573,19 @@ const Invitations = {
     return base + "?invitation=" + jeton;
   },
 
-  /* Extrait le jeton d'un lien colle, ou renvoie le texte s'il s'agit deja d'un jeton. */
+  /* Accepte tout ce qu'on peut lui donner : un lien collé, un code tapé avec
+     ou sans tirets, en minuscules, avec des espaces. Les invitations créées
+     avant le passage aux codes courts (48 caractères hexadécimaux) restent
+     valables : c'est la longueur qui distingue les deux formats. */
   extraireJeton(texte) {
     const t = (texte || "").trim();
-    const m = t.match(/invitation=([a-f0-9]{16,})/i);
-    if (m) return m[1].toLowerCase();
-    return /^[a-f0-9]{16,}$/i.test(t) ? t.toLowerCase() : null;
+    const dansLien = t.match(/invitation=([A-Za-z0-9-]+)/);
+    const brut = dansLien ? dansLien[1] : t;
+    const nu = brut.replace(/[^A-Za-z0-9]/g, "");
+    /* Ancien format : identifiant hexadécimal, sensible à la casse. */
+    if (/^[a-f0-9]{32,}$/i.test(nu)) return nu.toLowerCase();
+    const code = nu.toUpperCase();
+    return /^[A-Z2-9]{12}$/.test(code) ? code : null;
   },
 
   /* On ne lit QUE l'invitation : la famille n'est pas encore lisible pour cet
@@ -1550,7 +1608,7 @@ const Invitations = {
 
 /* ============ Remise à niveau des recettes d'une famille existante ============
 
-   Les 50 plats fournis sont recopiés dans la famille le jour de sa création :
+   Les plats fournis sont recopiés dans la famille le jour de sa création :
    les améliorations apportées ensuite au fichier `recettes.js` ne les
    atteignent donc jamais. Cette fonction complète ce qui manque — et
    UNIQUEMENT ce qui manque, sans jamais écraser ce que la famille a saisi. */
@@ -1689,9 +1747,9 @@ async function majRecettesSiBesoin() {
   if (!besoin) return;
   const bilan = reparerRecettes();
   const parts = [];
-  if (bilan.saisons) parts.push(bilan.saisons + " saisons");
-  if (bilan.etapes) parts.push(bilan.etapes + " déroulés");
-  if (bilan.unites) parts.push(bilan.unites + " unités");
+  if (bilan.saisons) parts.push(bilan.saisons + " saison" + (bilan.saisons > 1 ? "s" : ""));
+  if (bilan.etapes) parts.push(bilan.etapes + " déroulé" + (bilan.etapes > 1 ? "s" : ""));
+  if (bilan.unites) parts.push(bilan.unites + " unité" + (bilan.unites > 1 ? "s" : ""));
   if (parts.length) {
     await Store.ecrire(["recettes"]);
     rendre();
@@ -2262,6 +2320,7 @@ document.addEventListener("click", (e) => {
       break;
     }
     case "recettes-filtre-vider": ui.filtresRecettes = []; ui.rechercheRecette = ""; rendre(); break;
+    case "recettes-tri": ui.triRecettes = b.dataset.valeur; rendre(); break;
 
     case "note-toggle": Actions.basculerNote(v); break;
     case "note-nouvelle": Formulaires.note(null); break;
@@ -2290,6 +2349,7 @@ document.addEventListener("click", (e) => {
       aller("accueil");
       break;
     case "menu-profil": Formulaires.menuProfil(); break;
+    case "mon-appareil": Formulaires.monAppareil(); break;
     case "maj-liste": Formulaires.misesAJour(); break;
     case "deconnexion": fermerFeuille(); deconnecter(); break;
 
@@ -2462,6 +2522,13 @@ async function demarrer() {
 async function demarrerVraiment() {
   const th = localStorage.getItem("tribu:theme");
   if (th && th !== "auto") document.documentElement.dataset.theme = th;
+
+  /* Sur téléphone, la mémoire d'un site peut être effacée pour faire de la
+     place. Cette demande met la session à l'abri quand le navigateur la
+     comprend, et ne coûte rien quand il l'ignore (c'est le cas de Safari). */
+  if (navigator.storage && navigator.storage.persist) {
+    try { navigator.storage.persist(); } catch (e) { /* sans importance */ }
+  }
 
   await Store.preparer();
 

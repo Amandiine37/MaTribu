@@ -1177,13 +1177,21 @@ Formulaires.invitation = function () {
         "</b>, valable jusqu'au " + esc(fin) +
         (inv.profil ? ".<br>Cette personne devra saisir son code à 4 chiffres." : ".") +
         "</div></div>" +
-        '<div class="code-famille" style="font-size:.72rem;word-break:break-all;letter-spacing:0">' +
+        /* Le code d'abord : c'est le seul format qui passe partout, y compris
+           dans une application sans barre d'adresse, ou dicté au téléphone. */
+        '<div class="code-famille">' + esc(codeLisible(inv.jeton)) + "</div>" +
+        '<p class="aide centre" style="margin:.4rem 0 .7rem">À taper dans ' +
+        "<b>J'ai reçu une invitation</b>. Les tirets sont facultatifs.</p>" +
+        '<div class="rangee-btn" style="margin-bottom:.5rem">' +
+        '<button class="btn doux" data-action="copier" data-texte="' + esc(inv.jeton) + '">Copier le code</button>' +
+        '<button class="btn principal" data-role="partager">Partager le lien</button></div>' +
+        '<div class="code-famille" style="font-size:.7rem;word-break:break-all;letter-spacing:0">' +
         esc(lien) + "</div>" +
-        '<div class="rangee-btn" style="margin-top:.7rem">' +
-        '<button class="btn doux" data-action="copier" data-texte="' + esc(lien) + '">Copier le lien</button>' +
-        '<button class="btn principal" data-role="partager">Partager</button></div>' +
+        '<button class="btn plein mini" data-action="copier" style="margin-top:.4rem" ' +
+        'data-texte="' + esc(lien) + '">Copier le lien</button>' +
         '<p class="aide" style="margin-top:.6rem">Une fois utilisée, elle ne fonctionnera plus. ' +
-        "Créez-en une nouvelle pour chaque personne et chaque appareil.</p>";
+        "Créez-en une nouvelle pour chaque personne et chaque appareil — " +
+        "une icône sur l'écran d'accueil compte comme un appareil.</p>";
 
       const bp = zone.querySelector('[data-role="partager"]');
       bp.onclick = () => {
@@ -1199,6 +1207,66 @@ Formulaires.invitation = function () {
           toast("Copiez le lien ci-dessus");
         }
       };
+    };
+  });
+};
+
+/* ==================== CONNECTER UN AUTRE APPAREIL ==================== */
+
+/* Le cas typique, et déroutant : on ajoute Tribu à l'écran d'accueil de son
+   iPhone, et l'icône ouvre une application vierge qui propose de créer une
+   famille. Elle n'a pas accès à la mémoire du navigateur — pour le téléphone,
+   c'est une autre application. Il lui faut donc sa propre invitation, comme
+   à un nouveau téléphone. Ce raccourci évite d'avoir à y penser. */
+Formulaires.monAppareil = function () {
+  const admin = estAdmin();
+  const html = '<div id="f-appareil">' +
+    '<div class="bandeau">📱<div>Une icône ajoutée à l\'écran d\'accueil est traitée par ' +
+    "le téléphone comme une <b>application séparée</b> : elle ne connaît pas la famille " +
+    "ouverte dans votre navigateur, et vous proposera d'en créer une. " +
+    "<b>N'en créez pas une deuxième</b> — elle serait vide. Connectez-la avec un code." +
+    "</div></div>" +
+
+    '<div class="carte"><div class="carte-titre">En trois gestes</div>' +
+    '<div class="ligne"><span class="etape">1</span><div class="ligne-corps">' +
+    "<b>Créez le code ci-dessous</b><small>Il vaut pour votre profil " +
+    esc(moi.emoji || "🙂") + " " + esc(moi.prenom) + ", et ne sert qu'une fois.</small></div></div>" +
+    '<div class="ligne"><span class="etape">2</span><div class="ligne-corps">' +
+    "<b>Ouvrez Tribu depuis l'icône</b><small>Celle de l'écran d'accueil, pas le navigateur.</small></div></div>" +
+    '<div class="ligne"><span class="etape">3</span><div class="ligne-corps">' +
+    "<b>« J'ai reçu une invitation »</b><small>Tapez le code, puis votre code à " +
+    "4 chiffres habituel.</small></div></div></div>" +
+
+    (admin
+      ? '<button class="btn principal plein" data-role="creer">Créer mon code d\'invitation</button>'
+      : '<p class="aide">Seul un administrateur peut créer une invitation. Demandez-lui d\'en ' +
+      "créer une à votre nom : sur son téléphone, <b>Administration ▸ Inviter</b>, en " +
+      "choisissant votre prénom.</p>") +
+    '<div id="resultat-appareil" style="margin-top:1rem"></div>' +
+    '<button class="btn plein" data-action="fermer" style="margin-top:1rem">Fermer</button></div>';
+
+  ouvrirFeuille("Connecter un appareil", html, (f) => {
+    const bouton = f.querySelector('[data-role="creer"]');
+    if (!bouton) return;
+    const zone = f.querySelector("#resultat-appareil");
+
+    bouton.onclick = async () => {
+      if (!moi.pinHash && !moi.pin) {
+        toast("Donnez d'abord un code à 4 chiffres à votre profil");
+        return;
+      }
+      bouton.disabled = true;
+      const inv = await Invitations.creer(7, moi.id);
+      bouton.disabled = false;
+      if (!inv) { toast("Création impossible"); return; }
+      const lien = Invitations.lien(inv.jeton);
+      zone.innerHTML = '<div class="code-famille">' + esc(codeLisible(inv.jeton)) + "</div>" +
+        '<p class="aide centre" style="margin:.4rem 0 .7rem">Valable 7 jours, une seule fois. ' +
+        "Les tirets sont facultatifs.</p>" +
+        '<div class="rangee-btn">' +
+        '<button class="btn doux" data-action="copier" data-texte="' + esc(inv.jeton) + '">Copier le code</button>' +
+        '<button class="btn doux" data-action="copier" data-texte="' + esc(lien) + '">Copier le lien</button></div>';
+      bouton.textContent = "Créer un autre code";
     };
   });
 };
@@ -1318,6 +1386,7 @@ Formulaires.menuProfil = function () {
     (estAdmin()
       ? '<button class="btn plein" data-action="aller" data-vue="admin" style="margin-bottom:.5rem">⚙️ Administration</button>'
       : "") +
+    '<button class="btn plein" data-action="mon-appareil" style="margin-bottom:.5rem">📱 Connecter un appareil</button>' +
     '<button class="btn plein" data-action="theme" style="margin-bottom:.5rem">🌓 Thème : ' + nomTheme + "</button>" +
     '<button class="btn plein" data-role="mon-profil" style="margin-bottom:.5rem">✏️ Modifier mon profil</button>' +
     "<hr class=\"sep\">" +
@@ -1363,6 +1432,348 @@ Formulaires.monProfilSimple = function () {
       fermerFeuille();
       sauver("membres");
       toast("Profil enregistré");
+    };
+  });
+};
+
+/* ======================== CONSULTER UNE RECETTE ========================
+
+   Le déroulé de la recette, en lecture. C'est la fenêtre qu'on ouvre en
+   cuisine, une main occupée : de grandes lignes, et le bouton « Modifier »
+   à la fin, pas au début. */
+
+Formulaires.consulterRecette = function (rid) {
+  const r = etat.recettes.find((x) => x.id === rid);
+  if (!r) { toast("Recette introuvable"); return; }
+
+  const ings = (r.ingredients || []).filter((i) => i && i.nom);
+  const etapes = (r.etapes || []).filter((e) => String(e).trim());
+
+  const etiquettes =
+    (r.vegetarien ? '<span class="etiquette vert">🥦 végé</span>' : "") +
+    (r.rapide ? '<span class="etiquette">⏱️ rapide</span>' : "") +
+    (r.thermomix ? '<span class="etiquette chaud">🍲 robot</span>' : "") +
+    (r.type === "leger" ? '<span class="etiquette">léger</span>' : "") +
+    (r.saisons || []).map((v) => {
+      const x = infoSaison(v);
+      return x ? '<span class="etiquette' + (v === saisonActuelle() ? " vert" : "") + '">' +
+        x.emoji + " " + x.nom.toLowerCase() + "</span>" : "";
+    }).join("") +
+    (r.origine === "importee" && r.deQui
+      ? '<span class="etiquette">de ' + esc(r.deQui) + "</span>" : "");
+
+  let html = '<div id="f-voir">' +
+    '<div style="text-align:center;margin-bottom:.8rem">' +
+    '<div style="font-size:2.6rem;line-height:1">' + esc(r.emoji || "🍽️") + "</div>" +
+    '<div class="etiquettes" style="justify-content:center;margin-top:.5rem">' + etiquettes + "</div>" +
+    "</div>";
+
+  html += '<div class="sous-titre" style="margin-top:.4rem"><h3>Ingrédients</h3>' +
+    '<span class="etiquette">' + ings.length + "</span></div>";
+  html += ings.length
+    ? '<div class="carte">' + ings.map((i) =>
+      '<div class="ligne"><div class="ligne-corps"><b>' + esc(i.nom) + "</b>" +
+      (i.rayon ? "<small>" + esc(i.rayon) + "</small>" : "") + "</div>" +
+      '<span class="etiquette">' + esc(formaterQte(i.qte, i.unite) || "—") + "</span></div>").join("") +
+    "</div>"
+    : rienDu("🥕", "Aucun ingrédient noté.");
+
+  html += '<div class="sous-titre"><h3>Préparation</h3>' +
+    (etapes.length ? '<span class="etiquette">' + etapes.length + " étape" +
+      (etapes.length > 1 ? "s" : "") + "</span>" : "") + "</div>";
+  html += etapes.length
+    ? '<div class="carte">' + etapes.map((e, k) =>
+      '<div class="ligne" style="align-items:flex-start">' +
+      '<span class="etape" style="margin-top:.1rem">' + (k + 1) + "</span>" +
+      '<div class="ligne-corps"><b style="font-weight:500;line-height:1.5">' +
+      esc(e) + "</b></div></div>").join("") + "</div>"
+    /* Pas de déroulé : on le dit sans détour, et on propose de l'écrire. */
+    : rienDu("📝", "Le déroulé n'est pas encore écrit.<br>" +
+      "Vous pouvez l'ajouter dans <b>Modifier</b>, une étape par ligne.");
+
+  if (r.lien) {
+    html += '<a class="btn plein doux" href="' + esc(r.lien) + '" target="_blank" rel="noopener" ' +
+      'style="margin-top:.6rem;text-decoration:none">Ouvrir la recette d\'origine ↗</a>';
+  }
+
+  html += '<div class="rangee-btn" style="margin-top:1.2rem">' +
+    '<button class="btn" data-action="fermer">Fermer</button>' +
+    '<button class="btn principal" data-role="modifier">✏️ Modifier</button></div></div>';
+
+  ouvrirFeuille(r.nom, html, (f) => {
+    f.querySelector('[data-role="modifier"]').onclick = () => Formulaires.recette(r.id);
+  });
+};
+
+/* ================== PARTAGER UNE RECETTE AVEC LES AUTRES ==================
+
+   Publier, c'est rendre la recette visible par TOUTES les familles de l'app.
+   On le dit avant, on montre ce qui part vraiment, et on rappelle que c'est
+   la version ENREGISTRÉE qui est publiée — pas ce qui vient d'être tapé. */
+
+Formulaires.publierRecette = function (rid) {
+  const r = etat.recettes.find((x) => x.id === rid);
+  if (!r) return;
+
+  if (Store.mode !== "nuage") {
+    toast("Le partage demande la connexion familiale (Firebase)");
+    return;
+  }
+  const dejaPartagee = !!r.partageId;
+
+  const html = '<div id="f-publier">' +
+    '<div class="bandeau' + (dejaPartagee ? " info" : "") + '">' + (dejaPartagee ? "🌍" : "⚠️") +
+    "<div>" +
+    (dejaPartagee
+      ? "<b>" + esc(r.nom) + "</b> est actuellement visible par toutes les familles " +
+      "de l'application. Vous pouvez la retirer à tout moment."
+      : "Publier <b>" + esc(r.nom) + "</b> la rendra visible par <b>toutes les familles</b> " +
+      "de l'application, qui pourront la recopier chez elles.") +
+    "</div></div>" +
+
+    '<div class="carte"><div class="carte-titre">Ce qui part vraiment</div>' +
+    '<div class="ligne"><span class="etape ok">✓</span><div class="ligne-corps">' +
+    "<b>Le plat</b><small>Nom, icône, ingrédients, déroulé, saisons, lien.</small></div></div>" +
+    '<div class="ligne"><span class="etape ok">✓</span><div class="ligne-corps">' +
+    "<b>Le nom de votre tribu</b><small>« " + esc(etat.famille.nom || "Une famille") +
+    " » — pour dire d'où vient la recette.</small></div></div>" +
+    '<div class="ligne"><span class="etape">✗</span><div class="ligne-corps">' +
+    "<b>Rien d'autre</b><small>Ni le repère de la famille, ni les prénoms, " +
+    "ni les points, ni les courses.</small></div></div></div>" +
+
+    (dejaPartagee ? "" :
+      '<p class="aide" style="margin-bottom:1rem">C\'est la version <b>enregistrée</b> qui ' +
+      "est publiée. Si vous venez de modifier la recette, enregistrez-la d'abord.</p>") +
+
+    '<div class="rangee-btn">' +
+    '<button class="btn" data-action="fermer">Annuler</button>' +
+    '<button class="btn ' + (dejaPartagee ? "danger" : "principal") + '" data-role="ok">' +
+    (dejaPartagee ? "Retirer du catalogue" : "🌍 Publier") + "</button></div></div>";
+
+  ouvrirFeuille(dejaPartagee ? "Recette partagée" : "Partager la recette", html, (f) => {
+    const b = f.querySelector('[data-role="ok"]');
+    b.onclick = async () => {
+      b.disabled = true;
+      const ok = dejaPartagee ? await Partage.retirer(r.id) : await Partage.publier(r.id);
+      b.disabled = false;
+      if (!ok) return;                       // le message d'échec est déjà affiché
+      toast(dejaPartagee ? "Recette retirée du catalogue" : "Recette partagée 🌍");
+      Formulaires.recette(r.id);
+    };
+  });
+};
+
+/* ================== LE CATALOGUE DES RECETTES PARTAGÉES ================== */
+
+Formulaires.catalogue = function () {
+  if (Store.mode !== "nuage") {
+    ouvrirFeuille("Recettes partagées",
+      '<div class="bandeau">🌍<div>Le catalogue commun demande la connexion familiale ' +
+      "(Firebase). Sur cet appareil, l'application fonctionne en local : vos recettes " +
+      "restent chez vous.</div></div>" +
+      '<button class="btn plein" data-action="fermer">Fermer</button>');
+    return;
+  }
+
+  ouvrirFeuille("Recettes partagées",
+    '<div id="f-catalogue"><p class="aide centre" style="padding:2rem 0">Chargement du ' +
+    "catalogue…</p></div>", async () => {
+      const fiches = await Store.listerRecettesPartagees();
+      const zone = document.querySelector("#f-catalogue");
+      if (!zone) return;                     // la feuille a été fermée entre-temps
+
+      if (fiches === null) {
+        /* On n'invente pas la cause : on montre celle que le serveur a donnée. */
+        zone.innerHTML = '<div class="bandeau">⚠️<div><b>Catalogue illisible.</b> ' +
+          "Soit la connexion manque, soit les règles Firebase n'autorisent pas encore " +
+          "la lecture de <b>recettesPartagees</b>.</div></div>" +
+          (Store.derniereErreur
+            ? '<p class="aide">Message du serveur : ' + esc(String(Store.derniereErreur.code ||
+              Store.derniereErreur.message || Store.derniereErreur)) + "</p>"
+            : "") +
+          '<button class="btn plein" data-action="fermer">Fermer</button>';
+        return;
+      }
+
+      const monCode = etat.famille.code;
+      const miennes = fiches.filter((x) => x.familleRef === monCode);
+      const autres = fiches.filter((x) => x.familleRef !== monCode);
+      const chezMoi = new Set(etat.recettes.map((r) => String(r.nom || "").toLowerCase().trim()));
+
+      const carte = (fiche, aMoi) => {
+        const dejaLa = chezMoi.has(String(fiche.nom || "").toLowerCase().trim());
+        return '<div class="ligne" style="align-items:flex-start">' +
+          '<span style="font-size:1.4rem">' + esc(fiche.emoji || "🍽️") + "</span>" +
+          '<div class="ligne-corps"><b>' + esc(fiche.nom) + "</b><small>" +
+          (aMoi ? "publiée par vous" : "par " + esc(fiche.parFamille || "une famille")) +
+          " • " + (fiche.ingredients || []).length + " ingrédient" +
+          ((fiche.ingredients || []).length > 1 ? "s" : "") +
+          ((fiche.etapes || []).length ? " • " + fiche.etapes.length + " étape" +
+            (fiche.etapes.length > 1 ? "s" : "") : "") +
+          "</small>" +
+          '<span class="etiquettes">' +
+          (fiche.vegetarien ? '<span class="etiquette vert">végé</span>' : "") +
+          (fiche.rapide ? '<span class="etiquette">rapide</span>' : "") +
+          (dejaLa && !aMoi ? '<span class="etiquette or">déjà chez vous</span>' : "") +
+          "</span></div>" +
+          (aMoi
+            ? '<button class="btn mini danger" data-role="retirer" data-id="' + esc(fiche.id) + '">Retirer</button>'
+            : '<button class="btn mini ' + (dejaLa ? "" : "doux") + '" data-role="importer" ' +
+            'data-id="' + esc(fiche.id) + '"' + (dejaLa ? " disabled" : "") + ">＋ Ajouter</button>") +
+          "</div>";
+      };
+
+      let h = "";
+      if (!fiches.length) {
+        h += rienDu("🌍", "Le catalogue est vide pour l'instant.<br>" +
+          "Publiez une de vos recettes : ouvrez-la, <b>Modifier</b>, puis " +
+          "<b>Partager avec les autres familles</b>.");
+      }
+      if (autres.length) {
+        h += '<div class="sous-titre" style="margin-top:0"><h3>Proposées par d\'autres familles</h3>' +
+          '<span class="etiquette">' + autres.length + "</span></div>" +
+          '<div class="carte">' + autres.map((x) => carte(x, false)).join("") + "</div>";
+      } else if (fiches.length) {
+        h += rienDu("🌍", "Aucune autre famille n'a encore publié de recette.");
+      }
+      if (miennes.length) {
+        h += '<div class="sous-titre"><h3>Vos publications</h3>' +
+          '<span class="etiquette vert">' + miennes.length + "</span></div>" +
+          '<div class="carte">' + miennes.map((x) => carte(x, true)).join("") + "</div>";
+      }
+      h += '<p class="aide" style="margin-top:.8rem">Une recette ajoutée est <b>recopiée</b> ' +
+        "chez vous : vous pouvez la modifier sans rien changer chez la famille qui l'a publiée.</p>" +
+        '<button class="btn plein" data-action="fermer" style="margin-top:.6rem">Fermer</button>';
+      zone.innerHTML = h;
+
+      zone.querySelectorAll('[data-role="importer"]').forEach((b) => {
+        b.onclick = () => {
+          const fiche = fiches.find((x) => x.id === b.dataset.id);
+          if (!fiche) return;
+          if (Partage.importer(fiche)) {
+            toast("« " + fiche.nom + " » ajoutée à votre cahier 📖");
+            b.disabled = true;
+            b.textContent = "Ajoutée ✓";
+          }
+        };
+      });
+
+      zone.querySelectorAll('[data-role="retirer"]').forEach((b) => {
+        b.onclick = async () => {
+          const fiche = fiches.find((x) => x.id === b.dataset.id);
+          if (!fiche) return;
+          b.disabled = true;
+          /* La recette locale porte le lien vers sa publication. Si elle a été
+             publiée depuis un autre téléphone, on retire quand même la fiche. */
+          const locale = etat.recettes.find((r) => r.partageId === fiche.id);
+          const ok = locale
+            ? await Partage.retirer(locale.id)
+            : await Store.retirerRecettePartagee(fiche.id);
+          if (!ok) { b.disabled = false; toast("Retrait impossible"); return; }
+          toast("Publication retirée");
+          Formulaires.catalogue();
+        };
+      });
+    });
+};
+
+/* ======================= LES MISES À JOUR DISPONIBLES ======================= */
+
+Formulaires.misesAJour = function () {
+  const liste = misesAJour();
+  if (!liste.length) {
+    ouvrirFeuille("Mises à jour",
+      rienDu("✅", "Tout est à jour.<br>Rien à valider pour le moment.") +
+      '<button class="btn plein" data-action="fermer">Fermer</button>');
+    return;
+  }
+
+  const html = '<div id="f-maj">' +
+    '<p class="aide" style="margin-bottom:.8rem">Ce que l\'application peut ajouter ou ' +
+    "compléter chez vous. Rien n'est fait sans votre accord.</p>" +
+    '<div class="carte">' + liste.map((m) =>
+      '<div class="ligne"><span style="font-size:1.4rem">' + esc(m.emoji) + "</span>" +
+      '<div class="ligne-corps"><b>' + esc(m.titre) + "</b><small>" + esc(m.detail) + "</small></div>" +
+      '<button class="btn mini doux" data-role="ouvrir" data-cible="' + esc(m.action) +
+      '">Voir</button></div>').join("") + "</div>" +
+    '<button class="btn plein" data-action="fermer" style="margin-top:1rem">Fermer</button></div>';
+
+  ouvrirFeuille("Mises à jour", html, (f) => {
+    /* « Voir » doit montrer, pas valider : on ouvre la fenêtre correspondante. */
+    f.querySelectorAll('[data-role="ouvrir"]').forEach((b) => {
+      b.onclick = () => {
+        if (b.dataset.cible === "recettes-maj") Formulaires.majRecettes();
+      };
+    });
+  });
+};
+
+/* ================= METTRE À JOUR LE CAHIER DE RECETTES ================= */
+
+Formulaires.majRecettes = function () {
+  if (!estAdmin()) { toast("Seul un administrateur peut mettre à jour le cahier"); return; }
+  const d = diagnosticRecettes();
+
+  if (d.rienAFaire) {
+    ouvrirFeuille("Cahier de recettes",
+      rienDu("✅", "Votre cahier est déjà complet.<br>" +
+        etat.recettes.length + " recettes, rien à ajouter.") +
+      '<button class="btn plein" data-action="fermer">Fermer</button>');
+    return;
+  }
+
+  const apercu = d.nouvelles.slice(0, 12);
+  const reste = d.nouvelles.length - apercu.length;
+
+  let html = '<div id="f-maj-recettes">';
+  if (d.nouvelles.length) {
+    html += '<div class="bandeau info">✨<div><b>' + d.nouvelles.length + " nouveau" +
+      (d.nouvelles.length > 1 ? "x" : "") + " plat" + (d.nouvelles.length > 1 ? "s" : "") +
+      "</b> disponible" + (d.nouvelles.length > 1 ? "s" : "") +
+      " dans la bibliothèque de l'application.</div></div>" +
+      '<div class="carte">' + apercu.map((r) =>
+        '<div class="ligne"><span style="font-size:1.3rem">' + esc(r.emoji || "🍽️") + "</span>" +
+        '<div class="ligne-corps"><b>' + esc(r.nom) + "</b><small>" +
+        (r.ingredients || []).length + " ingrédient" +
+        ((r.ingredients || []).length > 1 ? "s" : "") +
+        ((r.etapes || []).length ? " • " + r.etapes.length + " étape" +
+          (r.etapes.length > 1 ? "s" : "") : "") +
+        (r.thermomix ? " • 🍲 robot" : "") + "</small></div></div>").join("") +
+      (reste > 0 ? '<p class="aide centre" style="margin:.5rem 0 0">…et ' + reste +
+        " autre" + (reste > 1 ? "s" : "") + "</p>" : "") +
+      "</div>";
+  }
+  if (d.aCompleter) {
+    html += '<div class="bandeau">🔄<div><b>' + d.aCompleter + " recette" +
+      (d.aCompleter > 1 ? "s" : "") + " à compléter</b><br>" +
+      [d.saisons ? d.saisons + " sans saison" : "",
+        d.etapes ? d.etapes + " sans déroulé" : "",
+        d.unites ? d.unites + " ingrédient" + (d.unites > 1 ? "s" : "") + " sans unité" : ""]
+        .filter(Boolean).join(", ") +
+      ". Vos propres recettes ne sont pas touchées.</div></div>";
+  }
+  html += '<p class="aide">Vos recettes personnelles et vos modifications sont conservées : ' +
+    "on ajoute et on complète, on ne remplace jamais.</p>" +
+    '<div class="rangee-btn" style="margin-top:1rem">' +
+    '<button class="btn" data-action="fermer">Plus tard</button>' +
+    '<button class="btn principal" data-role="ok">Mettre à jour</button></div></div>';
+
+  ouvrirFeuille("Mettre à jour le cahier", html, (f) => {
+    const b = f.querySelector('[data-role="ok"]');
+    b.onclick = async () => {
+      b.disabled = true;
+      const bilan = reparerRecettes();
+      const ajoutees = ajouterRecettesManquantes();
+      await Store.ecrire(["recettes"]);
+      fermerFeuille();
+      rendre();
+      const parts = [];
+      if (ajoutees) parts.push(ajoutees + " plat" + (ajoutees > 1 ? "s" : "") +
+        " ajouté" + (ajoutees > 1 ? "s" : ""));
+      if (bilan.saisons) parts.push(bilan.saisons + " saison" + (bilan.saisons > 1 ? "s" : ""));
+      if (bilan.etapes) parts.push(bilan.etapes + " déroulé" + (bilan.etapes > 1 ? "s" : ""));
+      if (bilan.unites) parts.push(bilan.unites + " unité" + (bilan.unites > 1 ? "s" : ""));
+      toast(parts.length ? "Cahier à jour : " + parts.join(", ") + " ✅" : "Cahier déjà à jour");
     };
   });
 };

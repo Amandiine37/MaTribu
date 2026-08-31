@@ -39,6 +39,10 @@ Application pour téléphone (à installer sur l'écran d'accueil) qui rassemble
 - Chacun choisit son prénom, un avatar et un **code à 4 chiffres** pour entrer.
 - Il faut **une invitation par appareil** : c'est ce qui fait que connaître le
   nom de votre tribu ne suffit jamais pour entrer.
+- Une invitation se présente sous **deux formes équivalentes** : un **code de
+  12 caractères** (`ABCD-EFGH-JKLM`) que l'on peut taper ou dicter, et un
+  **lien** que l'on peut envoyer par message. Les tirets sont facultatifs, les
+  minuscules aussi.
 - Un administrateur peut : créer/modifier les tâches, valider les tâches faites,
   gérer les cadeaux, ajouter ou modifier des membres, ajuster les points.
 
@@ -157,7 +161,7 @@ deviner.*
 ### Les menus
 
 - Appuyez sur **🎲 Générer** : l'application remplit la semaine en piochant dans
-  la bibliothèque de recettes (118 plats fournis). Voir les réglages juste en
+  la bibliothèque de recettes (175 plats fournis). Voir les réglages juste en
   dessous.
 - Sous les boutons, une ligne récapitule ce que donne la semaine :
   **🐟 2 · 🍗 3 · 🥦 2**.
@@ -198,7 +202,7 @@ bœuf ne fait pas un repas de viande.
   les ingrédients passent devant. Moins de courses, moins de perte. Ça pèse
   lourd sans écraser la saison ni les nombres demandés.
 - **Plats plus légers le soir**, **plats rapides du lundi au vendredi**.
-- **Privilégier les recettes Thermomix** (53 plats fournis s'y prêtent).
+- **Privilégier les recettes Thermomix** (67 plats fournis s'y prêtent).
 - **Ne pas resservir un plat vu depuis…** 2, 3, 4 ou 6 semaines.
 
 Si vous demandez plus de repas qu'il n'y a de cases à remplir, l'application
@@ -209,7 +213,7 @@ place ce qu'elle peut et vous le dit.
 Chaque recette peut porter une ou plusieurs **saisons** — 🌸 printemps, ☀️ été,
 🍂 automne, ❄️ hiver. Une recette sans saison cochée convient toute l'année.
 
-Les 50 plats fournis sont déjà renseignés : la ratatouille et le gratin de
+Les 175 plats fournis sont déjà renseignés : la ratatouille et le gratin de
 courgettes en été, la tartiflette et la soupe à l'oignon en hiver, les lasagnes
 toute l'année…
 
@@ -236,7 +240,7 @@ Appuyez sur une recette dans la liste : sa fiche s'ouvre avec les **ingrédients
 et le **déroulé numéroté**. Depuis l'onglet Menus, un bouton
 **📖 Consulter la recette** ouvre la même fiche pour le plat prévu ce jour-là.
 
-Les 118 plats fournis ont tous leur déroulé (4 à 5 étapes). Il est **écrit pour
+Les 175 plats fournis ont tous leur déroulé (4 à 5 étapes). Il est **écrit pour
 l'application** : aucune recette n'est recopiée d'un site. C'est indicatif —
 pour les temps exacts ou les vitesses d'un robot, collez le lien de la recette
 d'origine dans la fiche, un bouton l'ouvrira.
@@ -246,7 +250,7 @@ par ligne**, les lignes vides sont ignorées.
 
 #### Les plats fournis
 
-L'application arrive avec **118 plats**, dont **53 marqués 🍲 robot** : veloutés,
+L'application arrive avec **175 plats**, dont **67 marqués 🍲 robot** : veloutés,
 risottos, sauces, plats mijotés et one-pot — tout ce que le Thermomix (ou un
 autre robot cuiseur) fait bien. Ils sont écrits maison : **aucune recette n'est
 recopiée d'un site**, on n'y trouve que le nom du plat et ses ingrédients. À
@@ -256,7 +260,7 @@ La case **🍲 Robot** existe aussi sur vos propres recettes.
 
 #### Si votre famille existait déjà
 
-Les 50 recettes sont **recopiées dans votre famille le jour de sa création** :
+Les 175 recettes sont **recopiées dans votre famille le jour de sa création** :
 les améliorations apportées ensuite au fichier de recettes ne les atteignent
 pas toutes seules. Une famille créée avant l'arrivée des saisons se retrouve
 donc avec des recettes sans saison — et le filtre affiche alors tout.
@@ -291,16 +295,29 @@ Dans **Mes recettes**, la barre de recherche cherche dans les noms de plats
 **et dans les ingrédients** (tapez « coco » pour retrouver tout ce qui contient
 du lait de coco).
 
-En dessous, quatre filtres se combinent librement :
+En dessous, six filtres se combinent librement :
 
 | Filtre | Ce qu'il garde |
 |---|---|
 | ☀️ **De saison** | Ce qui se cuisine en ce moment (la saison affichée suit la date) |
-| 🍲 **Thermomix** | Les plats qui se prêtent bien au robot cuiseur (53 des 118 fournis) |
-| ✍️ **Mes recettes** | Uniquement celles que vous avez créées (pas les 50 fournies) |
+| 🍲 **Thermomix** | Les plats qui se prêtent bien au robot cuiseur (67 des 175 fournis) |
+| ✍️ **Mes recettes** | Uniquement celles que vous avez créées (pas les 175 fournies) |
 | 🌿 **Végé** | Les plats végétariens |
 | ⚡ **Rapide** | Moins de 30 minutes |
 | 🥗 **Léger** | Les plats marqués « léger » |
+
+### Ranger le cahier
+
+Juste au-dessus de la liste, trois façons de la trier :
+
+| Tri | Ce qu'il donne |
+|---|---|
+| 🔤 **A → Z** | L'ordre alphabétique, **avec un repère par lettre** : A, B, C… Avec 175 plats, c'est ce qui permet de retrouver un nom en faisant défiler. |
+| 🕐 **Récentes** | Les dernières arrivées d'abord : ce que vous venez d'ajouter, puis ce qu'une mise à jour a apporté. |
+| ☀️ **De saison** | Les plats de la saison en cours d'abord, puis ceux de toute l'année, puis le reste. Contrairement au filtre, **rien n'est caché** : c'est juste l'ordre qui change. |
+
+Les accents et les ligatures sont ignorés pour le classement : *Émincé de dinde*
+se range à **E**, *Œufs cocotte* à **O**, *Bœuf bourguignon* à **B**.
 
 ### Partager vos recettes avec d'autres familles
 
@@ -319,7 +336,7 @@ autres familles**. Un écran vous rappelle précisément ce qui devient visible 
 
 Quelques règles :
 
-- seules **vos propres créations** peuvent être partagées — pas les 50 recettes
+- seules **vos propres créations** peuvent être partagées — pas les 175 recettes
   fournies (tout le monde les a déjà), ni celles importées d'une autre famille ;
 - vous pouvez **retirer** une publication à tout moment, depuis la même fenêtre ;
 - une fiche publiée n'est pas modifiable : pour corriger, retirez-la et
@@ -346,6 +363,29 @@ Comme pour l'application *reventes* :
 5. Sur le téléphone : ouvrez l'adresse dans Chrome → menu **⋮** →
    **« Ajouter à l'écran d'accueil »**.
 
+### ⚠️ L'icône de l'écran d'accueil est un appareil de plus
+
+C'est le piège le plus déroutant, surtout sur iPhone. Quand vous ajoutez Tribu
+à l'écran d'accueil, le téléphone en fait une **application séparée**, avec sa
+**propre mémoire**. Elle ne voit pas la session ouverte dans Safari ou Chrome :
+elle affiche donc l'écran de départ et propose de **créer une famille**.
+
+**Ne créez pas une deuxième famille** — elle serait vide, et vos données
+resteraient dans l'autre. Faites plutôt :
+
+1. Dans le **navigateur** (ou sur le téléphone d'un administrateur) :
+   *Mon profil ▸ **📱 Connecter un appareil*** ▸ **Créer mon code d'invitation**.
+2. Ouvrez Tribu **depuis l'icône** de l'écran d'accueil.
+3. **« J'ai reçu une invitation »**, tapez le code, puis votre code à
+   4 chiffres habituel.
+
+L'icône retrouve alors toute la famille. Vos deux accès (navigateur et icône)
+continuent de fonctionner en parallèle.
+
+*Pourquoi ne pas faire ça tout seul ?* Parce que c'est précisément la
+protection : un appareil n'entre dans une famille qu'avec une invitation
+valide. Sans cette règle, connaître le nom d'une tribu suffirait à y entrer.
+
 **Pour mettre à jour plus tard :** redéposez les fichiers modifiés sur GitHub.
 L'application se met à jour toute seule au prochain lancement (le cache est en
 « réseau d'abord »).
@@ -370,7 +410,7 @@ bandeau orange le rappelle sur l'accueil.
 | `app.js` | Le cœur : dates, points, rotation des tâches, stockage, connexion. |
 | `vues.js` | Le dessin de chaque écran. |
 | `formulaires.js` | Les fenêtres qui remontent du bas (ajouter, modifier…). |
-| `recettes.js` | Les 118 plats fournis au démarrage. Modifiable dans l'app. |
+| `recettes.js` | Les 175 plats fournis au démarrage. Modifiable dans l'app. |
 | `firebase-config.js` | **Le seul fichier à remplir** pour activer le partage. |
 | `firestore.rules` | Les règles de sécurité, **à copier dans Firebase**. Sans elles, rien n'est protégé. |
 | `manifest.webmanifest` | Permet d'installer l'app sur l'écran d'accueil. |
@@ -491,3 +531,7 @@ ne peut les consulter — ni les modifier — depuis l'application.
   ne partiront vers la famille qu'au retour du réseau.
 - **Changer de téléphone ?** Demandez une nouvelle invitation à un
   administrateur : vous retrouverez votre profil, vos points et votre historique.
+- **Il vous redemande de créer une famille ?** C'est que cet accès-là n'a pas
+  encore d'invitation — le plus souvent l'icône de l'écran d'accueil, qui est
+  une application à part. Ne créez pas de deuxième famille : voir
+  *L'icône de l'écran d'accueil est un appareil de plus*.
