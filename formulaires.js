@@ -291,6 +291,11 @@ Formulaires.stock = function (sid) {
     '<p class="aide" style="margin:-.5rem 0 1rem">Laissez vide si vous ne voulez pas être prévenue. ' +
     "Sinon, dès que la quantité passe en dessous, l'article vous est proposé dans les courses.</p>" +
     '<label class="champ"><span>Rayon</span>' + selectRayon(cour.rayon) + "</label>" +
+    '<label class="champ"><span>À consommer avant le… (facultatif)</span>' +
+    '<input type="date" name="peremption" value="' + esc(cour.peremption || "") + '"></label>' +
+    '<p class="aide" style="margin:-.4rem 0 1rem">Avec une date, l’article est signalé ' +
+    "quand il approche, et le générateur de menus propose en priorité les plats qui " +
+    "l'utilisent.</p>" +
     boutonsFormulaire(s ? "Enregistrer" : "Ajouter à la réserve", !!s) + "</form>";
 
   ouvrirFeuille(s ? "Modifier " + s.nom : "Nouvel article de réserve", html, (f) => {
@@ -314,7 +319,8 @@ Formulaires.stock = function (sid) {
         unite: String(d.get("unite")),
         mini: String(d.get("mini")).trim(),
         rayon: String(d.get("rayon")),
-        vrac: !!d.get("vrac")
+        vrac: !!d.get("vrac"),
+        peremption: String(d.get("peremption") || "")
       }, s ? s.id : null);
       toast(s ? "Réserve mise à jour" : "Ajouté à la réserve 🥫");
     };
@@ -473,38 +479,97 @@ Formulaires.repas = function (jour, moment) {
   const cle = jour + "-" + moment;
   const actuel = (etat.repas[ui.semaine] || {})[cle] || null;
   const liste = etat.recettes.slice().sort((a, b) => a.nom.localeCompare(b.nom));
+  const r = actuel && actuel.recetteId ? etat.recettes.find((x) => x.id === actuel.recetteId) : null;
+  const e = etatRepas(ui.semaine, jour, moment);
+  const pts = Number(reglagesFamille().pointsRepas) || 0;
+  const cuisinier = actuel && actuel.cuisinier ? membre(actuel.cuisinier) : null;
 
-  const html = '<div id="f-repas">' +
+  /* Quand le plat est déjà choisi, ce qu'on vient faire le plus souvent
+     n'est pas d'en changer : c'est de dire qui cuisine, ou que c'est fait.
+     Ces gestes passent donc devant, et le choix du plat se replie. */
+  let h = '<div id="f-repas">';
+
+  if (actuel) {
+    h += '<div class="carte" style="margin-bottom:.8rem">' +
+      '<div class="ligne" style="border:none;padding-top:0">' +
+      '<span style="font-size:1.5rem">' + esc(actuel.restes ? "♻️" : (r ? (r.emoji || "🍽️") : "📝")) + "</span>" +
+      '<div class="ligne-corps"><b>' + esc(r ? r.nom : (actuel.texte || "Repas")) + "</b>" +
+      (actuel.restes ? "<small>restes — aucune course, aucune réserve entamée</small>" : "") + "</div>" +
+      (r ? '<button class="btn mini doux" data-role="consulter">📖</button>' : "") + "</div>" +
+
+      /* --- qui cuisine --- */
+      '<div class="sous-titre" style="margin:.6rem 0 .4rem"><h3>Qui cuisine ?</h3>' +
+      (pts ? '<span class="etiquette or">' + pts + " pts</span>" : "") + "</div>" +
+      '<div class="puces">' +
+      '<button class="puce ' + (cuisinier ? "" : "on") + '" data-role="chef" data-id="">Personne</button>' +
+      cuisiniersPossibles().map((m) =>
+        '<button class="puce ' + (cuisinier && cuisinier.id === m.id ? "on" : "") +
+        '" data-role="chef" data-id="' + m.id + '">' +
+        esc((m.emoji || "🙂") + " " + m.prenom) + "</button>").join("") +
+      "</div>" +
+      '<button class="lien" data-role="tour" style="margin-top:.5rem">🔁 Prendre le tour de rôle</button>' +
+
+      /* --- où en est ce repas --- */
+      '<hr class="sep">' +
+      (e.statut === "valide"
+        ? '<div class="bandeau info">✓<div><b>Repas validé.</b>' +
+          (e.parQui && pts ? " " + esc(nomDe(e.parQui)) + " a gagné " + pts + " points." : "") +
+          "</div></div>"
+        : e.statut === "fait"
+          ? '<div class="bandeau">⏳<div><b>Marqué fait par ' + esc(nomDe(e.parQui)) + ".</b> " +
+            (estAdmin() ? "À vous de valider." : "En attente d'un administrateur.") + "</div></div>" +
+            '<div class="rangee-btn">' +
+            '<button class="btn" data-action="repas-annuler" data-jour="' + jour + '" data-moment="' + moment + '">Annuler</button>' +
+            (estAdmin()
+              ? '<button class="btn principal" data-action="repas-valider" data-jour="' + jour + '" data-moment="' + moment + '">Valider</button>'
+              : "") + "</div>"
+          : '<button class="btn plein principal" data-action="repas-fait" data-jour="' + jour +
+            '" data-moment="' + moment + '">🍽️ C’est fait — j’ai cuisiné</button>') +
+
+      /* --- ce que le repas retire de la réserve --- */
+      (r && !actuel.restes && etat.stock.length
+        ? '<button class="btn plein doux" data-action="repas-reserve" data-jour="' + jour +
+          '" data-moment="' + moment + '" style="margin-top:.5rem">🥫 Retirer de ma réserve</button>'
+        : "") +
+      "</div>";
+
+    h += '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
+      '<input type="checkbox" id="repas-restes"' + (actuel.restes ? " checked" : "") +
+      ' style="width:auto;margin-top:.25rem"><span style="margin:0">♻️ Ce sont des restes' +
+      '<br><small style="font-weight:400">Le plat reste affiché, mais il ne fait acheter ' +
+      "aucun ingrédient et n'entame pas la réserve.</small></span></label>";
+  }
+
+  h += '<div class="sous-titre" style="margin-top:.2rem"><h3>' +
+    (actuel ? "Changer le plat" : "Choisir un plat") + "</h3></div>" +
     '<input type="text" id="rech-repas" placeholder="Rechercher un plat…" autocomplete="off" style="margin-bottom:.8rem">' +
-    '<div id="liste-repas" style="max-height:44dvh;overflow-y:auto;margin-bottom:.9rem"></div>' +
+    '<div id="liste-repas" style="max-height:36dvh;overflow-y:auto;margin-bottom:.9rem"></div>' +
     "<hr class=\"sep\">" +
     '<label class="champ"><span>Ou écrire librement</span>' +
-    '<input type="text" id="repas-libre" maxlength="60" placeholder="Restes du frigo, resto…" value="' +
+    '<input type="text" id="repas-libre" maxlength="60" placeholder="Chez mamie, resto…" value="' +
     esc(actuel && actuel.texte ? actuel.texte : "") + '"></label>' +
-    ((actuel && actuel.recetteId)
-      ? '<button class="btn plein doux" data-role="consulter" style="margin-bottom:.6rem">' +
-        "📖 Consulter la recette</button>"
-      : "") +
     '<div class="rangee-btn">' +
     (actuel ? '<button class="btn danger" data-role="vider">Vider</button>' : "") +
-    '<button class="btn" data-action="fermer">Annuler</button>' +
+    '<button class="btn" data-action="fermer">Fermer</button>' +
     '<button class="btn principal" data-role="ok-libre">Valider</button></div></div>';
 
   ouvrirFeuille(jour.charAt(0).toUpperCase() + jour.slice(1) + " " + (moment === "midi" ? "midi" : "soir"),
-    html, (f) => {
+    h, (f) => {
       const zone = f.querySelector("#liste-repas");
       const rech = f.querySelector("#rech-repas");
       const dessiner = () => {
         const q = rech.value.toLowerCase().trim();
-        const l = liste.filter((r) => !q || r.nom.toLowerCase().includes(q));
+        const l = liste.filter((x) => !q || x.nom.toLowerCase().includes(q));
         zone.innerHTML = l.length
-          ? l.map((r) => '<button class="ligne" data-recette="' + r.id + '" ' +
+          ? l.map((x) => '<button class="ligne" data-recette="' + x.id + '" ' +
             'style="width:100%;background:none;border:none;border-top:1px solid var(--border);text-align:left">' +
-            '<span style="font-size:1.3rem">' + esc(r.emoji || "🍽️") + "</span>" +
-            '<span class="ligne-corps"><b>' + esc(r.nom) + "</b><small>" +
-            (r.vegetarien ? "végé • " : "") + (r.rapide ? "rapide • " : "") +
-            (r.ingredients || []).length + " ingrédients</small></span>" +
-            (actuel && actuel.recetteId === r.id ? '<span class="etiquette vert">choisi</span>' : "") +
+            '<span style="font-size:1.3rem">' + esc(x.emoji || "🍽️") + "</span>" +
+            '<span class="ligne-corps"><b>' + esc(x.nom) + "</b><small>" +
+            (estDessert(x) ? "dessert • " : "") +
+            (x.vegetarien ? "végé • " : "") + (x.rapide ? "rapide • " : "") +
+            (x.ingredients || []).length + " ingrédient" + ((x.ingredients || []).length > 1 ? "s" : "") +
+            "</small></span>" +
+            (actuel && actuel.recetteId === x.id ? '<span class="etiquette vert">choisi</span>' : "") +
             "</button>").join("")
           : '<p class="aide">Aucun plat ne correspond.</p>';
       };
@@ -516,6 +581,32 @@ Formulaires.repas = function (jour, moment) {
         fermerFeuille();
         Actions.definirRepas(ui.semaine, jour, moment, { recetteId: b.dataset.recette, texte: "" });
       };
+
+      f.querySelectorAll('[data-role="chef"]').forEach((b) => {
+        b.onclick = () => {
+          fermerFeuille();
+          Actions.definirCuisinier(ui.semaine, jour, moment, b.dataset.id || null);
+          const m = b.dataset.id ? membre(b.dataset.id) : null;
+          toast(m ? m.prenom + " cuisine 🍳" : "Personne n'est désigné");
+        };
+      });
+      const bt = f.querySelector('[data-role="tour"]');
+      if (bt) bt.onclick = () => {
+        const q = cuisinierDuTour(ui.semaine, jour, moment);
+        fermerFeuille();
+        Actions.definirCuisinier(ui.semaine, jour, moment, q);
+        const m = membre(q);
+        toast(m ? "C'est au tour de " + m.prenom + " 🔁" : "Personne à désigner");
+      };
+      const cr = f.querySelector("#repas-restes");
+      if (cr) cr.onchange = () => {
+        const c = repasDe(ui.semaine, jour, moment);
+        if (!c) return;
+        c.restes = cr.checked;
+        sauver("repas");
+        toast(cr.checked ? "Marqué comme restes ♻️" : "Repas normal");
+      };
+
       const bc = f.querySelector('[data-role="consulter"]');
       if (bc) bc.onclick = () => Formulaires.consulterRecette(actuel.recetteId);
       const bv = f.querySelector('[data-role="vider"]');
@@ -526,6 +617,99 @@ Formulaires.repas = function (jour, moment) {
         Actions.definirRepas(ui.semaine, jour, moment, txt ? { recetteId: null, texte: txt } : null);
       };
     });
+};
+
+/* ================ CE QUE LE REPAS RETIRE DE LA RÉSERVE ================
+
+   On ne touche jamais à la réserve sans montrer, ligne à ligne, ce qui va
+   être retiré. Une réserve fausse est pire qu'une réserve vide : on s'y fie
+   pour faire les courses. */
+
+Formulaires.consommerRepas = function (jour, moment) {
+  const lignes = ingredientsARetirer(ui.semaine, jour, moment);
+  if (!lignes.length) {
+    toast("Aucun ingrédient de ce plat n'est dans votre réserve");
+    return;
+  }
+  const nets = lignes.filter((l) => l.retire !== null);
+  const douteux = lignes.filter((l) => l.retire === null);
+
+  const html = '<div id="f-conso">' +
+    '<p class="aide" style="margin-bottom:.8rem">Quantités calculées pour <b>' +
+    nbConvives() + " personne" + (nbConvives() > 1 ? "s" : "") + "</b>. " +
+    "Décochez ce que vous n'avez pas utilisé.</p>" +
+    (nets.length
+      ? '<div class="carte">' + nets.map((l) =>
+        '<label class="ligne" style="cursor:pointer">' +
+        '<input type="checkbox" data-stock="' + esc(l.stockId) + '" checked style="width:auto;flex:0 0 auto">' +
+        '<div class="ligne-corps"><b>' + esc(l.nom) + "</b><small>" +
+        esc(l.avant) + " → " + esc(formaterQte(texteNombre(l.reste), l.unite)) +
+        "  (−" + esc(formaterQte(texteNombre(l.retire), l.unite)) + ")</small></div></label>").join("") +
+        "</div>"
+      : "") +
+    (douteux.length
+      ? '<div class="bandeau">⚠️<div><b>' + douteux.length + " article(s) à vérifier :</b> " +
+        esc(douteux.map((l) => l.nom + " (" + l.demande + " vs " + l.avant + ")").join(", ")) +
+        " — les unités ne se convertissent pas, l'application n'y touche pas.</div></div>"
+      : "") +
+    '<div class="rangee-btn" style="margin-top:1rem">' +
+    '<button class="btn" data-action="fermer">Annuler</button>' +
+    '<button class="btn principal" data-role="ok">Retirer de la réserve</button></div></div>';
+
+  ouvrirFeuille("Ce que ce repas a consommé", html, (f) => {
+    f.querySelector('[data-role="ok"]').onclick = () => {
+      const garder = Array.from(f.querySelectorAll("input[data-stock]"))
+        .filter((c) => !c.checked).map((c) => c.dataset.stock);
+      fermerFeuille();
+      const n = Actions.retirerDeLaReserve(nets, garder);
+      toast(n ? n + " article(s) mis à jour dans la réserve 🥫" : "Rien n'a été retiré");
+    };
+  });
+};
+
+/* ==================== LES RÉGLAGES DE LA FAMILLE ==================== */
+
+Formulaires.reglagesFamille = function () {
+  if (!estAdmin()) { toast("Seul un administrateur peut changer ces réglages"); return; }
+  const g = reglagesFamille();
+
+  const html = '<form id="f-reglages">' +
+    '<label class="champ"><span>Nombre de personnes à table</span>' +
+    '<input type="number" name="convives" min="1" max="30" value="' + esc(String(g.convives)) + '"></label>' +
+    '<p class="aide" style="margin:-.4rem 0 1rem">Les recettes fournies sont écrites pour ' +
+    PORTIONS_BASE + " personnes. Les quantités de la liste de courses et de la " +
+    "réserve sont ajustées à ce nombre.</p>" +
+
+    '<label class="champ"><span>Points gagnés pour un repas cuisiné</span>' +
+    '<input type="number" name="pointsRepas" min="0" max="200" value="' + esc(String(g.pointsRepas)) + '"></label>' +
+    '<p class="aide" style="margin:-.4rem 0 1rem">Comme pour une tâche : la personne ' +
+    "qui cuisine dit « c'est fait », un administrateur valide, les points tombent. " +
+    "Mettez 0 pour ne pas compter la cuisine.</p>" +
+
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
+    '<input type="checkbox" name="antiGaspi"' + (g.antiGaspi !== false ? " checked" : "") +
+    ' style="width:auto;margin-top:.25rem"><span style="margin:0">Anti-gaspillage' +
+    '<br><small style="font-weight:400">Le générateur de menus propose en priorité ' +
+    "les plats qui utilisent ce qui va bientôt périmer dans la réserve.</small></span></label>" +
+
+    boutonsFormulaire("Enregistrer", false) + "</form>";
+
+  ouvrirFeuille("Réglages de la famille", html, (f) => {
+    f.onsubmit = (ev) => {
+      ev.preventDefault();
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
+      const n = Number(d.get("convives"));
+      if (!(n >= 1 && n <= 30)) { toast("Entre 1 et 30 personnes"); return; }
+      etat.reglages = Object.assign({}, etat.reglages, {
+        convives: n,
+        pointsRepas: Math.max(0, Math.min(200, Number(d.get("pointsRepas")) || 0)),
+        antiGaspi: !!d.get("antiGaspi")
+      });
+      fermerFeuille();
+      sauver("reglages");
+      toast("Réglages enregistrés");
+    };
+  });
 };
 
 /* ================================ GENERATEUR DE MENUS ================================ */
@@ -821,6 +1005,12 @@ Formulaires.recette = function (rid) {
     "toute l'année. Sinon, le générateur de menus l'évitera hors saison.</p>" +
     '<button type="button" class="btn plein doux" data-role="deviner" style="margin-bottom:1rem">' +
     "🔎 Deviner d'après les ingrédients</button>" +
+    '<label class="champ"><span>Cette recette est prévue pour combien de personnes ?</span>' +
+    '<input type="number" name="portions" min="1" max="30" value="' +
+    esc(String(cour.portions || PORTIONS_BASE)) + '"></label>' +
+    '<p class="aide" style="margin:-.4rem 0 1rem">Les quantités seront ajustées au nombre ' +
+    "de personnes de votre famille (<b>" + nbConvives() + "</b> actuellement, modifiable " +
+    "dans Administration).</p>" +
     '<label class="champ"><span>Lien vers la recette (Cookomix, blog…)</span>' +
     '<input type="url" name="lien" value="' + esc(cour.lien || "") + '" placeholder="https://…"></label>' +
     (cour.lien ? '<a class="btn plein doux" href="' + esc(cour.lien) + '" target="_blank" rel="noopener" ' +
@@ -907,6 +1097,7 @@ Formulaires.recette = function (rid) {
         rapide: !!d.get("rapide"),
         thermomix: !!d.get("thermomix"),
         plat: d.get("dessert") ? "dessert" : "principal",
+        portions: Math.max(1, Math.min(30, Number(d.get("portions")) || PORTIONS_BASE)),
         lien: String(d.get("lien") || "").trim(),
         saisons: valeursMulti(f, "saisons"),
         etapes: String(d.get("etapes") || "").split(/\r?\n/)
@@ -1943,6 +2134,91 @@ Formulaires.onglets = function () {
       fermerFeuille();
       sauver("reglages");
       toast(off.length ? off.length + " onglet(s) masqué(s)" : "Tous les onglets sont visibles");
+    };
+  });
+};
+
+/* ==================== L'OBJECTIF COMMUN DE LA TRIBU ====================
+
+   Entièrement optionnel : tant qu'il n'est pas activé, rien ne change et le
+   classement reste seul. C'est un choix d'ambiance de maison, pas un réglage
+   technique — la fenêtre le dit. */
+
+Formulaires.objectif = function () {
+  if (!estAdmin()) { toast("Seul un administrateur peut fixer l'objectif"); return; }
+  const o = objectifFamille();
+  const acquis = pointsCollectifs();
+
+  const html = '<form id="f-objectif">' +
+    '<div class="bandeau info">🤝<div>Le classement met chacun contre les autres. ' +
+    "L'objectif commun met toute la maison <b>du même côté</b> : les points gagnés " +
+    "par chacun s'additionnent vers une récompense partagée. Les deux peuvent " +
+    "coexister — ou vous pouvez n'en garder qu'un.</div></div>" +
+
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
+    '<input type="checkbox" name="actif"' + (o.actif ? " checked" : "") +
+    ' style="width:auto"><span style="margin:0">Activer l’objectif commun</span></label>' +
+
+    '<label class="champ"><span>L’objectif</span>' +
+    '<input type="text" name="nom" maxlength="50" value="' + esc(o.nom) +
+    '" placeholder="Une soirée cinéma en famille"></label>' +
+    '<label class="champ"><span>Icône</span></label>' +
+    grilleEmojis(EMOJIS_CADEAUX, o.emoji) +
+    '<label class="champ"><span>Points à atteindre, tous ensemble</span>' +
+    '<input type="number" name="cible" min="10" max="100000" value="' + esc(String(o.cible)) + '"></label>' +
+    '<p class="aide" style="margin:-.4rem 0 1rem">Comptez large : c’est la somme de ce ' +
+    "que <b>toute la famille</b> gagne. Aujourd’hui, la tribu en est à <b>" + acquis +
+    "</b> point" + (acquis > 1 ? "s" : "") + " depuis " +
+    (o.depuis ? "le " + esc(dateJolie(o.depuis.slice(0, 10), true)) : "le début") + ".</p>" +
+
+    '<div class="bandeau">💡<div>Les points dépensés en cadeaux <b>ne font pas reculer</b> ' +
+    "la tribu : on compte ce qui a été gagné, pas ce qui reste en poche.</div></div>" +
+
+    (o.actif
+      ? '<button type="button" class="btn plein doux" data-role="relancer" style="margin-bottom:.6rem">' +
+        "🔄 Repartir à zéro (objectif atteint et fêté)</button>"
+      : "") +
+
+    boutonsFormulaire("Enregistrer", false) + "</form>";
+
+  ouvrirFeuille("Objectif commun", html, (f) => {
+    brancherEmojis(f);
+
+    const br = f.querySelector('[data-role="relancer"]');
+    if (br) br.onclick = async () => {
+      const ok = await confirmer("Le compteur repart de zéro pour un nouvel objectif. " +
+        "Les points de chacun ne sont pas touchés.", { titre: "Repartir à zéro", ok: "Repartir" });
+      if (!ok) return;
+      etat.reglages = Object.assign({}, etat.reglages, {
+        objectif: Object.assign({}, o, {
+          depuis: new Date().toISOString(),
+          faits: (Number(o.faits) || 0) + 1
+        })
+      });
+      fermerFeuille();
+      sauver("reglages");
+      toast("Nouvel objectif lancé 🎯");
+    };
+
+    f.onsubmit = (ev) => {
+      ev.preventDefault();
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
+      const actif = !!d.get("actif");
+      const nom = String(d.get("nom") || "").trim();
+      const cible = Math.max(10, Math.min(100000, Number(d.get("cible")) || 500));
+      if (actif && !nom) { toast("Donnez un nom à l’objectif"); return; }
+      etat.reglages = Object.assign({}, etat.reglages, {
+        objectif: {
+          actif: actif, nom: nom, emoji: emojiChoisi(f, "🎯"), cible: cible,
+          /* La date de départ n'est posée qu'au premier lancement : sinon
+             chaque modification effacerait les points déjà gagnés. */
+          depuis: o.depuis || new Date().toISOString(),
+          faits: Number(o.faits) || 0
+        }
+      });
+      fermerFeuille();
+      sauver("reglages");
+      toast(actif ? "Objectif commun activé 🤝" : "Objectif commun désactivé");
     };
   });
 };

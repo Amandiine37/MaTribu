@@ -39,6 +39,33 @@ const Vues = {};
 /* La nouveauté doit se voir là où l'on regarde. Une pastille de 12 pixels sur
    l'avatar, personne ne la remarque : on annonce donc en toutes lettres, sur
    l'accueil et sur les recettes, ce qui attend d'être ajouté. */
+/* La jauge de l'objectif commun. Rendue au même endroit sur l'accueil et
+   dans Points & cadeaux : c'est la même information, elle doit avoir la même
+   tête aux deux endroits. */
+function carteObjectif() {
+  const o = objectifActif();
+  if (!o) return "";
+  const pts = pointsCollectifs();
+  const part = Math.min(100, Math.round(pts / o.cible * 100));
+  const atteint = pts >= o.cible;
+
+  return '<div class="carte" style="text-align:center">' +
+    '<div style="font-size:2rem;line-height:1">' + esc(o.emoji || "🎯") + "</div>" +
+    '<div style="font-family:var(--font-display);font-size:1.15rem;margin:.25rem 0 .1rem">' +
+    esc(o.nom) + "</div>" +
+    '<div class="aide" style="margin-bottom:.7rem">Objectif de toute la tribu' +
+    (o.faits ? " • " + o.faits + " déjà atteint" + (o.faits > 1 ? "s" : "") : "") + "</div>" +
+    '<div class="barre-progression"><i style="width:' + part + '%"></i></div>' +
+    '<div style="margin-top:.5rem;font-weight:700">' + pts + " / " + o.cible + " points</div>" +
+    (atteint
+      ? '<div class="bandeau info" style="margin:.7rem 0 0;text-align:left">🎉<div>' +
+        "<b>Objectif atteint !</b> À vous de fêter ça." +
+        (estAdmin() ? " Puis relancez-en un depuis l'administration." : "") + "</div></div>"
+      : '<div class="aide" style="margin-top:.35rem">Encore ' + (o.cible - pts) +
+        " points, tous ensemble</div>") +
+    "</div>";
+}
+
 function bandeauMaj() {
   const maj = misesAJour();
   if (!maj.length) return "";
@@ -146,6 +173,24 @@ Vues.accueil = function () {
       });
       if (!ongletMasque("taches")) h.push(bloc("✅ À valider", l.join("")));
     }
+
+    /* Les repas cuisinés attendent la même validation que les tâches : sans
+       ce rappel, les points de la cuisine ne tomberaient jamais. */
+    const rav = repasAValider();
+    if (rav.length && !ongletMasque("menus")) {
+      h.push(bloc("🍽️ Repas à valider" +
+        ' <span class="etiquette chaud">' + rav.length + "</span>",
+        rav.map((x) => {
+          const r = x.repas.recetteId ? etat.recettes.find((y) => y.id === x.repas.recetteId) : null;
+          return '<div class="ligne">' + avatarDe(membre(x.etat.parQui)) +
+            '<div class="ligne-corps"><b>' + esc(r ? r.nom : (x.repas.texte || "Repas")) + "</b><small>" +
+            esc(nomDe(x.etat.parQui)) + " a cuisiné • " + esc(x.jour) + " " + esc(x.moment) +
+            "</small></div>" +
+            '<button class="btn mini principal" data-action="repas-valider" data-semaine="' +
+            esc(x.cleSem) + '" data-jour="' + esc(x.jour) + '" data-moment="' +
+            esc(x.moment) + '">Valider</button></div>';
+        }).join("")));
+    }
   }
 
   /* Tâches des enfants sans téléphone : c'est le parent qui coche */
@@ -245,6 +290,7 @@ Vues.accueil = function () {
   /* Classement */
   const cl = classement();
   if (cl.length > 1) {
+    h.push(carteObjectif());
     h.push(bloc("🌟 Classement de la tribu",
       cl.map((x, i) =>
         '<div class="ligne"><span class="rang' + (i === 0 ? " or" : "") + '">' + (i + 1) + "</span>" +
@@ -463,6 +509,15 @@ function vueReserve() {
     return h.join("");
   }
 
+  /* Ce qui va se perdre passe avant ce qui manque : on peut racheter demain,
+     on ne peut pas rattraper un yaourt périmé. */
+  const presses = stockBientotPerime();
+  if (presses.length) {
+    h.push('<div class="bandeau">⏳<div><b>À finir bientôt : ' +
+      esc(presses.map((s) => s.nom).join(", ")) + "</b><br>" +
+      "Le générateur de menus proposera en priorité les plats qui les utilisent.</div></div>");
+  }
+
   const bas = stockSousMinimum();
   if (bas.length) {
     h.push('<div class="bandeau">⚠️<div><b>À racheter : ' + esc(bas.map((s) => s.nom).join(", ")) + "</b>" +
@@ -484,6 +539,18 @@ function vueReserve() {
   return h.join("");
 }
 
+/* Ce qui va se perdre doit se voir de loin : c'est la seule information de
+   la réserve qui a une date limite. */
+function etiquettePeremption(s) {
+  const j = joursAvantPeremption(s);
+  if (j === null) return "";
+  if (j < 0) return '<span class="etiquette rouge">périmé</span>';
+  if (j === 0) return '<span class="etiquette rouge">à finir aujourd’hui</span>';
+  if (j === 1) return '<span class="etiquette rouge">demain</span>';
+  if (j <= 5) return '<span class="etiquette chaud">dans ' + j + " jours</span>";
+  return '<span class="etiquette">' + esc(dateJolie(s.peremption)) + "</span>";
+}
+
 function ligneStock(s) {
   const mini = nombre(s.mini);
   const q = nombre(s.qte);
@@ -492,9 +559,10 @@ function ligneStock(s) {
     '<div class="ligne-corps"><b>' + esc(s.nom) + "</b><small>" +
     esc(formaterQte(s.qte, s.unite) || "0") +
     (mini !== null && mini > 0 ? " • minimum " + esc(formaterQte(s.mini, s.unite)) : "") + "</small>" +
-    (manque || s.vrac
+    (manque || s.vrac || s.peremption
       ? '<span class="etiquettes">' +
         (manque ? '<span class="etiquette rouge">à racheter</span>' : "") +
+        etiquettePeremption(s) +
         (s.vrac ? '<span class="etiquette">🫙 vrac</span>' : "") + "</span>"
       : "") +
     "</div>" +
@@ -557,10 +625,21 @@ function caseRepas(jour, moment, contenu) {
       texte = contenu.texte; libre = false; emoji = "📝";
     }
   }
+  /* Qui cuisine, et où en est le repas : lisible sans ouvrir la case. */
+  const e = etatRepas(ui.semaine, jour, moment);
+  const cuisinier = contenu && contenu.cuisinier ? membre(contenu.cuisinier) : null;
+  let marque = "";
+  if (!libre) {
+    if (e.statut === "valide") marque = '<span class="etiquette vert">✓</span>';
+    else if (e.statut === "fait") marque = '<span class="etiquette chaud">à valider</span>';
+    else if (cuisinier) marque = '<span class="avatar xs">' + esc(cuisinier.emoji || "🙂") + "</span>";
+  }
   return '<button class="case-repas" data-action="repas-case" data-jour="' + jour + '" data-moment="' + moment + '">' +
     '<span class="quand">' + (moment === "midi" ? "Midi" : "Soir") + "</span>" +
-    "<span>" + emoji + "</span>" +
-    '<span class="plat' + (libre ? " libre" : "") + '">' + esc(texte) + "</span></button>";
+    "<span>" + (contenu && contenu.restes ? "♻️" : emoji) + "</span>" +
+    '<span class="plat' + (libre ? " libre" : "") + '">' + esc(texte) +
+    (contenu && contenu.restes ? " <small>(restes)</small>" : "") + "</span>" +
+    (marque ? '<span class="marque-repas">' + marque + "</span>" : "") + "</button>";
 }
 
 /* ================================ RECETTES ================================ */
@@ -794,6 +873,7 @@ Vues.notes = function () {
 
 Vues.points = function () {
   const h = [];
+  h.push(carteObjectif());
   const mesPts = pointsDe(moi.id);
   const dispo = etat.cadeaux.filter((c) => c.actif !== false).sort((a, b) => a.cout - b.cout);
   const prochain = dispo.find((c) => c.cout > mesPts);
@@ -956,6 +1036,35 @@ Vues.admin = function () {
       : "") +
     '<button class="btn plein doux" data-action="aller" data-vue="recettes" style="margin-top:.6rem">Gérer les recettes</button>' +
     '<button class="btn plein" data-action="recettes-maj" style="margin-top:.5rem">🔄 Mettre à jour les recettes fournies</button>'));
+
+  const g = reglagesFamille();
+  h.push(bloc("⚙️ Réglages de la famille",
+    '<div class="ligne"><span style="font-size:1.3rem">🍽️</span>' +
+    '<div class="ligne-corps"><b>' + g.convives + " personne" + (g.convives > 1 ? "s" : "") +
+    " à table</b><small>Les quantités des recettes sont ajustées à ce nombre.</small></div></div>" +
+    '<div class="ligne"><span style="font-size:1.3rem">🌟</span>' +
+    '<div class="ligne-corps"><b>' + g.pointsRepas + " points par repas cuisiné</b><small>" +
+    (g.pointsRepas ? "Validés comme une tâche." : "La cuisine ne rapporte rien.") + "</small></div></div>" +
+    '<div class="ligne"><span style="font-size:1.3rem">♻️</span>' +
+    '<div class="ligne-corps"><b>Anti-gaspillage ' + (g.antiGaspi !== false ? "activé" : "désactivé") +
+    "</b><small>Priorité aux plats qui utilisent ce qui va périmer.</small></div></div>" +
+    '<button class="btn plein doux" data-action="admin-reglages" style="margin-top:.7rem">Modifier</button>'));
+
+  const ob = objectifFamille();
+  h.push(bloc("🤝 Objectif commun",
+    '<p class="aide">Le classement met chacun contre les autres ; l’objectif ' +
+    "commun met toute la maison du même côté. Facultatif.</p>" +
+    (ob.actif
+      ? '<div class="ligne" style="margin-top:.5rem"><span style="font-size:1.4rem">' +
+        esc(ob.emoji || "🎯") + "</span>" +
+        '<div class="ligne-corps"><b>' + esc(ob.nom) + "</b><small>" +
+        pointsCollectifs() + " / " + ob.cible + " points" +
+        (ob.faits ? " • " + ob.faits + " déjà atteint" + (ob.faits > 1 ? "s" : "") : "") +
+        "</small></div>" +
+        (objectifAtteint() ? '<span class="etiquette vert">atteint 🎉</span>' : "") + "</div>"
+      : '<p class="aide" style="margin-top:.5rem">Désactivé — seul le classement individuel est affiché.</p>') +
+    '<button class="btn plein doux" data-action="admin-objectif" style="margin-top:.7rem">' +
+    (ob.actif ? "Modifier l’objectif" : "Définir un objectif") + "</button>"));
 
   /* Onglets visibles : toutes les familles ne se servent pas de tout. */
   const caches = ongletsMasques();

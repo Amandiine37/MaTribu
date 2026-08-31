@@ -473,6 +473,11 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:1.1rem 0;}
 }
 .ligne-maj{cursor:pointer;}
 
+/* ---------- repère « qui cuisine / où en est le repas » ---------- */
+.case-repas{position:relative;}
+.marque-repas{position:absolute;top:.3rem;right:.35rem;}
+.marque-repas .avatar.xs{width:20px;height:20px;font-size:.7rem;}
+
 /* ---------- une recette se consulte d'un simple appui ---------- */
 .ligne-recette{cursor:pointer;}
 .ligne-recette:active{background:var(--surface-2);}

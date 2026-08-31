@@ -29,6 +29,11 @@ const $ = (sel) => document.querySelector(sel);
 const RAYONS = ["Fruits & légumes", "Boucherie", "Poissonnerie", "Crèmerie",
   "Boulangerie", "Épicerie", "Surgelés", "Boissons", "Entretien", "Autre"];
 const JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+
+/* Réglages de la famille et leurs valeurs par défaut. Déclarés ici, avec les
+   autres constantes : `etatVide()` s'en sert dès le chargement du fichier. */
+const REGLAGES_DEFAUT = { convives: 4, pointsRepas: 15, antiGaspi: true };
+const PORTIONS_BASE = 4;      // les recettes fournies sont écrites pour 4
 /* Les grilles d'icones. Elles sont volontairement fournies : c'est ce qui
    permet a chacun de se reconnaitre du premier coup d'oeil dans les listes. */
 const EMOJIS_MEMBRES = [
@@ -66,13 +71,13 @@ const EMOJIS_LISTES = [
   "🥩", "🧊", "🧽", "🧼", "🧴", "💊", "🎁", "🎂", "🎄", "🎒",
   "✏️", "🏕️", "🌻", "🔧", "📦", "👶", "🐾", "🐶", "🍼", "🎨"];
 
-const VERSION = "0.11 bêta";
+const VERSION = "0.13.2 bêta";
 
 /* Unites utilisables pour les ingredients, le stock et les courses.
    "" = pas d'unite, on compte simplement (4 carottes). */
 const UNITES = ["", "g", "kg", "ml", "cl", "l", "boîte(s)", "paquet(s)", "pot(s)",
-  "sachet(s)", "tranche(s)", "bouquet(s)", "branche(s)", "gousse(s)", "tête(s)",
-  "bûche(s)", "morceau(x)", "pincée(s)", "c. à soupe", "c. à café"];
+  "bocal(aux)", "sachet(s)", "tranche(s)", "bouquet(s)", "branche(s)", "gousse(s)",
+  "tête(s)", "bûche(s)", "morceau(x)", "pincée(s)", "c. à soupe", "c. à café"];
 
 /* Familles d'unites convertibles entre elles, avec leur valeur de reference. */
 const FAMILLES_UNITES = {
@@ -369,7 +374,7 @@ function etatVide() {
     taches: [], bareme: {}, etats: {},
     courses: [], listesCourses: [], stock: [], recettes: [], repas: {}, notes: [],
     cadeaux: [], tarifs: {}, echanges: [], journal: [],
-    reglages: {}, jetonUtilise: null
+    reglages: Object.assign({}, REGLAGES_DEFAUT), jetonUtilise: null
   };
 }
 
@@ -571,6 +576,37 @@ function tachesDesEnfants() {
 function pointsDe(idm) {
   return etat.journal.reduce((s, e) => s + (e.membreId === idm ? e.delta : 0), 0);
 }
+/* ---------------------- L'objectif commun de la tribu ----------------------
+
+   Le classement met chacun contre les autres ; l'objectif commun met toute la
+   maison du même côté. Avec des enfants d'âges différents, le petit qui perd
+   toujours au classement peut au moins gagner AVEC les autres.
+
+   On compte les points GAGNÉS depuis le lancement de l'objectif, pas les
+   points détenus : sinon un cadeau échangé par l'un ferait reculer la tribu
+   entière, ce qui n'aurait aucun sens. */
+const OBJECTIF_DEFAUT = { actif: false, nom: "", emoji: "🎯", cible: 500, depuis: null, faits: 0 };
+
+function objectifFamille() {
+  return Object.assign({}, OBJECTIF_DEFAUT, (etat.reglages && etat.reglages.objectif) || {});
+}
+function objectifActif() {
+  const o = objectifFamille();
+  return o.actif && o.cible > 0 ? o : null;
+}
+function pointsCollectifs() {
+  const o = objectifFamille();
+  return etat.journal.reduce((s, e) => {
+    if (e.delta <= 0) return s;                       // un cadeau ne défait rien
+    if (o.depuis && String(e.date || "") < o.depuis) return s;
+    return s + e.delta;
+  }, 0);
+}
+function objectifAtteint() {
+  const o = objectifActif();
+  return !!o && pointsCollectifs() >= o.cible;
+}
+
 function classement() {
   return etat.membres.map((m) => ({ m, pts: pointsDe(m.id) }))
     .sort((a, b) => b.pts - a.pts || a.m.prenom.localeCompare(b.m.prenom));
@@ -1282,6 +1318,85 @@ const Actions = {
     sauverEtat(cle);
   },
 
+  /* --- Qui cuisine --- */
+
+  definirCuisinier(cleSem, jour, moment, membreId) {
+    const sem = etat.repas[cleSem];
+    const c = sem && sem[jour + "-" + moment];
+    if (!c) { toast("Choisissez d'abord un plat"); return; }
+    c.cuisinier = membreId || null;
+    sauver("repas");
+  },
+
+  async repasFait(cleSem, jour, moment) {
+    const c = repasDe(cleSem, jour, moment);
+    if (!c) return;
+    const cle = cleEtatRepas(cleSem, jour, moment);
+    if ((etat.etats[cle] || {}).statut === "valide") return;
+
+    const beneficiaire = c.cuisinier || (moi && moi.id);
+    /* Comme pour les tâches : un administrateur qui coche pour un profil géré
+       valide du même geste, sinon le repas resterait bloqué. */
+    const directe = estAdmin() && (estGere(beneficiaire) || beneficiaire === moi.id);
+
+    etat.etats[cle] = {
+      statut: directe ? "valide" : "fait",
+      parQui: beneficiaire,
+      faitLe: new Date().toISOString(),
+      valideLe: directe ? new Date().toISOString() : null,
+      valideePar: directe ? moi.id : null
+    };
+    await Store.ecrireEtat(cle, etat.etats[cle]);
+    if (directe) await crediterRepas(cleSem, jour, moment, beneficiaire);
+    rendre();
+    const m = membre(beneficiaire);
+    const pts = Number(reglagesFamille().pointsRepas) || 0;
+    toast(directe && m && pts
+      ? "+" + pts + " points pour " + m.prenom + " 🍽️"
+      : "Repas fait ! En attente de validation.");
+  },
+
+  async validerRepas(cleSem, jour, moment) {
+    if (!estAdmin()) return;
+    const cle = cleEtatRepas(cleSem, jour, moment);
+    const e = etat.etats[cle];
+    if (!e || e.statut !== "fait") return;
+    e.statut = "valide";
+    e.valideLe = new Date().toISOString();
+    e.valideePar = moi.id;
+    etat.etats[cle] = e;
+    await Store.ecrireEtat(cle, e);
+    await crediterRepas(cleSem, jour, moment, e.parQui);
+    rendre();
+    const m = membre(e.parQui);
+    const pts = Number(reglagesFamille().pointsRepas) || 0;
+    toast(m && pts ? "+" + pts + " points pour " + m.prenom + " 🍽️" : "Validé");
+  },
+
+  annulerRepasFait(cleSem, jour, moment) {
+    const cle = cleEtatRepas(cleSem, jour, moment);
+    if ((etat.etats[cle] || {}).statut !== "fait") return;
+    etat.etats[cle] = { statut: "afaire", parQui: null, faitLe: null, valideLe: null, valideePar: null };
+    sauverEtat(cle);
+  },
+
+  /* Retire de la réserve ce que le repas a consommé. `garder` = les articles
+     que l'on a choisi de ne pas décompter. */
+  retirerDeLaReserve(lignes, garder) {
+    const hors = new Set(garder || []);
+    let n = 0;
+    (lignes || []).forEach((l) => {
+      if (hors.has(l.stockId) || l.retire === null) return;
+      const s = etat.stock.find((x) => x.id === l.stockId);
+      if (!s) return;
+      s.qte = texteNombre(Math.max(0, (nombre(s.qte) || 0) - l.retire));
+      s.majLe = new Date().toISOString();
+      n++;
+    });
+    if (n) sauver("stock");
+    return n;
+  },
+
   /* --- Courses --- */
   ajouterCourse(nom, rayon, qte, unite, opts) {
     nom = (nom || "").trim();
@@ -1439,10 +1554,15 @@ const Actions = {
     if (!ok) return;
     const cible = listeCourante().id;
     aAjouter.slice().reverse().forEach((s) => {
+      /* Ce qui MANQUE pour revenir au minimum, pas le minimum lui-même : avec
+         200 g de farine et un minimum d'1 kg, on achète 800 g, pas 1 kg.
+         Quand la quantité en réserve n'est pas un nombre (« un peu »), on ne
+         peut rien soustraire : on propose alors le minimum entier. */
       const mini = nombre(s.mini) || 0;
-      const q = nombre(s.qte) || 0;
+      const q = nombre(s.qte);
+      const manque = q === null ? mini : Math.max(mini - q, 0);
       etat.courses.unshift({
-        id: id(), nom: s.nom, qte: texteNombre(Math.max(mini - q, mini)), unite: s.unite || "",
+        id: id(), nom: s.nom, qte: texteNombre(manque || mini), unite: s.unite || "",
         rayon: s.rayon || "Autre", coche: false, listeId: cible, vrac: !!s.vrac,
         parQui: moi && moi.id, creeLe: new Date().toISOString()
       });
@@ -1454,6 +1574,10 @@ const Actions = {
   /* --- Repas --- */
   definirRepas(cleSem, jour, moment, valeur) {
     if (!etat.repas[cleSem]) etat.repas[cleSem] = {};
+    /* Changer le plat ne doit pas effacer qui cuisine : c'est souvent la même
+       personne qui s'y colle, quel que soit le menu. */
+    const avant = etat.repas[cleSem][jour + "-" + moment];
+    if (valeur && avant && avant.cuisinier && !valeur.cuisinier) valeur.cuisinier = avant.cuisinier;
     etat.repas[cleSem][jour + "-" + moment] = valeur;
     sauver("repas");
   },
@@ -1674,6 +1798,7 @@ const UNITES_CONNUES = {
   "boite": "boîte(s)", "boites": "boîte(s)", "boîte": "boîte(s)", "boîtes": "boîte(s)",
   "paquet": "paquet(s)", "paquets": "paquet(s)",
   "pot": "pot(s)", "pots": "pot(s)",
+  "bocal": "bocal(aux)", "bocaux": "bocal(aux)",
   "sachet": "sachet(s)", "sachets": "sachet(s)",
   "tranche": "tranche(s)", "tranches": "tranche(s)",
   "bouquet": "bouquet(s)", "bouquets": "bouquet(s)",
@@ -2364,6 +2489,10 @@ function genererMenus(cleSem, opt) {
   const demande = CATEGORIES_REPAS.reduce((s, c) => s + quotas[c.val], 0);
   const plan = repartitionSouhaitee(cases.length, quotas).plan;
 
+  /* L'anti-gaspillage est un réglage de la famille, pas une case à cocher à
+     chaque génération : on le lit là, sauf si l'appelant tranche lui-même. */
+  const antiGaspi = opt.antiGaspi !== undefined
+    ? !!opt.antiGaspi : reglagesFamille().antiGaspi !== false;
   const recents = recettesUtiliseesRecemment(cleSem, Math.max(0, Number(opt.semaines) || 3));
   const utilises = new Set();
   const bilan = { poisson: 0, viande: 0, vege: 0, autre: 0 };
@@ -2392,6 +2521,9 @@ function genererMenus(cleSem, opt) {
       /* Ce dont on a déjà les ingrédients passe devant : moins de courses,
          moins de perte. Ça pèse, sans écraser la saison ni la répartition. */
       if (opt.reserve) s += couvertureReserve(r) * 10;
+      /* Ce qui va se perdre passe devant tout le reste de la réserve : c'est
+         maintenant ou jamais qu'on l'utilise. */
+      if (antiGaspi) s += urgenceAntiGaspi(r) * 14;
       if (s > meilleurScore) { meilleurScore = s; meilleur = r; }
     });
     if (!meilleur) return;
@@ -2416,14 +2548,18 @@ function ingredientsDeLaSemaine(cleSem) {
   const parNom = new Map();
   Object.values(sem).forEach((c) => {
     if (!c || !c.recetteId) return;
+    /* Un repas de restes ne fait acheter personne : c'est justement ce qu'on
+       a déjà cuisiné la veille. */
+    if (c.restes) return;
     const r = etat.recettes.find((x) => x.id === c.recetteId);
     if (!r) return;
+    const facteur = facteurConvives(r);
     (r.ingredients || []).forEach((ing) => {
       const cle = ing.nom.toLowerCase().trim();
       if (!parNom.has(cle)) {
         parNom.set(cle, { nom: ing.nom, rayon: ing.rayon || "Autre", morceaux: [] });
       }
-      parNom.get(cle).morceaux.push({ qte: ing.qte, unite: ing.unite || "" });
+      parNom.get(cle).morceaux.push({ qte: qteAjustee(ing.qte, facteur), unite: ing.unite || "" });
     });
   });
 
@@ -2438,6 +2574,145 @@ function ingredientsDeLaSemaine(cleSem) {
     };
   }).sort((a, b) =>
     RAYONS.indexOf(a.rayon) - RAYONS.indexOf(b.rayon) || a.nom.localeCompare(b.nom));
+}
+
+
+/* ==================== Qui cuisine, et ce que ça rapporte ====================
+
+   Faire la cuisine est la corvée la plus lourde de la maison, et la seule qui
+   ne rapportait rien. Elle suit donc exactement le même chemin qu'une tâche :
+   on est désigné, on dit « c'est fait », un administrateur valide, les points
+   tombent. Et pour la même raison que les tâches, la validation est vérifiée
+   par le serveur — sinon chacun pourrait s'attribuer des points.
+
+   L'état d'un repas est rangé dans `etats`, comme celui d'une tâche, et pas
+   dans `repas` : `repas` est librement modifiable par tous les membres, ce
+   qui en fait un mauvais endroit pour ce qui doit être prouvé. */
+
+function cleEtatRepas(cleSem, jour, moment) {
+  return "repas|" + cleSem + "|" + jour + "-" + moment;
+}
+function etatRepas(cleSem, jour, moment) {
+  return etat.etats[cleEtatRepas(cleSem, jour, moment)] || { statut: "afaire" };
+}
+function repasDe(cleSem, jour, moment) {
+  return (etat.repas[cleSem] || {})[jour + "-" + moment] || null;
+}
+
+/* Le tour de cuisine : on ne compte que les personnes qui peuvent vraiment
+   cuisiner — les tout-petits sans téléphone n'ont rien à faire dans la
+   rotation, l'administrateur les ajoute à la main s'il le souhaite. */
+function cuisiniersPossibles() {
+  return etat.membres.filter((m) => !m.sansAppareil);
+}
+function cuisinierDuTour(cleSem, jour, moment) {
+  const l = cuisiniersPossibles();
+  if (!l.length) return null;
+  /* Un rang stable dans la semaine : même semaine, même ordre, sans avoir à
+     stocker quoi que ce soit. */
+  const rang = JOURS.indexOf(jour) * 2 + (moment === "soir" ? 1 : 0);
+  const sem = Number(String(cleSem).replace(/[^0-9]/g, "")) || 0;
+  return l[(rang + sem) % l.length].id;
+}
+
+/* Les repas cuisinés qui attendent un administrateur. On regarde la semaine
+   affichée et la précédente : un dimanche soir se valide souvent le lundi. */
+function repasAValider() {
+  const l = [];
+  const lundi = lundiDeCle(ui.semaine);
+  [0, -7].forEach((d) => {
+    const dd = new Date(lundi); dd.setDate(dd.getDate() + d);
+    const cle = cleSemaine(dd);
+    JOURS.forEach((j) => ["midi", "soir"].forEach((m) => {
+      if (etatRepas(cle, j, m).statut !== "fait") return;
+      const c = repasDe(cle, j, m);
+      if (!c) return;
+      l.push({ cleSem: cle, jour: j, moment: m, repas: c, etat: etatRepas(cle, j, m) });
+    }));
+  });
+  return l;
+}
+
+async function crediterRepas(cleSem, jour, moment, beneficiaire) {
+  const pts = Number(reglagesFamille().pointsRepas) || 0;
+  if (!beneficiaire || !pts) return;
+  /* La règle Firebase compare le montant à `reglages.pointsRepas`. Sur une
+     famille créée avant cette version, le réglage n'existe pas encore : on
+     l'inscrit avant, sinon le serveur refuserait la ligne sans qu'on
+     comprenne pourquoi. */
+  if (!etat.reglages || etat.reglages.pointsRepas === undefined) {
+    etat.reglages = Object.assign({}, REGLAGES_DEFAUT, etat.reglages || {});
+    if (estAdmin()) await Store.ecrire(["reglages"]);
+  }
+  const cle = cleEtatRepas(cleSem, jour, moment);
+  const c = repasDe(cleSem, jour, moment);
+  const r = c && c.recetteId ? etat.recettes.find((x) => x.id === c.recetteId) : null;
+  await ajouterAuJournal({
+    id: "r|" + cleSem + "|" + jour + "-" + moment,
+    type: "repas", refId: cleSem + "|" + jour + "-" + moment,
+    cleEtat: cle.replace(/\|/g, "__"),
+    membreId: beneficiaire, delta: pts,
+    motif: "Repas : " + ((r && r.nom) || (c && c.texte) || jour + " " + moment)
+  });
+}
+
+/* ==================== Ce qu'un repas retire de la réserve ====================
+
+   La moitié manquante du retour du magasin : les courses remplissaient la
+   réserve, rien ne la vidait. On ne le fait JAMAIS sans confirmation — on ne
+   met jamais exactement ce que dit la recette, et une réserve fausse est pire
+   qu'une réserve vide. */
+
+function ingredientsARetirer(cleSem, jour, moment) {
+  const c = repasDe(cleSem, jour, moment);
+  if (!c || !c.recetteId || c.restes) return [];
+  const r = etat.recettes.find((x) => x.id === c.recetteId);
+  if (!r) return [];
+  const facteur = facteurConvives(r);
+  const lignes = [];
+  (r.ingredients || []).forEach((ing) => {
+    const s = articleStock(ing.nom);
+    if (!s) return;                               // pas en réserve : rien à retirer
+    const besoin = qteAjustee(ing.qte, facteur);
+    const retire = convertirUnite(besoin, ing.unite || "", s.unite || "");
+    lignes.push({
+      stockId: s.id, nom: s.nom,
+      avant: formaterQte(s.qte, s.unite),
+      demande: formaterQte(besoin, ing.unite),
+      retire: retire,                             // null = unités incompatibles
+      unite: s.unite || "",
+      reste: retire === null ? null : Math.max(0, (nombre(s.qte) || 0) - retire)
+    });
+  });
+  return lignes;
+}
+
+/* ==================== Les dates de péremption ====================
+
+   La réserve sait ce qu'on a ; avec une date, elle sait aussi ce qui va se
+   perdre. Le générateur s'en sert pour proposer d'abord les plats qui
+   l'utilisent — c'est la version anti-gaspi de « utiliser ma réserve ». */
+
+function joursAvantPeremption(s) {
+  if (!s || !s.peremption) return null;
+  return joursEntre(isoDate(new Date()), s.peremption);
+}
+function stockBientotPerime(marge) {
+  const m = marge === undefined ? 5 : marge;
+  return etat.stock.filter((s) => {
+    const j = joursAvantPeremption(s);
+    return j !== null && j <= m;
+  }).sort((a, b) => String(a.peremption).localeCompare(String(b.peremption)));
+}
+/* Part des ingrédients d'un plat qui sont sur le point de se perdre. */
+function urgenceAntiGaspi(r) {
+  const presses = stockBientotPerime(7);
+  if (!presses.length) return 0;
+  const noms = new Set(presses.map((s) => s.nom.toLowerCase().trim()));
+  const ing = (r.ingredients || []).filter((i) => i && i.nom);
+  if (!ing.length) return 0;
+  const n = ing.filter((i) => noms.has(i.nom.toLowerCase().trim())).length;
+  return n ? n / ing.length : 0;
 }
 
 /* Rentrer les achats en réserve sans confirmation : réglage de l'appareil,
@@ -2600,6 +2875,33 @@ const ONGLETS = [
   { vue: "recettes", nom: "Recettes", emoji: "📖" },
   { vue: "notes", nom: "Rappels", emoji: "🔔" }
 ];
+/* --- Les réglages de la famille ---
+   Rangés dans `reglages`, que seuls les administrateurs peuvent écrire
+   (voir firestore.rules) : le nombre de convives et le barème d'un repas
+   ne sont pas des préférences d'appareil, ils valent pour toute la maison. */
+function reglagesFamille() {
+  return Object.assign({}, REGLAGES_DEFAUT, etat.reglages || {});
+}
+function nbConvives() {
+  const n = Number(reglagesFamille().convives);
+  return n > 0 && n <= 30 ? n : PORTIONS_BASE;
+}
+/* De combien il faut multiplier les quantités d'une recette pour la table.
+   Une recette peut annoncer son propre nombre de parts. */
+function facteurConvives(r) {
+  const base = Number(r && r.portions) > 0 ? Number(r.portions) : PORTIONS_BASE;
+  return nbConvives() / base;
+}
+/* Une quantité mise à l'échelle, arrondie de façon lisible : personne
+   n'achète 1,3333 oignon. */
+function qteAjustee(qte, facteur) {
+  const n = nombre(qte);
+  if (n === null || !facteur || facteur === 1) return qte;
+  const v = n * facteur;
+  const arrondi = v >= 10 ? Math.round(v) : Math.round(v * 10) / 10;
+  return texteNombre(arrondi);
+}
+
 function ongletsMasques() {
   const l = (etat.reglages && etat.reglages.ongletsMasques) || [];
   return Array.isArray(l) ? l : [];
@@ -2749,6 +3051,14 @@ document.addEventListener("click", (e) => {
     case "notes-filtre": ui.filtreNotes = b.dataset.valeur; rendre(); break;
     case "notes-qui": ui.filtreQuiNotes = b.dataset.valeur || ""; rendre(); break;
     case "admin-onglets": Formulaires.onglets(); break;
+    case "admin-reglages": Formulaires.reglagesFamille(); break;
+    case "admin-objectif": Formulaires.objectif(); break;
+    /* `data-semaine` est facultatif : l'accueil peut proposer un repas de la
+       semaine précédente, il ne faut pas valider la case d'à côté. */
+    case "repas-fait": Actions.repasFait(b.dataset.semaine || ui.semaine, b.dataset.jour, b.dataset.moment); break;
+    case "repas-valider": Actions.validerRepas(b.dataset.semaine || ui.semaine, b.dataset.jour, b.dataset.moment); break;
+    case "repas-annuler": Actions.annulerRepasFait(b.dataset.semaine || ui.semaine, b.dataset.jour, b.dataset.moment); break;
+    case "repas-reserve": Formulaires.consommerRepas(b.dataset.jour, b.dataset.moment); break;
 
     case "cadeau-demander": Actions.demanderCadeau(v); break;
     case "cadeau-nouveau": Formulaires.cadeau(null); break;

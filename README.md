@@ -1,6 +1,6 @@
 # 🏡 Tribu — l'organisation de la maison, en famille
 
-> ### 🧪 Version 0.11 — BÊTA
+> ### 🧪 Version 0.13.2 — BÊTA
 > L'application est utilisable au quotidien, mais elle est encore jeune : des
 > bugs sont possibles et la forme des données peut encore changer.
 > Un bouton **« Signaler un problème / proposer une idée »** est disponible
@@ -104,12 +104,83 @@ les rendez-vous des deux prochaines semaines groupés par jour, et les
 pense-bêtes. Plus besoin d'ouvrir l'onglet pour savoir ce qu'il y a cette
 semaine.
 
+### Qui cuisine ce soir ?
+
+Faire la cuisine est la corvée la plus lourde de la maison, et c'était la seule
+qui ne rapportait rien. Elle suit maintenant **exactement le chemin d'une
+tâche** :
+
+1. On désigne quelqu'un dans la case du repas — ou **🔁 Prendre le tour de
+   rôle**, qui répartit les repas de la semaine entre ceux qui cuisinent.
+2. Cette personne appuie sur **🍽️ C'est fait — j'ai cuisiné**.
+3. Un administrateur valide (une carte **🍽️ Repas à valider** apparaît sur son
+   accueil), et les **points tombent**.
+
+Le nombre de points est réglable dans *Administration → ⚙️ Réglages de la
+famille* — mettez 0 pour ne pas compter la cuisine.
+
+Dans la grille de la semaine, un coup d'œil suffit : l'avatar de qui cuisine,
+⏳ pour un repas à valider, ✓ pour un repas validé.
+
+> 🔒 Comme pour les tâches, **le serveur vérifie**. Un membre ne peut pas
+> s'attribuer de points : il peut seulement dire « c'est fait ». Seul un
+> administrateur valide, et le montant est comparé au réglage de la famille.
+
+### ♻️ Les restes
+
+Dans la case d'un repas, une case **« Ce sont des restes »**. Le plat reste
+affiché — on voit ce qu'on mange — mais il **ne fait acheter aucun ingrédient**
+et **n'entame pas la réserve**. C'est ce que font toutes les familles, et
+l'application le comptait deux fois.
+
+### 🥫 Ce qu'un repas retire de la réserve
+
+C'est la moitié qui manquait au retour du magasin : les courses **remplissaient**
+la réserve, rien ne la **vidait**. Dans la case d'un repas, **🥫 Retirer de ma
+réserve** montre ligne à ligne ce qui va être décompté :
+
+```
+Aubergines   3 → 1   (−2)
+Courgettes   4 → 2   (−2)
+```
+
+Rien n'est fait sans confirmation, et vous décochez ce que vous n'avez pas
+utilisé — on ne met jamais exactement ce que dit la recette. Si les unités ne
+se convertissent pas (3 boîtes de tomates contre 4 tomates), l'application
+**n'y touche pas** et vous le dit.
+
 ### Les points et les cadeaux
 
 - Les points s'accumulent tâche après tâche.
 - L'administrateur définit la **boutique** : nom du cadeau, icône, coût en points.
 - Un membre demande un cadeau → l'administrateur accorde → les points sont retirés.
 - Chacun peut consulter son historique de points.
+
+### 🤝 L'objectif commun (facultatif)
+
+*Administration → 🤝 Objectif commun.* **Désactivé par défaut** : tant que vous
+ne l'activez pas, rien ne change et seul le classement individuel s'affiche.
+
+Le classement met chacun **contre** les autres. L'objectif commun met toute la
+maison **du même côté** : les points gagnés par chacun s'additionnent vers une
+récompense partagée.
+
+> 🎬 **Une soirée cinéma en famille**
+> Objectif de toute la tribu
+> ▓▓▓▓▓▓▓▓▓░ **270 / 300 points** — encore 30, tous ensemble
+
+Ce n'est pas un détail d'affichage : avec des enfants d'âges différents, le
+plus petit perdra toujours au classement, mais il peut gagner **avec** les
+autres. Les deux peuvent coexister, ou vous pouvez n'en garder qu'un.
+
+**Comment le compte est fait.** On additionne les points **gagnés** depuis le
+lancement de l'objectif, pas les points détenus. Un cadeau échangé par l'un ne
+fait donc **pas reculer** la tribu entière — ce qui n'aurait aucun sens.
+
+Une fois l'objectif atteint, la carte le célèbre. Un administrateur peut alors
+**repartir à zéro** pour un nouvel objectif : le compteur commun redémarre, et
+les points de chacun ne sont pas touchés. Le nombre d'objectifs déjà atteints
+reste affiché.
 
 ### La réserve et les courses
 
@@ -138,7 +209,10 @@ conserves, produits d'entretien. Pour chaque article :
 
 - la quantité que vous avez, avec son unité ;
 - une **quantité minimum** facultative. Dès que vous passez en dessous,
-  l'article est signalé et un bouton l'ajoute à la liste de courses ;
+  l'article est signalé et un bouton l'ajoute à la liste de courses — avec
+  **ce qui manque**, pas le minimum entier : 200 g de farine pour un minimum
+  d'1 kg font apparaître **800 g** dans la liste. Au retour du magasin, la
+  réserve retombe donc pile sur son minimum ;
 - les boutons **−** et **+** ajustent la quantité en un geste ;
 - une case **🫙 Acheté en vrac**. L'article est alors marqué « vrac » partout,
   et quand il arrive dans une liste de courses, un bandeau rappelle en tête de
@@ -155,6 +229,19 @@ quantité réellement manquante.
 > Exemple : la semaine demande 6 pommes et 250 g de farine. Vous avez 2 pommes
 > et 1 kg de farine → l'application propose **4 pommes**, et laisse la farine de
 > côté. Les kilos et les grammes sont convertis tout seuls (idem ml / cl / l).
+
+### Les dates de péremption
+
+Chaque article de la réserve peut porter un **« à consommer avant le… »**.
+Il est alors signalé quand il approche — *dans 2 jours*, *demain*, *périmé* —
+et un bandeau récapitule en tête de réserve : *« À finir bientôt : yaourts,
+courgettes, aubergines »*.
+
+**Le générateur s'en sert.** Avec l'option **anti-gaspillage** (activée par
+défaut, dans les réglages de la famille), il propose en priorité les plats qui
+utilisent ce qui va se perdre. Mesuré sur une réserve où courgettes et
+aubergines expirent : la ratatouille est retenue **12 fois sur 12** avec
+l'option, **1 fois sur 12** sans.
 
 ### Au magasin : terminer les courses
 
@@ -500,6 +587,24 @@ valide. Sans cette règle, connaître le nom d'une tribu suffirait à y entrer.
 **Pour mettre à jour plus tard :** redéposez les fichiers modifiés sur GitHub.
 L'application se met à jour toute seule au prochain lancement (le cache est en
 « réseau d'abord »).
+
+---
+
+## Combien de personnes à table ?
+
+*Administration → ⚙️ Réglages de la famille.*
+
+Les 300 recettes fournies sont écrites **pour 4 personnes**. Indiquez le nombre
+réel de convives, et toute la chaîne s'ajuste : la liste de courses, ce qu'un
+repas retire de la réserve, les quantités affichées.
+
+| Pour 4 | Pour 6 | Pour 8 |
+|---|---|---|
+| 6 cuisses de poulet | 9 | 12 |
+| 300 g de riz | 450 g | 600 g |
+
+Une de vos recettes peut annoncer son propre nombre de parts, dans son
+formulaire — utile pour un plat prévu pour 2 ou pour 10.
 
 ---
 
