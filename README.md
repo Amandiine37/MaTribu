@@ -1,6 +1,6 @@
 # 🏡 Tribu — l'organisation de la maison, en famille
 
-> ### 🧪 Version 0.13.2 — BÊTA
+> ### 🧪 Version 0.15 — BÊTA
 > L'application est utilisable au quotidien, mais elle est encore jeune : des
 > bugs sont possibles et la forme des données peut encore changer.
 > Un bouton **« Signaler un problème / proposer une idée »** est disponible
@@ -14,7 +14,7 @@ Application pour téléphone (à installer sur l'écran d'accueil) qui rassemble
 | 🧹 **Tâches** | Les tâches ménagères, avec la personne assignée, les points, et la validation. |
 | 🛒 **Courses** | Une ou plusieurs listes partagées (semaine, mois, magasin), rangées par rayon. |
 | 🍽️ **Menus** | Les repas midi et soir de la semaine, avec un générateur automatique. |
-| 📖 **Recettes** | Le cahier : 250 plats et 50 desserts, filtrables et triables. |
+| 📖 **Recettes** | Le cahier : 291 plats et 62 desserts, filtrables et triables. |
 | 🔔 **Rappels** | L'agenda partagé de la famille et les pense-bêtes. |
 | 🥫 **Ma réserve** | Votre stock (épicerie, conserves, vrac…) avec les quantités minimum, dans l'onglet Courses. |
 | 🌟 **Points & cadeaux** | Le score de chacun et la boutique de récompenses. |
@@ -125,6 +125,29 @@ Dans la grille de la semaine, un coup d'œil suffit : l'avatar de qui cuisine,
 > 🔒 Comme pour les tâches, **le serveur vérifie**. Un membre ne peut pas
 > s'attribuer de points : il peut seulement dire « c'est fait ». Seul un
 > administrateur valide, et le montant est comparé au réglage de la famille.
+
+### 🚪 Quand personne n'est à la maison
+
+Dans la case d'un repas, une rangée **« Personne à la maison ? »** avec six
+motifs, en une seule pression :
+
+🍽️ Au restaurant · 🏡 Chez des proches · 🏫 À la cantine ·
+✈️ En déplacement · 🌙 Pas de repas · 🚪 Absent
+
+La case affiche alors le motif au lieu d'un plat, et surtout :
+
+- **le générateur ne la remplira jamais**, même quand vous lui demandez de
+  remplacer les repas déjà prévus. Une absence est une décision, pas une case
+  restée vide ;
+- **rien ne part dans la liste de courses** ;
+- elle ne compte pas dans le récapitulatif de la semaine (🐟 · 🍗 · 🥦) ;
+- sur l'accueil, le menu du jour affiche *« 🏫 À la cantine »* plutôt que
+  *« — non prévu »*.
+
+Après une génération, l'application vous le confirme : *« 12 repas proposés —
+2 absences respectées »*.
+
+Pour revenir en arrière : **↩️ Finalement, on mange à la maison**.
 
 ### ♻️ Les restes
 
@@ -254,9 +277,9 @@ apparaît alors :
 En une pression, les articles quittent la liste **et rejoignent votre réserve** :
 
 - ce qui y est **déjà** est réapprovisionné tout seul — *Riz : 1 kg → 3 kg* ;
-- ce qui n'y est **pas encore** vous est proposé, à cocher. Le gâteau
-  d'anniversaire n'a rien à faire dans une réserve : laissez-le décoché, il
-  disparaîtra simplement de la liste ;
+- ce qui n'y est **pas encore** est ajouté aussi, et vous est montré avant :
+  les cases sont **cochées par défaut**. Le gâteau d'anniversaire n'a rien à
+  faire dans une réserve — décochez-le, il disparaîtra simplement de la liste ;
 - si les unités ne correspondent pas (2 paquets achetés, une réserve en kilos),
   l'application **ne bricole pas un chiffre faux** : elle vous le signale pour
   que vous ajustiez à la main.
@@ -273,7 +296,7 @@ deviner.*
 ### Les menus
 
 - Appuyez sur **🎲 Générer** : l'application remplit la semaine en piochant dans
-  la bibliothèque de recettes (300 plats fournis). Voir les réglages juste en
+  la bibliothèque de recettes (353 plats fournis). Voir les réglages juste en
   dessous.
 - Sous les boutons, une ligne récapitule ce que donne la semaine :
   **🐟 2 · 🍗 3 · 🥦 2**.
@@ -325,7 +348,7 @@ place ce qu'elle peut et vous le dit.
 Chaque recette peut porter une ou plusieurs **saisons** — 🌸 printemps, ☀️ été,
 🍂 automne, ❄️ hiver. Une recette sans saison cochée convient toute l'année.
 
-Les 300 plats fournis sont déjà renseignés : la ratatouille et le gratin de
+Les 353 plats fournis sont déjà renseignés : la ratatouille et le gratin de
 courgettes en été, la tartiflette et la soupe à l'oignon en hiver, les lasagnes
 toute l'année…
 
@@ -352,7 +375,7 @@ Appuyez sur une recette dans la liste : sa fiche s'ouvre avec les **ingrédients
 et le **déroulé numéroté**. Depuis l'onglet Menus, un bouton
 **📖 Consulter la recette** ouvre la même fiche pour le plat prévu ce jour-là.
 
-Les 300 plats fournis ont tous leur déroulé (4 à 5 étapes). Il est **écrit pour
+Les 353 plats fournis ont tous leur déroulé (4 à 5 étapes). Il est **écrit pour
 l'application** : aucune recette n'est recopiée d'un site. C'est indicatif —
 pour les temps exacts ou les vitesses d'un robot, collez le lien de la recette
 d'origine dans la fiche, un bouton l'ouvrira.
@@ -362,7 +385,7 @@ par ligne**, les lignes vides sont ignorées.
 
 #### Les plats fournis
 
-L'application arrive avec **250 plats et 50 desserts**, dont **99 marqués 🍲 robot** : veloutés,
+L'application arrive avec **291 plats et 62 desserts**, dont **99 marqués 🍲 robot** : veloutés,
 risottos, sauces, plats mijotés et one-pot — tout ce que le Thermomix (ou un
 autre robot cuiseur) fait bien. Ils sont écrits maison : **aucune recette n'est
 recopiée d'un site**, on n'y trouve que le nom du plat et ses ingrédients. À
@@ -372,7 +395,7 @@ La case **🍲 Robot** existe aussi sur vos propres recettes.
 
 #### Si votre famille existait déjà
 
-Les 300 recettes sont **recopiées dans votre famille le jour de sa création** :
+Les 353 recettes sont **recopiées dans votre famille le jour de sa création** :
 les améliorations apportées ensuite au fichier de recettes ne les atteignent
 pas toutes seules. Une famille créée avant l'arrivée des saisons se retrouve
 donc avec des recettes sans saison — et le filtre affiche alors tout.
@@ -412,7 +435,7 @@ En dessous, six filtres se combinent librement :
 | Filtre | Ce qu'il garde |
 |---|---|
 | ☀️ **De saison** | Ce qui se cuisine en ce moment (la saison affichée suit la date) |
-| 🍲 **Thermomix** | Les plats qui se prêtent bien au robot cuiseur (99 des 300 fournis) |
+| 🍲 **Thermomix** | Les plats qui se prêtent bien au robot cuiseur (99 des 353 fournis) |
 | ✍️ **Mes recettes** | Uniquement celles que vous avez créées (pas les 300 fournies) |
 | 🌿 **Végé** | Les plats végétariens |
 | ⚡ **Rapide** | Moins de 30 minutes |
@@ -450,17 +473,23 @@ Chaque plat est rangé **tout seul**, d'après ses ingrédients. Rien à saisir 
 vos propres recettes et celles que vous importez sont classées de la même
 façon, et si vous changez les ingrédients, le classement suit.
 
-| Profil | Ce qu'il retient | Sur les 300 |
+| Profil | Ce qu'il retient | Sur les 353 |
 |---|---|---|
-| ❤️ **Cœur & cholestérol** | Moins de graisses saturées (beurre, crème, fromage, charcuterie), plus de poisson, de légumineuses, d'huile d'olive et de fibres | 48 |
-| 🩸 **Glycémie** | Des fibres et des protéines plutôt que du sucre et des féculents raffinés servis seuls | 44 |
-| 🌿 **Anti-inflammatoire** | La cuisine méditerranéenne conseillée en cas d'arthrose : poisson gras, huile d'olive, légumes, curcuma et gingembre | 55 |
-| 🦋 **Iode & sélénium** | Les plats riches en iode et en sélénium, les deux minéraux dont la thyroïde a besoin | 46 |
-| 🧂 **Peu de sel** | Aucun ingrédient naturellement très salé : ni charcuterie, ni fromage, ni bouillon cube, ni sauce soja, ni olives | 165 |
-| 🌾 **Sans gluten** | Aucun ingrédient à base de blé, d'orge ou de seigle | 151 |
-| 🥛 **Sans lactose** | Aucun produit laitier : ni lait, ni beurre, ni crème, ni fromage | 128 |
+| ❤️ **Cœur & cholestérol** | Moins de graisses saturées (beurre, crème, fromage, charcuterie), plus de poisson, de légumineuses, d'huile d'olive et de fibres | 79 |
+| 🩸 **Glycémie** | Des fibres et des protéines plutôt que du sucre et des féculents raffinés servis seuls | 65 |
+| 🌿 **Anti-inflammatoire** | La cuisine méditerranéenne conseillée en cas d'arthrose : poisson gras, huile d'olive, légumes, curcuma et gingembre | 88 |
+| 🦋 **Iode & sélénium** | Les plats riches en iode et en sélénium, les deux minéraux dont la thyroïde a besoin | 63 |
+| 🧂 **Peu de sel** | Aucun ingrédient naturellement très salé : ni charcuterie, ni fromage, ni bouillon cube, ni sauce soja, ni olives | 216 |
+| 🌾 **Sans gluten** | Aucun ingrédient à base de blé, d'orge ou de seigle | 175 |
+| 🍬 **Peu de sucre** | Aucun sucre ajouté : ni sucre, ni miel, ni sirop, ni chocolat | 290 |
+| 🥛 **Sans lactose** | Aucun produit laitier : ni lait, ni beurre, ni crème, ni fromage | 162 |
 
-Les trois derniers sont des **exclusions** : ils disent ce qu'un plat ne
+> 💡 **Le vrai usage de « peu de sucre »** : combinez-le avec **🍰 Desserts**.
+> Vous obtenez les 12 desserts sans sucre ajouté — compote, salade d'agrumes,
+> billes dattes-amandes, muffins banane-avoine… Seul, il retient presque tous
+> les plats salés, ce qui est exact mais peu utile.
+
+Les quatre derniers sont des **exclusions** : ils disent ce qu'un plat ne
 contient pas, et s'appliquent aussi aux desserts. Les quatre premiers sont des
 **façons de cuisiner un repas** : un dessert n'y entre jamais, sinon des œufs
 et des amandes suffiraient à faire passer un brownie pour un plat de la
@@ -493,7 +522,7 @@ peuvent interférer.)
 
 ### Les desserts
 
-50 des 300 recettes sont des **desserts**. Ils vivent dans le même cahier, avec
+62 des 353 recettes sont des **desserts**. Ils vivent dans le même cahier, avec
 deux différences :
 
 - le **générateur de menus ne les propose jamais** : il remplit des midis et
@@ -510,7 +539,7 @@ Juste au-dessus de la liste, trois façons de la trier :
 
 | Tri | Ce qu'il donne |
 |---|---|
-| 🔤 **A → Z** | L'ordre alphabétique, **avec un repère par lettre** : A, B, C… Avec 300 plats, c'est ce qui permet de retrouver un nom en faisant défiler. |
+| 🔤 **A → Z** | L'ordre alphabétique, **avec un repère par lettre** : A, B, C… Avec 353 plats, c'est ce qui permet de retrouver un nom en faisant défiler. |
 | 🕐 **Récentes** | Les dernières arrivées d'abord : ce que vous venez d'ajouter, puis ce qu'une mise à jour a apporté. |
 | ☀️ **De saison** | Les plats de la saison en cours d'abord, puis ceux de toute l'année, puis le reste. Contrairement au filtre, **rien n'est caché** : c'est juste l'ordre qui change. |
 
@@ -534,7 +563,7 @@ autres familles**. Un écran vous rappelle précisément ce qui devient visible 
 
 Quelques règles :
 
-- seules **vos propres créations** peuvent être partagées — pas les 300 recettes
+- seules **vos propres créations** peuvent être partagées — pas les 353 recettes
   fournies (tout le monde les a déjà), ni celles importées d'une autre famille ;
 - vous pouvez **retirer** une publication à tout moment, depuis la même fenêtre ;
 - une fiche publiée n'est pas modifiable : pour corriger, retirez-la et
@@ -642,7 +671,7 @@ bandeau orange le rappelle sur l'accueil.
 | `app.js` | Le cœur : dates, points, rotation des tâches, stockage, connexion. |
 | `vues.js` | Le dessin de chaque écran. |
 | `formulaires.js` | Les fenêtres qui remontent du bas (ajouter, modifier…). |
-| `recettes.js` | Les 300 plats fournis au démarrage. Modifiable dans l'app. |
+| `recettes.js` | Les 353 plats fournis au démarrage. Modifiable dans l'app. |
 | `firebase-config.js` | **Le seul fichier à remplir** pour activer le partage. |
 | `firestore.rules` | Les règles de sécurité, **à copier dans Firebase**. Sans elles, rien n'est protégé. |
 | `manifest.webmanifest` | Permet d'installer l'app sur l'écran d'accueil. |

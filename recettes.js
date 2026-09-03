@@ -624,7 +624,8 @@ window.RECETTES_DEPART = [
     {nom:"Truites", qte:"4", unite:"", rayon:"Poissonnerie"},
     {nom:"Amandes effilées", qte:"80", unite:"g", rayon:"Épicerie"},
     {nom:"Beurre", qte:"60", unite:"g", rayon:"Crèmerie"},
-    {nom:"Pommes de terre", qte:"800", unite:"g", rayon:"Fruits & légumes"}]},
+    {nom:"Pommes de terre", qte:"800", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Farine", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
 
   { nom:"Spaghettis aux fruits de mer", emoji:"🍝", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Faites revenir l'ail haché dans l'huile sans le brûler.", "Ajoutez les fruits de mer, déglacez au vin blanc, laissez évaporer 5 minutes.", "Cuisez les spaghettis al dente, gardez un peu d'eau de cuisson.", "Mélangez le tout, ajoutez le persil et un peu d'eau de cuisson pour lier."], lien:"", ingredients:[
     {nom:"Spaghettis", qte:"400", unite:"g", rayon:"Épicerie"},
@@ -874,7 +875,8 @@ window.RECETTES_DEPART = [
     {nom:"Pommes de terre", qte:"800", unite:"g", rayon:"Fruits & légumes"},
     {nom:"Ail", qte:"3", unite:"gousse(s)", rayon:"Fruits & légumes"},
     {nom:"Huile d'olive", qte:"10", unite:"cl", rayon:"Épicerie"},
-    {nom:"Lait", qte:"15", unite:"cl", rayon:"Crèmerie"}]},
+    {nom:"Lait", qte:"15", unite:"cl", rayon:"Crèmerie"},
+    {nom:"Chapelure", qte:"40", unite:"g", rayon:"Épicerie"}]},
 
   { nom:"Poisson pané maison et purée", emoji:"🐟", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Coupez les filets en gros bâtonnets.", "Passez-les dans la farine, puis dans l'œuf battu, puis dans la chapelure.", "Faites-les dorer 3 minutes de chaque côté à la poêle, dans un peu d'huile.", "Écrasez les pommes de terre cuites avec le lait chaud et une noix de beurre.", "Servez avec un quartier de citron."], lien:"", ingredients:[
     {nom:"Filets de poisson blanc", qte:"600", unite:"g", rayon:"Poissonnerie"},
@@ -968,14 +970,16 @@ window.RECETTES_DEPART = [
     {nom:"Carottes", qte:"2", unite:"", rayon:"Fruits & légumes"},
     {nom:"Céleri", qte:"2", unite:"branche(s)", rayon:"Fruits & légumes"},
     {nom:"Vin blanc", qte:"20", unite:"cl", rayon:"Boissons"},
-    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Farine", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
 
   { nom:"Navarin d'agneau", emoji:"🐑", type:"consistant", vegetarien:false, rapide:false, thermomix:false, saisons:["printemps"], etapes:["Faites dorer les morceaux d'agneau, saupoudrez de farine et remuez 2 minutes.", "Mouillez à hauteur, ajoutez l'ail et le thym, laissez mijoter 45 minutes.", "Ajoutez les navets et les carottes taillés en gros morceaux.", "Poursuivez 30 minutes, puis ajoutez les petits pois en fin de cuisson.", "La viande doit se défaire à la cuillère."], lien:"", ingredients:[
     {nom:"Épaule d'agneau", qte:"1", unite:"kg", rayon:"Boucherie"},
     {nom:"Navets", qte:"6", unite:"", rayon:"Fruits & légumes"},
     {nom:"Carottes", qte:"4", unite:"", rayon:"Fruits & légumes"},
     {nom:"Petits pois", qte:"300", unite:"g", rayon:"Surgelés"},
-    {nom:"Ail", qte:"3", unite:"gousse(s)", rayon:"Fruits & légumes"}]},
+    {nom:"Ail", qte:"3", unite:"gousse(s)", rayon:"Fruits & légumes"},
+    {nom:"Farine", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
 
   { nom:"Poulet yassa", emoji:"🍗", type:"consistant", vegetarien:false, rapide:false, thermomix:false, saisons:[], etapes:["Faites mariner le poulet au moins 2 heures avec le jus de citron, l'oignon émincé et l'huile.", "Égouttez les morceaux et faites-les dorer à la poêle.", "Faites confire les oignons de la marinade 20 minutes à feu doux : ils doivent fondre.", "Remettez le poulet, ajoutez la moutarde et un verre d'eau.", "Laissez mijoter 30 minutes et servez avec du riz."], lien:"", ingredients:[
     {nom:"Cuisses de poulet", qte:"6", unite:"", rayon:"Boucherie"},
@@ -1046,14 +1050,16 @@ window.RECETTES_DEPART = [
     {nom:"Carottes", qte:"2", unite:"", rayon:"Fruits & légumes"},
     {nom:"Concombre", qte:"1", unite:"", rayon:"Fruits & légumes"},
     {nom:"Cacahuètes", qte:"80", unite:"g", rayon:"Épicerie"},
-    {nom:"Menthe", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+    {nom:"Menthe", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Sucre", qte:"1", unite:"c. à café", rayon:"Épicerie"}]},
 
   { nom:"Veau Marengo", emoji:"🍲", type:"consistant", vegetarien:false, rapide:false, thermomix:true, saisons:["automne", "hiver"], etapes:["Faites dorer les morceaux de veau, saupoudrez de farine et remuez.", "Ajoutez l'oignon, l'ail et les tomates concassées.", "Mouillez au vin blanc, ajoutez le bouquet garni.", "Couvrez et laissez mijoter 1 h 15 à feu doux.", "Ajoutez les champignons 20 minutes avant la fin."], lien:"", ingredients:[
     {nom:"Épaule de veau", qte:"1", unite:"kg", rayon:"Boucherie"},
     {nom:"Tomates concassées", qte:"1", unite:"boîte(s)", rayon:"Épicerie"},
     {nom:"Champignons de Paris", qte:"300", unite:"g", rayon:"Fruits & légumes"},
     {nom:"Vin blanc", qte:"20", unite:"cl", rayon:"Boissons"},
-    {nom:"Oignon", qte:"2", unite:"", rayon:"Fruits & légumes"}]},
+    {nom:"Oignon", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Farine", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
 
   { nom:"Rougail saucisse", emoji:"🌶️", type:"consistant", vegetarien:false, rapide:false, thermomix:false, saisons:[], etapes:["Faites bouillir les saucisses 10 minutes pour les dessaler, puis coupez-les en tronçons.", "Faites-les dorer à la poêle, réservez.", "Faites revenir les oignons, l'ail, le gingembre et le curcuma.", "Ajoutez les tomates, laissez compoter 10 minutes.", "Remettez les saucisses, couvrez et laissez mijoter 25 minutes. Servez avec du riz."], lien:"", ingredients:[
     {nom:"Saucisses fumées", qte:"6", unite:"", rayon:"Boucherie"},
@@ -1132,7 +1138,8 @@ window.RECETTES_DEPART = [
     {nom:"Fromage de chèvre", qte:"150", unite:"g", rayon:"Crèmerie"},
     {nom:"Roquette", qte:"100", unite:"g", rayon:"Fruits & légumes"},
     {nom:"Noix", qte:"80", unite:"g", rayon:"Épicerie"},
-    {nom:"Vinaigre balsamique", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
+    {nom:"Vinaigre balsamique", qte:"2", unite:"c. à soupe", rayon:"Épicerie"},
+    {nom:"Miel", qte:"1", unite:"c. à café", rayon:"Épicerie"}]},
 
   { nom:"Taboulé libanais", emoji:"🌿", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["ete"], etapes:["Faites gonfler le boulgour 15 minutes dans un peu d'eau tiède.", "Hachez le persil très finement : dans ce taboulé-là, c'est l'ingrédient principal.", "Coupez les tomates en tout petits dés et ciselez les oignons nouveaux.", "Mélangez le tout avec le jus de citron et l'huile d'olive.", "Laissez reposer 1 heure au frais avant de servir."], lien:"", ingredients:[
     {nom:"Boulgour", qte:"150", unite:"g", rayon:"Épicerie"},
@@ -1199,7 +1206,8 @@ window.RECETTES_DEPART = [
     {nom:"Tomates", qte:"4", unite:"", rayon:"Fruits & légumes"},
     {nom:"Olives vertes", qte:"100", unite:"g", rayon:"Épicerie"},
     {nom:"Câpres", qte:"2", unite:"c. à soupe", rayon:"Épicerie"},
-    {nom:"Vinaigre de vin", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+    {nom:"Vinaigre de vin", qte:"3", unite:"c. à soupe", rayon:"Épicerie"},
+    {nom:"Sucre", qte:"1", unite:"c. à soupe", rayon:"Épicerie"}]},
 
   { nom:"Aubergines à la parmigiana", emoji:"🍆", type:"consistant", vegetarien:true, rapide:false, thermomix:false, saisons:["ete"], etapes:["Coupez les aubergines en tranches, salez-les et laissez dégorger 30 minutes.", "Épongez-les et faites-les griller à la poêle, sans les noyer d'huile.", "Préparez une sauce tomate avec l'ail et le basilic, laissez réduire 20 minutes.", "Alternez dans un plat : aubergines, sauce, mozzarella, parmesan.", "Enfournez 35 minutes à 180 °C et laissez reposer 10 minutes avant de servir."], lien:"", ingredients:[
     {nom:"Aubergines", qte:"4", unite:"", rayon:"Fruits & légumes"},
@@ -1342,7 +1350,9 @@ window.RECETTES_DEPART = [
     {nom:"Champignons de Paris", qte:"250", unite:"g", rayon:"Fruits & légumes"},
     {nom:"Lait", qte:"40", unite:"cl", rayon:"Crèmerie"},
     {nom:"Vin blanc", qte:"10", unite:"cl", rayon:"Boissons"},
-    {nom:"Fromage râpé", qte:"100", unite:"g", rayon:"Crèmerie"}]},
+    {nom:"Fromage râpé", qte:"100", unite:"g", rayon:"Crèmerie"},
+    {nom:"Farine", qte:"40", unite:"g", rayon:"Épicerie"},
+    {nom:"Beurre", qte:"40", unite:"g", rayon:"Crèmerie"}]},
 
   { nom:"Daurade au four et pommes de terre", emoji:"🐟", type:"consistant", vegetarien:false, rapide:false, thermomix:false, saisons:[], etapes:["Coupez les pommes de terre en fines rondelles et disposez-les au fond du plat avec l'oignon.", "Arrosez d'huile d'olive, salez, enfournez 20 minutes à 200 °C.", "Posez la daurade vidée dessus, avec du thym et des rondelles de citron.", "Arrosez de vin blanc et poursuivez 25 minutes.", "La chair doit se détacher facilement de l'arête centrale."], lien:"", ingredients:[
     {nom:"Daurade", qte:"2", unite:"", rayon:"Poissonnerie"},
@@ -1445,7 +1455,8 @@ window.RECETTES_DEPART = [
     {nom:"Pommes de terre", qte:"1", unite:"kg", rayon:"Fruits & légumes"},
     {nom:"Échalotes", qte:"2", unite:"", rayon:"Fruits & légumes"},
     {nom:"Chapelure", qte:"50", unite:"g", rayon:"Épicerie"},
-    {nom:"Persil", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+    {nom:"Persil", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Beurre", qte:"30", unite:"g", rayon:"Crèmerie"}]},
 
   { nom:"Bœuf aux oignons", emoji:"🥢", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Émincez le bœuf très finement, en travers des fibres.", "Faites-le mariner 20 minutes avec la sauce soja, l'ail et la fécule.", "Saisissez-le 2 minutes à feu très vif, réservez.", "Faites revenir les oignons en lamelles jusqu'à ce qu'ils blondissent.", "Réunissez le tout 1 minute et servez avec du riz."], lien:"", ingredients:[
     {nom:"Bœuf à griller", qte:"500", unite:"g", rayon:"Boucherie"},
@@ -1481,7 +1492,9 @@ window.RECETTES_DEPART = [
     {nom:"Carottes", qte:"4", unite:"", rayon:"Fruits & légumes"},
     {nom:"Champignons de Paris", qte:"250", unite:"g", rayon:"Fruits & légumes"},
     {nom:"Crème fraîche", qte:"20", unite:"cl", rayon:"Crèmerie"},
-    {nom:"Riz", qte:"300", unite:"g", rayon:"Épicerie"}]},
+    {nom:"Riz", qte:"300", unite:"g", rayon:"Épicerie"},
+    {nom:"Farine", qte:"40", unite:"g", rayon:"Épicerie"},
+    {nom:"Beurre", qte:"40", unite:"g", rayon:"Crèmerie"}]},
 
   { nom:"Pot-au-feu", emoji:"🍲", type:"consistant", vegetarien:false, rapide:false, thermomix:false, saisons:["automne", "hiver"], etapes:["Mettez la viande dans l'eau froide et portez doucement à frémissement.", "Écumez soigneusement pendant le premier quart d'heure : c'est ce qui donne un bouillon clair.", "Ajoutez l'oignon piqué de clous de girofle et laissez cuire 2 heures.", "Ajoutez carottes, navets et poireaux, poursuivez 45 minutes.", "Servez le bouillon d'abord, la viande et les légumes ensuite."], lien:"", ingredients:[
     {nom:"Bœuf à pot-au-feu", qte:"1,2", unite:"kg", rayon:"Boucherie"},
@@ -1708,7 +1721,8 @@ window.RECETTES_DEPART = [
     {nom:"Carottes", qte:"2", unite:"", rayon:"Fruits & légumes"},
     {nom:"Chou blanc", qte:"1", unite:"", rayon:"Fruits & légumes"},
     {nom:"Sauce soja", qte:"4", unite:"c. à soupe", rayon:"Épicerie"},
-    {nom:"Graines de sésame", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
+    {nom:"Graines de sésame", qte:"2", unite:"c. à soupe", rayon:"Épicerie"},
+    {nom:"Miel", qte:"1", unite:"c. à soupe", rayon:"Épicerie"}]},
 
   { nom:"Salade de courgettes crues au citron", emoji:"🥒", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["ete"], etapes:["Taillez les courgettes en fins rubans à l'économe.", "Salez-les légèrement et laissez 10 minutes, puis épongez.", "Assaisonnez d'huile d'olive, de jus de citron et de zeste.", "Ajoutez les pignons grillés et les copeaux de parmesan.", "Servez tout de suite : ces rubans ramollissent vite."], lien:"", ingredients:[
     {nom:"Courgettes", qte:"3", unite:"", rayon:"Fruits & légumes"},
@@ -1875,7 +1889,8 @@ window.RECETTES_DEPART = [
     {nom:"Oranges", qte:"2", unite:"", rayon:"Fruits & légumes"},
     {nom:"Bananes", qte:"2", unite:"", rayon:"Fruits & légumes"},
     {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
-    {nom:"Menthe", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+    {nom:"Menthe", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Sucre", qte:"1", unite:"c. à soupe", rayon:"Épicerie"}]},
 
   { nom:"Compote de pommes maison", emoji:"🍎", type:"leger", vegetarien:true, rapide:true, thermomix:true, plat:"dessert", saisons:["automne", "hiver"], etapes:["Épluchez et coupez les pommes en morceaux.", "Mettez-les dans une casserole avec 3 cuillères d'eau et la cannelle.", "Couvrez et laissez cuire 20 minutes à feu doux, en remuant de temps en temps.", "Écrasez à la fourchette pour une compote rustique, mixez pour une texture lisse.", "Sucrez seulement à la fin, si nécessaire : les pommes le sont souvent assez."], lien:"", ingredients:[
     {nom:"Pommes", qte:"1", unite:"kg", rayon:"Fruits & légumes"},
@@ -1894,7 +1909,8 @@ window.RECETTES_DEPART = [
     {nom:"Œufs", qte:"3", unite:"", rayon:"Crèmerie"},
     {nom:"Lait", qte:"40", unite:"cl", rayon:"Crèmerie"},
     {nom:"Beurre", qte:"100", unite:"g", rayon:"Crèmerie"},
-    {nom:"Levure chimique", qte:"1", unite:"sachet(s)", rayon:"Épicerie"}]},
+    {nom:"Levure chimique", qte:"1", unite:"sachet(s)", rayon:"Épicerie"},
+    {nom:"Sucre", qte:"60", unite:"g", rayon:"Épicerie"}]},
 
   { nom:"Pain perdu", emoji:"🍞", type:"leger", vegetarien:true, rapide:true, thermomix:false, plat:"dessert", saisons:[], etapes:["Battez les œufs avec le lait, le sucre et la vanille.", "Trempez les tranches de pain rassis 30 secondes de chaque côté : rassis, il boit sans se déliter.", "Faites-les dorer au beurre à feu moyen, 3 minutes par face.", "Saupoudrez de sucre à la sortie de la poêle.", "Servez tiède, avec de la compote ou des fruits rouges."], lien:"", ingredients:[
     {nom:"Pain rassis", qte:"8", unite:"tranche(s)", rayon:"Boulangerie"},
@@ -2140,5 +2156,396 @@ window.RECETTES_DEPART = [
     {nom:"Beurre", qte:"150", unite:"g", rayon:"Crèmerie"},
     {nom:"Sucre", qte:"150", unite:"g", rayon:"Épicerie"},
     {nom:"Œufs", qte:"4", unite:"", rayon:"Crèmerie"},
-    {nom:"Levure chimique", qte:"1", unite:"sachet(s)", rayon:"Épicerie"}]}
+    {nom:"Levure chimique", qte:"1", unite:"sachet(s)", rayon:"Épicerie"}]},
+
+  { nom:"Pâtes à la sauce au thon", emoji:"🍝", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Faites blondir l'ail émincé dans l'huile d'olive, sans le colorer.", "Ajoutez les tomates concassées et laissez réduire 15 minutes à découvert.", "Émiettez le thon égoutté dans la sauce, hors du feu : cuit trop longtemps, il devient sec.", "Faites cuire les pâtes al dente et gardez une louche d'eau de cuisson.", "Mélangez le tout, allongez avec l'eau de cuisson, terminez au persil et au citron."], lien:"", ingredients:[
+    {nom:"Pâtes", qte:"400", unite:"g", rayon:"Épicerie"},
+    {nom:"Thon en boîte", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Tomates concassées", qte:"1", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Ail", qte:"2", unite:"gousse(s)", rayon:"Fruits & légumes"},
+    {nom:"Persil", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Pâtes crémeuses au thon et citron", emoji:"🍋", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Faites cuire les pâtes et prélevez une louche d'eau de cuisson.", "Mélangez la ricotta avec le zeste et le jus du citron, allongez avec l'eau de cuisson.", "Ajoutez le thon égoutté et émietté.", "Versez sur les pâtes chaudes hors du feu : la sauce ne doit jamais bouillir.", "Poivrez généreusement et parsemez de ciboulette."], lien:"", ingredients:[
+    {nom:"Pâtes", qte:"400", unite:"g", rayon:"Épicerie"},
+    {nom:"Thon en boîte", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Ricotta", qte:"250", unite:"g", rayon:"Crèmerie"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Ciboulette", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"One pot pasta au saumon et épinards", emoji:"🍲", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Mettez dans une seule casserole les pâtes crues, les épinards, l'échalote émincée et le zeste de citron.", "Couvrez d'eau à hauteur, pas plus : c'est elle qui deviendra la sauce.", "Portez à ébullition et laissez cuire 10 minutes en remuant souvent.", "Ajoutez le saumon en cubes 4 minutes avant la fin.", "Hors du feu, incorporez la ricotta et le jus de citron."], lien:"", ingredients:[
+    {nom:"Pâtes", qte:"400", unite:"g", rayon:"Épicerie"},
+    {nom:"Pavés de saumon", qte:"400", unite:"g", rayon:"Poissonnerie"},
+    {nom:"Épinards", qte:"200", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Ricotta", qte:"150", unite:"g", rayon:"Crèmerie"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Échalotes", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"One pot pasta poulet-curry", emoji:"🍲", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Faites dorer les morceaux de poulet dans la casserole, réservez-les.", "Remettez tout ensemble : pâtes crues, poulet, oignon, poivron, curry.", "Couvrez d'eau à hauteur et portez à ébullition.", "Laissez cuire 11 minutes en remuant régulièrement pour que les pâtes n'attachent pas.", "Ajoutez le lait de coco en fin de cuisson et laissez épaissir 2 minutes."], lien:"", ingredients:[
+    {nom:"Pâtes", qte:"400", unite:"g", rayon:"Épicerie"},
+    {nom:"Blancs de poulet", qte:"500", unite:"g", rayon:"Boucherie"},
+    {nom:"Lait de coco", qte:"20", unite:"cl", rayon:"Épicerie"},
+    {nom:"Poivrons", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Curry", qte:"2", unite:"c. à soupe", rayon:"Épicerie"},
+    {nom:"Oignon", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"One pot pasta aux légumes du soleil", emoji:"🍲", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["ete"], etapes:["Coupez courgette, poivron et tomates en dés réguliers.", "Mettez tout dans la casserole avec les pâtes crues, l'ail et le basilic.", "Couvrez d'eau à hauteur et faites cuire 11 minutes à gros bouillons.", "Remuez souvent : l'amidon des pâtes lie la sauce tout seul.", "Terminez par un filet d'huile d'olive et du basilic frais."], lien:"", ingredients:[
+    {nom:"Pâtes", qte:"400", unite:"g", rayon:"Épicerie"},
+    {nom:"Courgettes", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Tomates", qte:"4", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Poivrons", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Ail", qte:"2", unite:"gousse(s)", rayon:"Fruits & légumes"},
+    {nom:"Basilic", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"One pot riz aux pois chiches et épinards", emoji:"🍲", type:"consistant", vegetarien:true, rapide:true, thermomix:false, saisons:[], etapes:["Faites revenir l'oignon avec le curcuma et le cumin.", "Ajoutez le riz cru et enrobez-le bien des épices.", "Versez deux fois son volume d'eau, ajoutez les pois chiches égouttés.", "Couvrez et laissez cuire 18 minutes sans remuer.", "Hors du feu, ajoutez les épinards et laissez-les tomber sous le couvercle 3 minutes."], lien:"", ingredients:[
+    {nom:"Riz", qte:"300", unite:"g", rayon:"Épicerie"},
+    {nom:"Pois chiches", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Épinards", qte:"200", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Curcuma", qte:"1", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Cumin", qte:"1", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Oignon", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"Cake salé au thon et tomates séchées", emoji:"🍞", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Battez les œufs avec l'huile et le lait.", "Incorporez la farine et la levure sans trop travailler la pâte.", "Ajoutez le thon égoutté, les tomates séchées en lanières et le basilic.", "Versez dans un moule à cake chemisé.", "Enfournez 40 minutes à 180 °C : la lame d'un couteau doit ressortir sèche."], lien:"", ingredients:[
+    {nom:"Thon en boîte", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Tomates séchées", qte:"100", unite:"g", rayon:"Épicerie"},
+    {nom:"Farine", qte:"200", unite:"g", rayon:"Épicerie"},
+    {nom:"Œufs", qte:"3", unite:"", rayon:"Crèmerie"},
+    {nom:"Lait", qte:"12", unite:"cl", rayon:"Crèmerie"},
+    {nom:"Levure chimique", qte:"1", unite:"sachet(s)", rayon:"Épicerie"}]},
+
+  { nom:"Cake salé courgette et menthe", emoji:"🍞", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["ete"], etapes:["Râpez les courgettes, salez légèrement et pressez-les fort : sans cela le cake reste humide.", "Battez les œufs avec l'huile d'olive et le lait.", "Ajoutez farine et levure, puis les courgettes et la menthe ciselée.", "Versez dans un moule chemisé.", "Enfournez 45 minutes à 180 °C."], lien:"", ingredients:[
+    {nom:"Courgettes", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Farine", qte:"200", unite:"g", rayon:"Épicerie"},
+    {nom:"Œufs", qte:"3", unite:"", rayon:"Crèmerie"},
+    {nom:"Menthe", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"8", unite:"cl", rayon:"Épicerie"},
+    {nom:"Levure chimique", qte:"1", unite:"sachet(s)", rayon:"Épicerie"},
+    {nom:"Lait", qte:"12", unite:"cl", rayon:"Crèmerie"}]},
+
+  { nom:"Cake salé saumon et aneth", emoji:"🍞", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Faites cuire le saumon 8 minutes à la vapeur, puis émiettez-le en gros morceaux.", "Préparez la pâte : œufs, lait, huile, farine, levure.", "Incorporez le saumon et l'aneth ciselé délicatement, pour garder des morceaux.", "Versez dans un moule à cake.", "Enfournez 40 minutes à 180 °C et laissez tiédir avant de démouler."], lien:"", ingredients:[
+    {nom:"Pavés de saumon", qte:"350", unite:"g", rayon:"Poissonnerie"},
+    {nom:"Aneth", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Farine", qte:"200", unite:"g", rayon:"Épicerie"},
+    {nom:"Œufs", qte:"3", unite:"", rayon:"Crèmerie"},
+    {nom:"Lait", qte:"12", unite:"cl", rayon:"Crèmerie"},
+    {nom:"Levure chimique", qte:"1", unite:"sachet(s)", rayon:"Épicerie"}]},
+
+  { nom:"Cake salé aux légumes du soleil", emoji:"🍞", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["ete"], etapes:["Faites revenir courgette, poivron et oignon en petits dés, 12 minutes.", "Laissez-les refroidir : versés chauds, ils cuiraient les œufs.", "Mélangez œufs, lait, huile d'olive, farine et levure.", "Incorporez les légumes et les herbes.", "Enfournez 45 minutes à 180 °C."], lien:"", ingredients:[
+    {nom:"Courgettes", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Poivrons", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Farine", qte:"200", unite:"g", rayon:"Épicerie"},
+    {nom:"Œufs", qte:"3", unite:"", rayon:"Crèmerie"},
+    {nom:"Huile d'olive", qte:"8", unite:"cl", rayon:"Épicerie"},
+    {nom:"Levure chimique", qte:"1", unite:"sachet(s)", rayon:"Épicerie"},
+    {nom:"Lait", qte:"12", unite:"cl", rayon:"Crèmerie"}]},
+
+  { nom:"Cake salé poulet et curry", emoji:"🍞", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Coupez le poulet en petits dés et faites-le dorer avec le curry.", "Laissez refroidir.", "Préparez la pâte : œufs, lait, huile, farine, levure.", "Ajoutez le poulet et les raisins secs.", "Enfournez 45 minutes à 180 °C."], lien:"", ingredients:[
+    {nom:"Blancs de poulet", qte:"300", unite:"g", rayon:"Boucherie"},
+    {nom:"Curry", qte:"2", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Raisins secs", qte:"60", unite:"g", rayon:"Épicerie"},
+    {nom:"Farine", qte:"200", unite:"g", rayon:"Épicerie"},
+    {nom:"Œufs", qte:"3", unite:"", rayon:"Crèmerie"},
+    {nom:"Lait", qte:"12", unite:"cl", rayon:"Crèmerie"}]},
+
+  { nom:"Quiche sans pâte au thon", emoji:"🥧", type:"leger", vegetarien:false, rapide:true, thermomix:true, saisons:[], etapes:["Battez les œufs avec le lait et la farine jusqu'à obtenir une pâte lisse.", "Ajoutez le thon égoutté et les tomates en dés.", "Versez dans un moule beurré : la pâte forme sa propre croûte en cuisant.", "Parsemez d'herbes.", "Enfournez 35 minutes à 180 °C."], lien:"", ingredients:[
+    {nom:"Thon en boîte", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Œufs", qte:"4", unite:"", rayon:"Crèmerie"},
+    {nom:"Lait", qte:"30", unite:"cl", rayon:"Crèmerie"},
+    {nom:"Farine", qte:"80", unite:"g", rayon:"Épicerie"},
+    {nom:"Tomates", qte:"3", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"Quiche brocolis et saumon", emoji:"🥧", type:"consistant", vegetarien:false, rapide:false, thermomix:false, saisons:["automne", "hiver"], etapes:["Faites cuire les brocolis 6 minutes à l'eau bouillante, égouttez-les bien.", "Étalez la pâte, piquez-la et répartissez brocolis et saumon en cubes.", "Battez les œufs avec la crème, l'aneth et le poivre.", "Versez l'appareil.", "Enfournez 35 minutes à 190 °C."], lien:"", ingredients:[
+    {nom:"Pâte brisée", qte:"1", unite:"", rayon:"Crèmerie"},
+    {nom:"Brocoli", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Pavés de saumon", qte:"300", unite:"g", rayon:"Poissonnerie"},
+    {nom:"Œufs", qte:"3", unite:"", rayon:"Crèmerie"},
+    {nom:"Crème fraîche", qte:"20", unite:"cl", rayon:"Crèmerie"},
+    {nom:"Aneth", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"Quiche aux champignons et persil", emoji:"🍄", type:"consistant", vegetarien:true, rapide:false, thermomix:false, saisons:["automne"], etapes:["Faites sauter les champignons à feu vif jusqu'à évaporation complète de leur eau.", "Ajoutez l'ail et le persil hors du feu.", "Étalez la pâte, répartissez les champignons.", "Versez l'appareil œufs-crème.", "Enfournez 35 minutes à 190 °C."], lien:"", ingredients:[
+    {nom:"Pâte brisée", qte:"1", unite:"", rayon:"Crèmerie"},
+    {nom:"Champignons de Paris", qte:"500", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Œufs", qte:"3", unite:"", rayon:"Crèmerie"},
+    {nom:"Crème fraîche", qte:"20", unite:"cl", rayon:"Crèmerie"},
+    {nom:"Persil", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"Tarte fine tomates et basilic", emoji:"🍅", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["ete"], etapes:["Déroulez la pâte feuilletée sur sa feuille de cuisson et piquez-la à la fourchette.", "Coupez les tomates en fines rondelles, laissez-les 10 minutes sur du papier absorbant.", "Rangez-les en les faisant se chevaucher, arrosez d'huile d'olive.", "Enfournez 25 minutes à 200 °C.", "Ajoutez le basilic à la sortie du four, jamais avant : il noircirait."], lien:"", ingredients:[
+    {nom:"Pâte feuilletée", qte:"1", unite:"", rayon:"Crèmerie"},
+    {nom:"Tomates", qte:"6", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Basilic", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Tarte rapide courgettes-ricotta", emoji:"🥧", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["ete"], etapes:["Taillez les courgettes en fines rondelles à l'économe.", "Étalez la pâte et tartinez-la de ricotta mélangée au zeste de citron.", "Disposez les courgettes en rosace par-dessus.", "Arrosez d'huile d'olive et poivrez.", "Enfournez 30 minutes à 200 °C."], lien:"", ingredients:[
+    {nom:"Pâte feuilletée", qte:"1", unite:"", rayon:"Crèmerie"},
+    {nom:"Courgettes", qte:"3", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Ricotta", qte:"250", unite:"g", rayon:"Crèmerie"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Tarte fine aux champignons et thym", emoji:"🍄", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["automne"], etapes:["Faites sauter les champignons émincés à feu vif avec l'échalote.", "Égouttez-les : une garniture humide détrempe la pâte.", "Étalez la pâte feuilletée, piquez-la, répartissez les champignons.", "Parsemez de thym et d'un filet d'huile.", "Enfournez 25 minutes à 210 °C."], lien:"", ingredients:[
+    {nom:"Pâte feuilletée", qte:"1", unite:"", rayon:"Crèmerie"},
+    {nom:"Champignons de Paris", qte:"500", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Échalotes", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Thym", qte:"3", unite:"branche(s)", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Tarte express poireaux et saumon", emoji:"🥧", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:["automne", "hiver"], etapes:["Émincez les poireaux et faites-les fondre 15 minutes à couvert.", "Étalez la pâte et répartissez les poireaux refroidis.", "Posez le saumon en cubes par-dessus.", "Battez les œufs avec la crème et versez.", "Enfournez 30 minutes à 190 °C."], lien:"", ingredients:[
+    {nom:"Pâte brisée", qte:"1", unite:"", rayon:"Crèmerie"},
+    {nom:"Poireaux", qte:"3", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Pavés de saumon", qte:"300", unite:"g", rayon:"Poissonnerie"},
+    {nom:"Œufs", qte:"3", unite:"", rayon:"Crèmerie"},
+    {nom:"Crème fraîche", qte:"20", unite:"cl", rayon:"Crèmerie"}]},
+  { nom:"Poke bowl au saumon", emoji:"🥗", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Faites cuire le riz et laissez-le tiédir.", "Coupez le saumon très frais en cubes réguliers, au couteau.", "Faites-le mariner 15 minutes dans le jus de citron vert et l'huile de sésame.", "Dressez le riz au fond du bol, puis chaque garniture par secteurs : avocat, concombre, edamames.", "Parsemez de graines de sésame et servez frais."], lien:"", ingredients:[
+    {nom:"Saumon très frais", qte:"400", unite:"g", rayon:"Poissonnerie"},
+    {nom:"Riz", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Avocats", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Concombre", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Citron vert", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Graines de sésame", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Bowl thon, avocat et quinoa", emoji:"🥑", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Faites cuire le quinoa 15 minutes dans le double d'eau, égouttez et laissez tiédir.", "Coupez l'avocat, les tomates cerises et le concombre.", "Égouttez le thon et détaillez-le en gros morceaux.", "Assaisonnez d'huile d'olive et de citron, sans saler : le thon apporte déjà ce qu'il faut.", "Dressez par secteurs et parsemez de graines de courge."], lien:"", ingredients:[
+    {nom:"Thon en boîte", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Quinoa", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Avocats", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Tomates cerises", qte:"250", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Graines de courge", qte:"40", unite:"g", rayon:"Épicerie"}]},
+
+  { nom:"Salade de lentilles, pomme et noix", emoji:"🥗", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["automne", "hiver"], etapes:["Faites cuire les lentilles 20 minutes dans l'eau non salée : le sel les durcit.", "Égouttez-les et laissez-les tiédir.", "Coupez la pomme en petits dés, arrosez-la de citron.", "Préparez une vinaigrette à l'huile de noix et au vinaigre de cidre.", "Mélangez le tout et parsemez de noix concassées et de persil."], lien:"", ingredients:[
+    {nom:"Lentilles vertes", qte:"300", unite:"g", rayon:"Épicerie"},
+    {nom:"Pommes", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Noix", qte:"80", unite:"g", rayon:"Épicerie"},
+    {nom:"Huile de noix", qte:"3", unite:"c. à soupe", rayon:"Épicerie"},
+    {nom:"Vinaigre de cidre", qte:"1", unite:"c. à soupe", rayon:"Épicerie"},
+    {nom:"Persil", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"Bowl patate douce et pois chiches rôtis", emoji:"🍠", type:"consistant", vegetarien:true, rapide:false, thermomix:false, saisons:["automne", "hiver"], etapes:["Coupez la patate douce en cubes, enrobez-la de paprika et d'huile d'olive.", "Séchez les pois chiches et mélangez-les au cumin.", "Étalez le tout sur une plaque sans superposer, c'est ce qui les fait rôtir.", "Enfournez 30 minutes à 210 °C en remuant à mi-cuisson.", "Servez sur un lit de quinoa avec une sauce au yaourt et citron."], lien:"", ingredients:[
+    {nom:"Patates douces", qte:"600", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Pois chiches", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Quinoa", qte:"200", unite:"g", rayon:"Épicerie"},
+    {nom:"Yaourt nature", qte:"2", unite:"pot(s)", rayon:"Crèmerie"},
+    {nom:"Paprika", qte:"1", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"Salade de riz complet aux crevettes", emoji:"🍤", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:["ete"], etapes:["Faites cuire le riz complet 35 minutes, rincez-le à l'eau froide.", "Coupez le concombre et les tomates cerises.", "Ajoutez les crevettes et la menthe ciselée.", "Assaisonnez d'huile d'olive, de citron vert et d'un peu de gingembre râpé.", "Laissez reposer 30 minutes au frais avant de servir."], lien:"", ingredients:[
+    {nom:"Riz complet", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Crevettes décortiquées", qte:"300", unite:"g", rayon:"Poissonnerie"},
+    {nom:"Concombre", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Tomates cerises", qte:"250", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Citron vert", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Menthe", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"Salade de haricots blancs au thon", emoji:"🥗", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Rincez et égouttez les haricots blancs.", "Émincez l'oignon rouge très finement et laissez-le 10 minutes dans le jus de citron : il s'adoucit.", "Ajoutez le thon égoutté et les tomates en quartiers.", "Assaisonnez d'huile d'olive et de persil.", "Meilleure après une heure au frais."], lien:"", ingredients:[
+    {nom:"Haricots blancs", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Thon en boîte", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Oignon rouge", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Tomates", qte:"3", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Papillote de saumon aux légumes croquants", emoji:"🐟", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Taillez carotte et courgette en fins bâtonnets.", "Posez-les au centre d'une feuille de papier cuisson, le pavé de saumon dessus.", "Ajoutez une rondelle de citron, un peu de gingembre râpé et un filet d'huile d'olive.", "Fermez hermétiquement en repliant les bords : c'est la vapeur enfermée qui cuit tout.", "Enfournez 18 minutes à 200 °C et ouvrez à table."], lien:"", ingredients:[
+    {nom:"Pavés de saumon", qte:"4", unite:"", rayon:"Poissonnerie"},
+    {nom:"Carottes", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Courgettes", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Gingembre", qte:"1", unite:"morceau(x)", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Cabillaud en croûte d'herbes", emoji:"🐟", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Mixez le persil, la ciboulette, l'ail et l'huile d'olive en une pâte verte.", "Étalez-la sur les dos de cabillaud.", "Posez-les sur un lit de tomates cerises coupées en deux.", "Enfournez 15 minutes à 200 °C.", "Le poisson est cuit dès qu'il se sépare en gros pétales — pas une minute de plus."], lien:"", ingredients:[
+    {nom:"Dos de cabillaud", qte:"4", unite:"", rayon:"Poissonnerie"},
+    {nom:"Persil", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Ciboulette", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Tomates cerises", qte:"300", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Ail", qte:"2", unite:"gousse(s)", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"4", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Sardines à la tomate et riz complet", emoji:"🐟", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Faites cuire le riz complet 35 minutes.", "Pendant ce temps, faites compoter les tomates avec l'ail et l'origan, 20 minutes.", "Ajoutez les sardines égouttées en fin de cuisson, sans les écraser.", "Servez sur le riz, avec un filet d'huile d'olive et du citron.", "Un plat de placard, riche en oméga-3 et prêt en une demi-heure."], lien:"", ingredients:[
+    {nom:"Sardines en boîte", qte:"3", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Riz complet", qte:"300", unite:"g", rayon:"Épicerie"},
+    {nom:"Tomates concassées", qte:"1", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Ail", qte:"2", unite:"gousse(s)", rayon:"Fruits & légumes"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Curry de lentilles au potiron", emoji:"🎃", type:"consistant", vegetarien:true, rapide:true, thermomix:true, saisons:["automne", "hiver"], etapes:["Faites revenir l'oignon, l'ail et le gingembre avec le curcuma et le cumin.", "Ajoutez le potiron en cubes et les lentilles corail rincées.", "Versez le lait de coco et deux verres d'eau.", "Laissez mijoter 25 minutes : les lentilles corail se défont et lient le plat.", "Terminez au citron vert et à la coriandre."], lien:"", ingredients:[
+    {nom:"Lentilles corail", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Potiron", qte:"600", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Lait de coco", qte:"40", unite:"cl", rayon:"Épicerie"},
+    {nom:"Gingembre", qte:"1", unite:"morceau(x)", rayon:"Fruits & légumes"},
+    {nom:"Curcuma", qte:"1", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Coriandre", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"Boulettes de lentilles à la tomate", emoji:"🫘", type:"consistant", vegetarien:true, rapide:false, thermomix:false, saisons:[], etapes:["Écrasez grossièrement les lentilles cuites à la fourchette.", "Mélangez-les à l'oignon râpé, l'œuf, les flocons d'avoine et le cumin.", "Laissez reposer 15 minutes : les flocons absorbent l'humidité et tout se tient.", "Formez des boulettes et faites-les dorer 8 minutes à la poêle.", "Laissez-les mijoter 15 minutes dans la sauce tomate."], lien:"", ingredients:[
+    {nom:"Lentilles vertes", qte:"300", unite:"g", rayon:"Épicerie"},
+    {nom:"Flocons d'avoine", qte:"80", unite:"g", rayon:"Épicerie"},
+    {nom:"Œufs", qte:"1", unite:"", rayon:"Crèmerie"},
+    {nom:"Tomates concassées", qte:"1", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Oignon", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Cumin", qte:"1", unite:"c. à café", rayon:"Épicerie"}]},
+
+  { nom:"Chili de quinoa aux haricots noirs", emoji:"🌶️", type:"consistant", vegetarien:true, rapide:true, thermomix:false, saisons:[], etapes:["Faites revenir oignon, poivron et ail.", "Ajoutez le cumin et le paprika, remuez pour les réveiller.", "Versez le quinoa rincé, les haricots noirs et les tomates.", "Ajoutez un verre d'eau et laissez mijoter 20 minutes à couvert.", "Servez avec de l'avocat en dés et de la coriandre."], lien:"", ingredients:[
+    {nom:"Quinoa", qte:"200", unite:"g", rayon:"Épicerie"},
+    {nom:"Haricots noirs", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Tomates concassées", qte:"1", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Poivrons", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Avocats", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Cumin", qte:"1", unite:"c. à café", rayon:"Épicerie"}]},
+
+  { nom:"Sauté de dinde au gingembre et brocolis", emoji:"🦃", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:[], etapes:["Émincez la dinde en fines lanières.", "Détaillez le brocoli en petits bouquets et blanchissez-les 4 minutes.", "Saisissez la dinde 3 minutes à feu très vif, réservez.", "Faites sauter le brocoli avec l'ail et le gingembre râpé.", "Réunissez le tout, ajoutez un filet de citron et servez avec du riz complet."], lien:"", ingredients:[
+    {nom:"Escalopes de dinde", qte:"600", unite:"g", rayon:"Boucherie"},
+    {nom:"Brocoli", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Gingembre", qte:"1", unite:"morceau(x)", rayon:"Fruits & légumes"},
+    {nom:"Riz complet", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Ail", qte:"2", unite:"gousse(s)", rayon:"Fruits & légumes"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"Blancs de poulet au paprika et patates douces", emoji:"🍗", type:"consistant", vegetarien:false, rapide:true, thermomix:false, saisons:["automne", "hiver"], etapes:["Coupez les patates douces en quartiers et enrobez-les d'huile d'olive et de paprika.", "Enfournez-les 15 minutes à 210 °C avant d'ajouter le poulet.", "Frottez les blancs de poulet de paprika et d'ail écrasé.", "Poursuivez 20 minutes ensemble.", "Arrosez de jus de citron à la sortie du four."], lien:"", ingredients:[
+    {nom:"Blancs de poulet", qte:"4", unite:"", rayon:"Boucherie"},
+    {nom:"Patates douces", qte:"800", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Paprika", qte:"2", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Ail", qte:"3", unite:"gousse(s)", rayon:"Fruits & légumes"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Crevettes sautées à l'ail et courgettes", emoji:"🍤", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:["ete"], etapes:["Taillez les courgettes en rubans à l'économe.", "Faites-les sauter 4 minutes à feu vif, elles doivent rester fermes.", "Ajoutez l'ail émincé et les crevettes, 3 minutes de plus.", "Déglacez au jus de citron et parsemez de persil.", "Servez tel quel ou sur du riz complet."], lien:"", ingredients:[
+    {nom:"Crevettes décortiquées", qte:"500", unite:"g", rayon:"Poissonnerie"},
+    {nom:"Courgettes", qte:"4", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Ail", qte:"3", unite:"gousse(s)", rayon:"Fruits & légumes"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Persil", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Riz complet aux légumes et œufs mollets", emoji:"🥚", type:"consistant", vegetarien:true, rapide:true, thermomix:false, saisons:[], etapes:["Faites cuire le riz complet 35 minutes.", "Faites sauter carottes, courgette et petits pois 8 minutes.", "Plongez les œufs 6 minutes dans l'eau bouillante, puis dans l'eau glacée : le jaune reste coulant.", "Mélangez riz et légumes, assaisonnez d'huile d'olive et de citron.", "Posez les œufs écalés et coupés en deux par-dessus."], lien:"", ingredients:[
+    {nom:"Riz complet", qte:"300", unite:"g", rayon:"Épicerie"},
+    {nom:"Œufs", qte:"4", unite:"", rayon:"Crèmerie"},
+    {nom:"Carottes", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Courgettes", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Petits pois", qte:"200", unite:"g", rayon:"Surgelés"},
+    {nom:"Huile d'olive", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Poêlée de sarrasin aux champignons", emoji:"🌾", type:"consistant", vegetarien:true, rapide:true, thermomix:false, saisons:["automne"], etapes:["Rincez le sarrasin et faites-le cuire 15 minutes dans le double d'eau.", "Faites sauter les champignons à feu vif jusqu'à évaporation de leur eau.", "Ajoutez l'échalote, l'ail et le persil.", "Mélangez au sarrasin égoutté.", "Terminez par des noisettes concassées et un filet d'huile."], lien:"", ingredients:[
+    {nom:"Sarrasin", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Champignons de Paris", qte:"400", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Échalotes", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Noisettes", qte:"50", unite:"g", rayon:"Épicerie"},
+    {nom:"Persil", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"2", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Curry de pois cassés au lait de coco", emoji:"🍛", type:"consistant", vegetarien:true, rapide:false, thermomix:true, saisons:["automne", "hiver"], etapes:["Rincez les pois cassés, inutile de les tremper.", "Faites revenir oignon, ail et gingembre avec le curcuma.", "Ajoutez les pois cassés et trois fois leur volume d'eau.", "Laissez cuire 45 minutes, jusqu'à ce qu'ils se défassent.", "Incorporez le lait de coco et le citron vert en fin de cuisson."], lien:"", ingredients:[
+    {nom:"Pois cassés", qte:"300", unite:"g", rayon:"Épicerie"},
+    {nom:"Lait de coco", qte:"20", unite:"cl", rayon:"Épicerie"},
+    {nom:"Gingembre", qte:"1", unite:"morceau(x)", rayon:"Fruits & légumes"},
+    {nom:"Curcuma", qte:"1", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Oignon", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Citron vert", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"Salade de vermicelles de riz aux crevettes", emoji:"🍜", type:"leger", vegetarien:false, rapide:true, thermomix:false, saisons:["ete"], etapes:["Faites tremper les vermicelles de riz 5 minutes dans l'eau bouillante, rincez à l'eau froide.", "Râpez la carotte, taillez le concombre en bâtonnets.", "Ajoutez les crevettes, la menthe et la coriandre.", "Assaisonnez de citron vert, d'un peu de sucre et d'huile — pas de sauce salée, le citron suffit.", "Parsemez de cacahuètes concassées."], lien:"", ingredients:[
+    {nom:"Vermicelles de riz", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Crevettes décortiquées", qte:"300", unite:"g", rayon:"Poissonnerie"},
+    {nom:"Carottes", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Concombre", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Citron vert", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Cacahuètes", qte:"60", unite:"g", rayon:"Épicerie"},
+    {nom:"Sucre", qte:"1", unite:"c. à café", rayon:"Épicerie"}]},
+
+  { nom:"Velouté de patate douce et lentilles corail", emoji:"🥣", type:"leger", vegetarien:true, rapide:true, thermomix:true, saisons:["automne", "hiver"], etapes:["Faites revenir l'oignon avec le curcuma et le gingembre.", "Ajoutez la patate douce en cubes et les lentilles corail.", "Couvrez d'eau et laissez cuire 20 minutes.", "Mixez : les lentilles corail donnent une texture veloutée sans crème.", "Servez avec un filet de citron et des graines de courge."], lien:"", ingredients:[
+    {nom:"Patates douces", qte:"600", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Lentilles corail", qte:"150", unite:"g", rayon:"Épicerie"},
+    {nom:"Gingembre", qte:"1", unite:"morceau(x)", rayon:"Fruits & légumes"},
+    {nom:"Curcuma", qte:"1", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Graines de courge", qte:"40", unite:"g", rayon:"Épicerie"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"Salade de quinoa, concombre et menthe", emoji:"🥗", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["ete"], etapes:["Faites cuire le quinoa 15 minutes, rincez-le à l'eau froide et égouttez bien.", "Coupez le concombre et les tomates cerises en petits dés.", "Ciselez beaucoup de menthe : c'est elle qui fait le plat.", "Assaisonnez d'huile d'olive, de citron et de poivre.", "Laissez reposer une heure au frais."], lien:"", ingredients:[
+    {nom:"Quinoa", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Concombre", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Tomates cerises", qte:"250", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Menthe", qte:"2", unite:"bouquet(s)", rayon:"Fruits & légumes"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Quinoa aux brocolis et amandes", emoji:"🥦", type:"leger", vegetarien:true, rapide:true, thermomix:false, saisons:["automne", "hiver"], etapes:["Faites cuire le quinoa 15 minutes.", "Détaillez le brocoli en petits bouquets et faites-le rôtir 20 minutes à 210 °C.", "Faites griller les amandes à sec.", "Mélangez le tout avec l'huile d'olive, le zeste et le jus de citron.", "Servez tiède, c'est là que c'est le meilleur."], lien:"", ingredients:[
+    {nom:"Quinoa", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Brocoli", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Amandes effilées", qte:"60", unite:"g", rayon:"Épicerie"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"3", unite:"c. à soupe", rayon:"Épicerie"}]},
+
+  { nom:"Poêlée de haricots blancs aux tomates et romarin", emoji:"🫘", type:"consistant", vegetarien:true, rapide:true, thermomix:false, saisons:[], etapes:["Faites blondir l'ail et le romarin dans l'huile d'olive.", "Ajoutez les tomates cerises et laissez-les éclater à feu vif.", "Versez les haricots blancs rincés.", "Laissez mijoter 10 minutes en écrasant quelques haricots : la sauce épaissit toute seule.", "Servez avec du pain grillé frotté à l'ail."], lien:"", ingredients:[
+    {nom:"Haricots blancs", qte:"2", unite:"boîte(s)", rayon:"Épicerie"},
+    {nom:"Tomates cerises", qte:"400", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Ail", qte:"3", unite:"gousse(s)", rayon:"Fruits & légumes"},
+    {nom:"Romarin", qte:"2", unite:"branche(s)", rayon:"Fruits & légumes"},
+    {nom:"Huile d'olive", qte:"4", unite:"c. à soupe", rayon:"Épicerie"}]},
+  { nom:"Compote pomme-poire sans sucre ajouté", emoji:"🍏", type:"leger", vegetarien:true, rapide:true, thermomix:true, plat:"dessert", saisons:["automne", "hiver"], etapes:["Épluchez pommes et poires, coupez-les en morceaux.", "Mettez-les dans une casserole avec deux cuillères d'eau et la cannelle.", "Couvrez et laissez cuire 20 minutes à feu doux.", "Écrasez à la fourchette ou mixez selon la texture voulue.", "Ne sucrez pas : les fruits mûrs suffisent largement, goûtez avant d'en douter."], lien:"", ingredients:[
+    {nom:"Pommes", qte:"600", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Poires", qte:"400", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Cannelle", qte:"1", unite:"c. à café", rayon:"Épicerie"}]},
+
+  { nom:"Salade d'agrumes à la menthe", emoji:"🍊", type:"leger", vegetarien:true, rapide:true, thermomix:false, plat:"dessert", saisons:["hiver"], etapes:["Pelez les agrumes à vif, en retirant toute la peau blanche.", "Détachez les quartiers au-dessus d'un saladier pour garder le jus.", "Ciselez la menthe et mélangez.", "Laissez reposer 30 minutes au frais.", "Aucun sucre : le pamplemousse et l'orange se répondent très bien seuls."], lien:"", ingredients:[
+    {nom:"Oranges", qte:"4", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Pamplemousse", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Clémentines", qte:"3", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Menthe", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"Poires rôties à la cannelle", emoji:"🍐", type:"leger", vegetarien:true, rapide:true, thermomix:false, plat:"dessert", saisons:["automne", "hiver"], etapes:["Coupez les poires en deux et retirez le cœur à la cuillère.", "Posez-les côté coupé vers le haut dans un plat.", "Saupoudrez de cannelle et ajoutez un fond d'eau.", "Enfournez 30 minutes à 190 °C.", "Servez tièdes avec des noix concassées — le fruit rôti se suffit à lui-même."], lien:"", ingredients:[
+    {nom:"Poires", qte:"6", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Cannelle", qte:"1", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Noix", qte:"60", unite:"g", rayon:"Épicerie"}]},
+
+  { nom:"Mousse de fruits rouges au fromage blanc", emoji:"🍓", type:"leger", vegetarien:true, rapide:true, thermomix:false, plat:"dessert", saisons:["ete"], etapes:["Mixez les fruits rouges en coulis.", "Fouettez le fromage blanc pour l'alléger.", "Incorporez le coulis en marbrant, sans mélanger complètement.", "Répartissez en verrines et réfrigérez 2 heures.", "Sans sucre ajouté : goûtez d'abord, les fruits de saison sont souvent assez doux."], lien:"", ingredients:[
+    {nom:"Fruits rouges", qte:"400", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Fromage blanc", qte:"500", unite:"g", rayon:"Crèmerie"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"Billes énergie dattes et amandes", emoji:"🌰", type:"leger", vegetarien:true, rapide:true, thermomix:true, plat:"dessert", saisons:[], etapes:["Faites tremper les dattes 10 minutes dans l'eau chaude si elles sont sèches.", "Mixez-les avec les amandes et les flocons d'avoine jusqu'à obtenir une pâte collante.", "Ajoutez le cacao non sucré et mixez encore.", "Formez des billes entre vos paumes humides.", "Roulez-les dans la noix de coco et gardez-les au frais. Le sucre vient uniquement des dattes."], lien:"", ingredients:[
+    {nom:"Dattes", qte:"250", unite:"g", rayon:"Épicerie"},
+    {nom:"Amandes", qte:"100", unite:"g", rayon:"Épicerie"},
+    {nom:"Flocons d'avoine", qte:"80", unite:"g", rayon:"Épicerie"},
+    {nom:"Cacao", qte:"2", unite:"c. à soupe", rayon:"Épicerie"},
+    {nom:"Noix de coco râpée", qte:"40", unite:"g", rayon:"Épicerie"}]},
+
+  { nom:"Muffins banane-avoine sans sucre ajouté", emoji:"🍌", type:"leger", vegetarien:true, rapide:true, thermomix:false, plat:"dessert", saisons:[], etapes:["Écrasez les bananes très mûres : ce sont elles qui sucrent tout.", "Mélangez-les aux œufs et au yaourt.", "Incorporez les flocons d'avoine mixés, la levure et la cannelle.", "Répartissez dans des caissettes aux trois quarts.", "Enfournez 22 minutes à 180 °C."], lien:"", ingredients:[
+    {nom:"Bananes", qte:"3", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Flocons d'avoine", qte:"200", unite:"g", rayon:"Épicerie"},
+    {nom:"Œufs", qte:"2", unite:"", rayon:"Crèmerie"},
+    {nom:"Yaourt nature", qte:"1", unite:"pot(s)", rayon:"Crèmerie"},
+    {nom:"Cannelle", qte:"1", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Levure chimique", qte:"1", unite:"sachet(s)", rayon:"Épicerie"}]},
+
+  { nom:"Brochettes de fruits frais", emoji:"🍉", type:"leger", vegetarien:true, rapide:true, thermomix:false, plat:"dessert", saisons:["ete"], etapes:["Coupez les fruits en cubes de taille régulière.", "Enfilez-les sur des piques en alternant les couleurs.", "Arrosez d'un filet de citron vert pour éviter que la banane ne noircisse.", "Parsemez de menthe ciselée.", "Servez très frais — c'est le dessert que les enfants préparent eux-mêmes."], lien:"", ingredients:[
+    {nom:"Melon", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Fraises", qte:"300", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Raisin", qte:"300", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Citron vert", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Menthe", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"Pommes râpées au fromage blanc", emoji:"🍎", type:"leger", vegetarien:true, rapide:true, thermomix:false, plat:"dessert", saisons:["automne", "hiver"], etapes:["Râpez les pommes avec la peau, juste avant de servir.", "Arrosez aussitôt de jus de citron.", "Mélangez au fromage blanc battu.", "Parsemez de cannelle et de noisettes concassées.", "Un dessert de dix minutes, sans four et sans sucre ajouté."], lien:"", ingredients:[
+    {nom:"Pommes", qte:"4", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Fromage blanc", qte:"400", unite:"g", rayon:"Crèmerie"},
+    {nom:"Noisettes", qte:"50", unite:"g", rayon:"Épicerie"},
+    {nom:"Cannelle", qte:"1", unite:"c. à café", rayon:"Épicerie"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"}]},
+
+  { nom:"Abricots rôtis au romarin", emoji:"🍑", type:"leger", vegetarien:true, rapide:true, thermomix:false, plat:"dessert", saisons:["ete"], etapes:["Coupez les abricots en deux et dénoyautez-les.", "Rangez-les côté coupé vers le haut dans un plat.", "Glissez quelques brins de romarin entre les fruits.", "Enfournez 20 minutes à 200 °C : le sucre de l'abricot caramélise tout seul.", "Servez tièdes, avec des amandes effilées grillées."], lien:"", ingredients:[
+    {nom:"Abricots", qte:"800", unite:"g", rayon:"Fruits & légumes"},
+    {nom:"Romarin", qte:"3", unite:"branche(s)", rayon:"Fruits & légumes"},
+    {nom:"Amandes effilées", qte:"40", unite:"g", rayon:"Épicerie"}]},
+
+  { nom:"Riz au lait à la vanille sans sucre", emoji:"🍚", type:"leger", vegetarien:true, rapide:false, thermomix:true, plat:"dessert", saisons:[], etapes:["Faites chauffer le lait avec la gousse de vanille fendue et grattée.", "Ajoutez le riz rond et laissez cuire 35 minutes à tout petit feu, en remuant souvent.", "Incorporez les raisins secs à mi-cuisson : ils gonflent et sucrent le riz.", "Retirez du feu quand il reste un peu de liquide, il sera absorbé en refroidissant.", "Aucun sucre ajouté : la vanille et les raisins font tout le travail."], lien:"", ingredients:[
+    {nom:"Riz rond", qte:"200", unite:"g", rayon:"Épicerie"},
+    {nom:"Lait", qte:"1", unite:"l", rayon:"Crèmerie"},
+    {nom:"Vanille", qte:"1", unite:"", rayon:"Épicerie"},
+    {nom:"Raisins secs", qte:"80", unite:"g", rayon:"Épicerie"}]},
+
+  { nom:"Ananas rôti au citron vert", emoji:"🍍", type:"leger", vegetarien:true, rapide:true, thermomix:false, plat:"dessert", saisons:["hiver"], etapes:["Épluchez l'ananas et retirez le cœur fibreux.", "Coupez-le en tranches épaisses.", "Posez-les dans un plat, arrosez de jus de citron vert.", "Enfournez 25 minutes à 200 °C en retournant à mi-cuisson.", "Parsemez de menthe et de noix de coco râpée."], lien:"", ingredients:[
+    {nom:"Ananas", qte:"1", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Citron vert", qte:"2", unite:"", rayon:"Fruits & légumes"},
+    {nom:"Noix de coco râpée", qte:"30", unite:"g", rayon:"Épicerie"},
+    {nom:"Menthe", qte:"1", unite:"bouquet(s)", rayon:"Fruits & légumes"}]},
+
+  { nom:"Yaourt glacé aux fruits rouges", emoji:"🍦", type:"leger", vegetarien:true, rapide:true, thermomix:true, plat:"dessert", saisons:["ete"], etapes:["Congelez les fruits rouges la veille, étalés sur une plaque.", "Mixez-les encore gelés avec le yaourt et le jus de citron.", "Mixez par à-coups : la préparation doit rester glacée, pas fondre.", "Servez immédiatement, à la cuillère.", "Aucun sucre ajouté : la texture glacée arrondit déjà l'acidité."], lien:"", ingredients:[
+    {nom:"Fruits rouges", qte:"500", unite:"g", rayon:"Surgelés"},
+    {nom:"Yaourt nature", qte:"3", unite:"pot(s)", rayon:"Crèmerie"},
+    {nom:"Citron", qte:"1", unite:"", rayon:"Fruits & légumes"}]}
 ];

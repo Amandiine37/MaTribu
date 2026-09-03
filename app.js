@@ -30,6 +30,22 @@ const RAYONS = ["Fruits & légumes", "Boucherie", "Poissonnerie", "Crèmerie",
   "Boulangerie", "Épicerie", "Surgelés", "Boissons", "Entretien", "Autre"];
 const JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 
+/* Les raisons de ne pas avoir de repas à prévoir. Une case marquée ainsi
+   n'est pas une case oubliée : c'est une décision, et le générateur doit la
+   respecter — même quand on lui demande de tout remplacer. */
+const MOTIFS_ABSENCE = [
+  { val: "resto", nom: "Au restaurant", emoji: "🍽️" },
+  { val: "proches", nom: "Chez des proches", emoji: "🏡" },
+  { val: "cantine", nom: "À la cantine", emoji: "🏫" },
+  { val: "deplacement", nom: "En déplacement", emoji: "✈️" },
+  { val: "saute", nom: "Pas de repas", emoji: "🌙" },
+  { val: "autre", nom: "Absent", emoji: "🚪" }
+];
+function infoMotif(val) {
+  return MOTIFS_ABSENCE.find((m) => m.val === val) || MOTIFS_ABSENCE[MOTIFS_ABSENCE.length - 1];
+}
+function estAbsence(c) { return !!(c && c.absent); }
+
 /* Réglages de la famille et leurs valeurs par défaut. Déclarés ici, avec les
    autres constantes : `etatVide()` s'en sert dès le chargement du fichier. */
 const REGLAGES_DEFAUT = { convives: 4, pointsRepas: 15, antiGaspi: true };
@@ -71,7 +87,7 @@ const EMOJIS_LISTES = [
   "🥩", "🧊", "🧽", "🧼", "🧴", "💊", "🎁", "🎂", "🎄", "🎒",
   "✏️", "🏕️", "🌻", "🔧", "📦", "👶", "🐾", "🐶", "🍼", "🎨"];
 
-const VERSION = "0.13.2 bêta";
+const VERSION = "0.15 bêta";
 
 /* Unites utilisables pour les ingredients, le stock et les courses.
    "" = pas d'unite, on compte simplement (4 carottes). */
@@ -1572,6 +1588,17 @@ const Actions = {
   },
 
   /* --- Repas --- */
+  /* Marquer une absence : on efface le plat, le cuisinier et l'état — il n'y
+     a plus rien à cuisiner ni à valider. */
+  marquerAbsence(cleSem, jour, moment, motif, texte) {
+    if (!etat.repas[cleSem]) etat.repas[cleSem] = {};
+    etat.repas[cleSem][jour + "-" + moment] = {
+      recetteId: null, texte: String(texte || "").trim(),
+      absent: true, motif: motif || "autre"
+    };
+    sauver("repas");
+  },
+
   definirRepas(cleSem, jour, moment, valeur) {
     if (!etat.repas[cleSem]) etat.repas[cleSem] = {};
     /* Changer le plat ne doit pas effacer qui cuisine : c'est souvent la même
@@ -1824,6 +1851,7 @@ function reparerRecettes() {
   let saisonsAjoutees = 0;
   let unitesSeparees = 0;
   let etapesAjoutees = 0;
+  let ingredientsAjoutes = 0;
 
   etat.recettes.forEach((r) => {
     /* Saisons absentes : on reprend celles du plat de référence, s'il existe.
@@ -1838,6 +1866,24 @@ function reparerRecettes() {
       r.etapes = ref ? (ref.etapes || []).slice() : [];
       if (r.etapes.length) etapesAjoutees++;
     }
+    /* Ingrédient oublié dans une recette fournie : plusieurs d'entre elles
+       farinaient la viande ou sucraient la pâte sans que ce soit dans la
+       liste. Ce n'est pas qu'une coquille : les filtres « sans gluten » et
+       « peu de sucre » s'y fiaient et donnaient une réponse fausse.
+       On AJOUTE seulement, jamais on ne modifie ni ne retire : vos propres
+       corrections sur une recette restent intactes. */
+    if (ref && Array.isArray(r.ingredients)) {
+      const presents = new Set(r.ingredients.map((i) =>
+        String((i && i.nom) || "").toLowerCase().trim()));
+      (ref.ingredients || []).forEach((i) => {
+        const cle = String(i.nom || "").toLowerCase().trim();
+        if (!cle || presents.has(cle)) return;
+        r.ingredients.push({ nom: i.nom, qte: i.qte, unite: i.unite, rayon: i.rayon });
+        presents.add(cle);
+        ingredientsAjoutes++;
+      });
+    }
+
     /* Quantité et unité collées : « 800 g » -> 800 + g. En cas de doute sur
        l'unité, on ne touche à rien : mieux vaut l'ancien format qu'une perte. */
     (r.ingredients || []).forEach((i) => {
@@ -1852,7 +1898,10 @@ function reparerRecettes() {
     });
   });
 
-  return { saisons: saisonsAjoutees, unites: unitesSeparees, etapes: etapesAjoutees };
+  return {
+    saisons: saisonsAjoutees, unites: unitesSeparees, etapes: etapesAjoutees,
+    ingredients: ingredientsAjoutes
+  };
 }
 
 /* Les plats fournis avec l'application que cette famille n'a pas (encore).
@@ -1881,18 +1930,32 @@ function ajouterRecettesManquantes() {
    chacune de leur côté, elles finissaient par se contredire — la pastille
    restait allumée alors que la fenêtre annonçait « rien à faire ». */
 function diagnosticRecettes() {
+  const reference = new Map((window.RECETTES_DEPART || [])
+    .map((r) => [r.nom.toLowerCase().trim(), r]));
   const manqueChamp = (r) =>
     r.saisons === undefined || r.thermomix === undefined || r.etapes === undefined;
   const manqueUnite = (r) =>
     (r.ingredients || []).some((i) => i.unite === undefined || i.unite === null);
+  /* Un ingrédient présent dans la recette d'origine mais absent de la copie
+     de la famille : c'est ce qui faussait les filtres sans gluten et sucre. */
+  const manqueIngredient = (r) => {
+    const ref = reference.get(String(r.nom || "").toLowerCase().trim());
+    if (!ref) return false;
+    const presents = new Set((r.ingredients || []).map((i) =>
+      String((i && i.nom) || "").toLowerCase().trim()));
+    return (ref.ingredients || []).some((i) =>
+      !presents.has(String(i.nom || "").toLowerCase().trim()));
+  };
 
-  const aCompleter = etat.recettes.filter((r) => manqueChamp(r) || manqueUnite(r));
+  const aCompleter = etat.recettes.filter((r) =>
+    manqueChamp(r) || manqueUnite(r) || manqueIngredient(r));
   const d = {
     aCompleter: aCompleter.length,
     saisons: etat.recettes.filter((r) => r.saisons === undefined).length,
     etapes: etat.recettes.filter((r) => r.etapes === undefined).length,
     unites: etat.recettes.reduce((n, r) =>
       n + (r.ingredients || []).filter((i) => i.unite === undefined || i.unite === null).length, 0),
+    ingredients: etat.recettes.filter(manqueIngredient).length,
     nouvelles: recettesManquantes()
   };
   d.rienAFaire = !d.aCompleter && !d.nouvelles.length;
@@ -1929,6 +1992,8 @@ async function majRecettesSiBesoin() {
   if (bilan.saisons) parts.push(bilan.saisons + " saison" + (bilan.saisons > 1 ? "s" : ""));
   if (bilan.etapes) parts.push(bilan.etapes + " déroulé" + (bilan.etapes > 1 ? "s" : ""));
   if (bilan.unites) parts.push(bilan.unites + " unité" + (bilan.unites > 1 ? "s" : ""));
+  if (bilan.ingredients) parts.push(bilan.ingredients + " ingrédient" +
+    (bilan.ingredients > 1 ? "s" : "") + " oublié" + (bilan.ingredients > 1 ? "s" : ""));
   if (parts.length) {
     await Store.ecrire(["recettes"]);
     rendre();
@@ -2118,7 +2183,14 @@ const GROUPES_ALIMENTS = {
     sauf: ["pate de curry", "pate de miso", "riz complet", "pain complet",
       "farine complete", "pate a tartiner"]
   },
-  sucres: { mots: ["sucre", "miel", "sirop", "confiture", "chocolat", "caramel"] },
+  sucres: {
+    mots: ["sucre", "miel", "sirop", "confiture", "chocolat", "caramel", "nutella",
+      "pepites de chocolat", "cassonade", "sucre glace", "bonbon", "biscuit",
+      "speculoos", "pate a tartiner"],
+    /* Le sucre des fruits n'est pas du sucre ajouté : une compote sans sucre
+       reste une compote sans sucre. */
+    sauf: ["sucrine", "patate douce", "petits pois"]
+  },
   graissesSaturees: {
     mots: ["beurre", "creme", "fromage", "emmental", "gruyere", "parmesan",
       "mozzarella", "feta", "chevre", "ricotta", "gorgonzola", "mascarpone",
@@ -2165,6 +2237,8 @@ const GROUPES_ALIMENTS = {
     mots: ["farine", "pain", "pate", "chapelure", "semoule", "boulgour", "couscous",
       "spaghetti", "tagliatelle", "nouille", "lasagne", "gnocchi", "epeautre",
       "biere", "tortilla", "wrap", "vermicelle", "sauce soja", "bouillon", "cube",
+      "macaroni", "coquillette", "penne", "fusilli", "farfalle", "rigatoni",
+      "tortellini", "cannelloni", "torsade", "papillon", "linguine", "orzo",
       "seitan", "orge", "seigle", "biscuit", "biscotte", "brioche", "croissant",
       "crepe", "gaufre", "genoise", "speculoos", "ravioles", "raviole"],
     sauf: ["pate de curry", "pate de miso", "vermicelle de riz", "farine de riz",
@@ -2281,6 +2355,18 @@ const PROFILS_SANTE = [
       "de la sauce soja, des olives et des conserves. Ce profil ne retient que les " +
       "plats qui n'en contiennent aucun — à vous de saler raisonnablement ensuite.",
     pour: {}, contre: {}, interdit: ["selRiche"], seuil: 0
+  },
+  {
+    val: "peuDeSucre", nom: "Peu de sucre", emoji: "🍬", famille: "eviter",
+    resume: "Aucun sucre ajouté : ni sucre, ni miel, ni sirop, ni chocolat.",
+    detail: "Écarte les plats qui contiennent du sucre ajouté sous une forme ou " +
+      "une autre : sucre, cassonade, miel, sirop, confiture, chocolat, pâte à " +
+      "tartiner, biscuits.\n\n" +
+      "Ce n'est pas « sans sucre » : les fruits, le lait et les féculents en " +
+      "contiennent naturellement, et c'est très bien ainsi. Une compote de pommes " +
+      "sans sucre ajouté reste sucrée — elle l'est par la pomme. Pour la glycémie, " +
+      "regardez plutôt le profil 🩸, qui tient compte de l'ensemble du plat.",
+    pour: {}, contre: {}, interdit: ["sucres"], seuil: 0
   },
   {
     val: "sansGluten", nom: "Sans gluten", emoji: "🌾", famille: "eviter",
@@ -2463,10 +2549,14 @@ function genererMenus(cleSem, opt) {
 
   const semaine = etat.repas[cleSem] || {};
   const cases = [];
+  let absences = 0;
   JOURS.forEach((j) => {
     ["midi", "soir"].forEach((m) => {
       if (m === "midi" && !opt.midi) return;
       if (m === "soir" && !opt.soir) return;
+      /* Une absence n'est jamais remplie, même en mode « remplacer » : c'est
+         une décision de la famille, pas une case restée vide. */
+      if (estAbsence(semaine[j + "-" + m])) { absences++; return; }
       if (semaine[j + "-" + m] && !opt.remplacer) return;
       cases.push({ jour: j, moment: m });
     });
@@ -2538,7 +2628,8 @@ function genererMenus(cleSem, opt) {
     tropDemande: Math.max(0, demande - cases.length),
     /* Moins de plats disponibles que de repas à remplir : il y aura forcément
        des répétitions. Mieux vaut l'annoncer que de laisser croire au hasard. */
-    choixCourt: profil && pool.length < cases.length ? { nom: profil.nom, dispo: pool.length } : null
+    choixCourt: profil && pool.length < cases.length ? { nom: profil.nom, dispo: pool.length } : null,
+    absences: absences
   };
 }
 

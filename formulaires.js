@@ -354,9 +354,14 @@ Formulaires.terminerCourses = function () {
     esc(formaterQte(x.avant, x.s.unite)) + " → <b>" +
     esc(formaterQte(x.apres, x.s.unite)) + "</b></small></div></div>";
 
+  /* Cochés par défaut. Ils ne l'étaient pas, et c'était une erreur : la
+     PREMIÈRE fois, la réserve est vide, donc tout est « nouveau », donc rien
+     n'entrait — l'application avait l'air cassée au moment précis où on
+     l'essayait. Le garde-fou reste la liste elle-même, qui s'affiche avant
+     d'agir : on décoche ce qui ne reste pas à la maison. */
   const ligneNouveau = (c) =>
     '<label class="ligne" style="cursor:pointer">' +
-    '<input type="checkbox" data-nouveau="' + esc(c.nom) + '" style="width:auto">' +
+    '<input type="checkbox" data-nouveau="' + esc(c.nom) + '" checked style="width:auto">' +
     '<span class="ligne-corps"><b>' + esc(c.nom) + "</b><small>" +
     esc(formaterQte(c.qte, c.unite) || "quantité non précisée") + " • " + esc(c.rayon) +
     "</small></span></label>";
@@ -379,9 +384,11 @@ Formulaires.terminerCourses = function () {
 
     (nouveaux.length
       ? '<div class="sous-titre"><h3>Pas encore en réserve</h3>' +
-        '<button class="lien" data-role="tout">Tout cocher</button></div>' +
-        '<p class="aide" style="margin:-.3rem 0 .4rem">Cochez ce que vous gardez ' +
-        "habituellement à la maison. Le reste disparaîtra simplement de la liste.</p>" +
+        '<button class="lien" data-role="tout">Tout décocher</button></div>' +
+        '<p class="aide" style="margin:-.3rem 0 .4rem">Ils vont être ajoutés à votre ' +
+        "réserve. <b>Décochez ce qui ne reste pas à la maison</b> — le gâteau " +
+        "d'anniversaire, la pizza du samedi soir : ceux-là disparaîtront simplement " +
+        "de la liste.</p>" +
         '<div class="carte">' + nouveaux.map(ligneNouveau).join("") + "</div>"
       : "") +
 
@@ -489,7 +496,21 @@ Formulaires.repas = function (jour, moment) {
      Ces gestes passent donc devant, et le choix du plat se replie. */
   let h = '<div id="f-repas">';
 
-  if (actuel) {
+  /* Une absence : rien à cuisiner, rien à valider, rien à acheter. On montre
+     la raison et le moyen d'en sortir, et on saute tout le reste. */
+  if (estAbsence(actuel)) {
+    const mo = infoMotif(actuel.motif);
+    h += '<div class="carte" style="margin-bottom:.8rem">' +
+      '<div class="ligne" style="border:none;padding-top:0">' +
+      '<span style="font-size:1.5rem">' + mo.emoji + "</span>" +
+      '<div class="ligne-corps"><b>' + esc(actuel.texte || mo.nom) + "</b>" +
+      "<small>Aucun repas à prévoir. Le générateur ne touchera pas à cette case, " +
+      "et rien n'ira dans la liste de courses.</small></div></div>" +
+      '<button class="btn plein" data-role="vider" style="margin-top:.5rem">' +
+      "↩️ Finalement, on mange à la maison</button></div>";
+  }
+
+  if (actuel && !estAbsence(actuel)) {
     h += '<div class="carte" style="margin-bottom:.8rem">' +
       '<div class="ligne" style="border:none;padding-top:0">' +
       '<span style="font-size:1.5rem">' + esc(actuel.restes ? "♻️" : (r ? (r.emoji || "🍽️") : "📝")) + "</span>" +
@@ -540,8 +561,20 @@ Formulaires.repas = function (jour, moment) {
       "aucun ingrédient et n'entame pas la réserve.</small></span></label>";
   }
 
+  /* Le geste qu'on cherche quand on ne mange pas à la maison : une pression,
+     pas un texte à taper. */
+  if (!estAbsence(actuel)) {
+    h += '<div class="sous-titre" style="margin-top:.2rem"><h3>Personne à la maison ?</h3></div>' +
+      '<div class="puces" style="margin-bottom:.4rem">' +
+      MOTIFS_ABSENCE.map((m) =>
+        '<button class="puce" data-absent="' + m.val + '">' +
+        m.emoji + " " + esc(m.nom) + "</button>").join("") + "</div>" +
+      '<p class="aide" style="margin:0 0 1rem">Aucun repas à prévoir : la case est ' +
+      "posée, le générateur la laissera tranquille et rien n'ira dans les courses.</p>";
+  }
+
   h += '<div class="sous-titre" style="margin-top:.2rem"><h3>' +
-    (actuel ? "Changer le plat" : "Choisir un plat") + "</h3></div>" +
+    (actuel && !estAbsence(actuel) ? "Changer le plat" : "Choisir un plat") + "</h3></div>" +
     '<input type="text" id="rech-repas" placeholder="Rechercher un plat…" autocomplete="off" style="margin-bottom:.8rem">' +
     '<div id="liste-repas" style="max-height:36dvh;overflow-y:auto;margin-bottom:.9rem"></div>' +
     "<hr class=\"sep\">" +
@@ -582,6 +615,15 @@ Formulaires.repas = function (jour, moment) {
         Actions.definirRepas(ui.semaine, jour, moment, { recetteId: b.dataset.recette, texte: "" });
       };
 
+      f.querySelectorAll("[data-absent]").forEach((b) => {
+        b.onclick = () => {
+          const mo = infoMotif(b.dataset.absent);
+          fermerFeuille();
+          Actions.marquerAbsence(ui.semaine, jour, moment, mo.val, "");
+          toast(mo.emoji + " " + mo.nom + " — aucun repas à prévoir");
+        };
+      });
+
       f.querySelectorAll('[data-role="chef"]').forEach((b) => {
         b.onclick = () => {
           fermerFeuille();
@@ -609,8 +651,10 @@ Formulaires.repas = function (jour, moment) {
 
       const bc = f.querySelector('[data-role="consulter"]');
       if (bc) bc.onclick = () => Formulaires.consulterRecette(actuel.recetteId);
-      const bv = f.querySelector('[data-role="vider"]');
-      if (bv) bv.onclick = () => { fermerFeuille(); Actions.definirRepas(ui.semaine, jour, moment, null); };
+      /* Il peut y en avoir deux : celui de la carte d'absence et celui du bas. */
+      f.querySelectorAll('[data-role="vider"]').forEach((bv) => {
+        bv.onclick = () => { fermerFeuille(); Actions.definirRepas(ui.semaine, jour, moment, null); };
+      });
       f.querySelector('[data-role="ok-libre"]').onclick = () => {
         const txt = f.querySelector("#repas-libre").value.trim();
         fermerFeuille();
@@ -850,7 +894,9 @@ Formulaires.generateur = function () {
       const detail = ["poisson", "viande", "vege"]
         .filter((c) => res.bilan[c])
         .map((c) => res.bilan[c] + " " + nomCategorie(c)).join(", ");
-      toast(res.n + " repas proposés 🍽️" + (detail ? " — " + detail : ""));
+      toast(res.n + " repas proposés 🍽️" + (detail ? " — " + detail : "") +
+        (res.absences ? " (" + res.absences + " absence" + (res.absences > 1 ? "s" : "") +
+          " respectée" + (res.absences > 1 ? "s" : "") + ")" : ""));
       if (res.choixCourt) {
         setTimeout(() => toast("Seulement " + res.choixCourt.dispo + " plat(s) « " +
           res.choixCourt.nom + " » : certains reviennent plusieurs fois"), 2800);
@@ -1979,12 +2025,15 @@ Formulaires.majRecettes = function () {
       (d.aCompleter > 1 ? "s" : "") + " à compléter</b><br>" +
       [d.saisons ? d.saisons + " sans saison" : "",
         d.etapes ? d.etapes + " sans déroulé" : "",
-        d.unites ? d.unites + " ingrédient" + (d.unites > 1 ? "s" : "") + " sans unité" : ""]
+        d.unites ? d.unites + " ingrédient" + (d.unites > 1 ? "s" : "") + " sans unité" : "",
+        d.ingredients ? d.ingredients + " avec un ingrédient oublié" : ""]
         .filter(Boolean).join(", ") +
       ". Vos propres recettes ne sont pas touchées.</div></div>";
   }
-  html += '<p class="aide">Vos recettes personnelles et vos modifications sont conservées : ' +
-    "on ajoute et on complète, on ne remplace jamais.</p>" +
+  html += '<p class="aide">Vos recettes personnelles ne sont <b>jamais</b> touchées, et vos ' +
+    "quantités sont conservées. En revanche, un ingrédient que vous auriez <b>retiré</b> " +
+    "d'une recette fournie sera rétabli : c'est à ce prix que les filtres " +
+    "« sans gluten » et « peu de sucre » disent vrai.</p>" +
     '<div class="rangee-btn" style="margin-top:1rem">' +
     '<button class="btn" data-action="fermer">Plus tard</button>' +
     '<button class="btn principal" data-role="ok">Mettre à jour</button></div></div>';
@@ -2004,6 +2053,8 @@ Formulaires.majRecettes = function () {
       if (bilan.saisons) parts.push(bilan.saisons + " saison" + (bilan.saisons > 1 ? "s" : ""));
       if (bilan.etapes) parts.push(bilan.etapes + " déroulé" + (bilan.etapes > 1 ? "s" : ""));
       if (bilan.unites) parts.push(bilan.unites + " unité" + (bilan.unites > 1 ? "s" : ""));
+      if (bilan.ingredients) parts.push(bilan.ingredients + " ingrédient" +
+        (bilan.ingredients > 1 ? "s" : ""));
       toast(parts.length ? "Cahier à jour : " + parts.join(", ") + " ✅" : "Cahier déjà à jour");
     };
   });

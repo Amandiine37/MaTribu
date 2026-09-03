@@ -219,6 +219,11 @@ Vues.accueil = function () {
   const midi = sem[jour + "-midi"], soir = sem[jour + "-soir"];
   const nomRepas = (c) => {
     if (!c) return null;
+    /* Une absence est une réponse, pas un vide : « — non prévu » serait faux. */
+    if (estAbsence(c)) {
+      const mo = infoMotif(c.motif);
+      return mo.emoji + " " + (c.texte || mo.nom);
+    }
     if (c.recetteId) {
       const r = etat.recettes.find((x) => x.id === c.recetteId);
       return r ? (r.emoji || "🍽️") + " " + r.nom : null;
@@ -618,7 +623,12 @@ Vues.menus = function () {
 function caseRepas(jour, moment, contenu) {
   let texte = "à définir", libre = true, emoji = "＋";
   if (contenu) {
-    if (contenu.recetteId) {
+    if (estAbsence(contenu)) {
+      const mo = infoMotif(contenu.motif);
+      texte = contenu.texte || mo.nom;
+      emoji = mo.emoji;
+      libre = false;
+    } else if (contenu.recetteId) {
       const r = etat.recettes.find((x) => x.id === contenu.recetteId);
       if (r) { texte = r.nom; libre = false; emoji = r.emoji || "🍽️"; }
     } else if (contenu.texte) {
@@ -629,7 +639,7 @@ function caseRepas(jour, moment, contenu) {
   const e = etatRepas(ui.semaine, jour, moment);
   const cuisinier = contenu && contenu.cuisinier ? membre(contenu.cuisinier) : null;
   let marque = "";
-  if (!libre) {
+  if (!libre && !estAbsence(contenu)) {
     if (e.statut === "valide") marque = '<span class="etiquette vert">✓</span>';
     else if (e.statut === "fait") marque = '<span class="etiquette chaud">à valider</span>';
     else if (cuisinier) marque = '<span class="avatar xs">' + esc(cuisinier.emoji || "🙂") + "</span>";
@@ -637,7 +647,7 @@ function caseRepas(jour, moment, contenu) {
   return '<button class="case-repas" data-action="repas-case" data-jour="' + jour + '" data-moment="' + moment + '">' +
     '<span class="quand">' + (moment === "midi" ? "Midi" : "Soir") + "</span>" +
     "<span>" + (contenu && contenu.restes ? "♻️" : emoji) + "</span>" +
-    '<span class="plat' + (libre ? " libre" : "") + '">' + esc(texte) +
+    '<span class="plat' + (libre || estAbsence(contenu) ? " libre" : "") + '">' + esc(texte) +
     (contenu && contenu.restes ? " <small>(restes)</small>" : "") + "</span>" +
     (marque ? '<span class="marque-repas">' + marque + "</span>" : "") + "</button>";
 }
