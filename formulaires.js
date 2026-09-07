@@ -366,11 +366,17 @@ Formulaires.terminerCourses = function () {
     esc(formaterQte(c.qte, c.unite) || "quantité non précisée") + " • " + esc(c.rayon) +
     "</small></span></label>";
 
+  /* On demande plutôt que d'ignorer : deux paquets de riz, la personne qui
+     revient du magasin sait combien de kilos cela fait. */
   const ligneDouteux = (x) =>
-    '<div class="ligne"><span style="font-size:1.1rem">⚠️</span>' +
+    '<div class="ligne"><span style="font-size:1.1rem">⚖️</span>' +
     '<div class="ligne-corps"><b>' + esc(x.c.nom) + "</b><small>acheté " +
-    esc(formaterQte(x.c.qte, x.c.unite) || "?") + ", en réserve en " +
-    esc(x.s.unite || "unités") + " — à ajuster à la main</small></div></div>";
+    esc(formaterQte(x.c.qte, x.c.unite) || "?") + " • en réserve : " +
+    esc(formaterQte(x.s.qte, x.s.unite)) + "</small></div>" +
+    '<input type="number" inputmode="decimal" min="0" step="any" ' +
+    'data-saisie="' + esc(x.s.id) + '" placeholder="0" ' +
+    'style="width:5rem;flex:0 0 auto;text-align:right">' +
+    '<span class="etiquette">' + esc(x.s.unite || "unité") + "</span></div>";
 
   ouvrirFeuille("Terminer les courses",
     '<p class="aide" style="margin-bottom:.8rem">' + achetes.length +
@@ -393,7 +399,11 @@ Formulaires.terminerCourses = function () {
       : "") +
 
     (douteux.length
-      ? '<div class="sous-titre"><h3>À vérifier</h3></div>' +
+      ? '<div class="sous-titre"><h3>À vous de dire</h3>' +
+        '<span class="etiquette chaud">' + douteux.length + "</span></div>" +
+        '<p class="aide" style="margin:-.3rem 0 .5rem">Les unités ne correspondent ' +
+        "pas. Indiquez ce que vous rapportez, dans l'unité de la réserve — laissez " +
+        "vide pour ne rien ajouter.</p>" +
         '<div class="carte">' + douteux.map(ligneDouteux).join("") + "</div>"
       : "") +
 
@@ -417,10 +427,15 @@ Formulaires.terminerCourses = function () {
       f.querySelector('[data-role="ok"]').onclick = () => {
         const choisis = Array.from(f.querySelectorAll("[data-nouveau]:checked"))
           .map((c) => c.dataset.nouveau);
+        const saisies = {};
+        f.querySelectorAll("input[data-saisie]").forEach((i) => {
+          const v = nombre(i.value);
+          if (v !== null && v > 0) saisies[i.dataset.saisie] = v;
+        });
         const auto = f.querySelector("#case-auto");
         localStorage.setItem("tribu:reserveAuto", auto && auto.checked ? "1" : "0");
         fermerFeuille();
-        Actions.terminerCourses({ listeId: cible, enReserve: true, nouveaux: choisis });
+        Actions.terminerCourses({ listeId: cible, enReserve: true, nouveaux: choisis, saisies: saisies });
       };
     });
 };
@@ -490,6 +505,7 @@ Formulaires.repas = function (jour, moment) {
   const e = etatRepas(ui.semaine, jour, moment);
   const pts = Number(reglagesFamille().pointsRepas) || 0;
   const cuisinier = actuel && actuel.cuisinier ? membre(actuel.cuisinier) : null;
+  const absents = absentsDuRepas(ui.semaine, jour, moment);
 
   /* Quand le plat est déjà choisi, ce qu'on vient faire le plus souvent
      n'est pas d'en changer : c'est de dire qui cuisine, ou que c'est fait.
@@ -529,6 +545,17 @@ Formulaires.repas = function (jour, moment) {
         esc((m.emoji || "🙂") + " " + m.prenom) + "</button>").join("") +
       "</div>" +
       '<button class="lien" data-role="tour" style="margin-top:.5rem">🔁 Prendre le tour de rôle</button>' +
+
+      /* Différent d'une absence de toute la maison : là on cuisine, mais
+         pour moins de monde — et la liste de courses en tient compte. */
+      '<div class="sous-titre" style="margin:.7rem 0 .4rem"><h3>Qui ne mange pas ?</h3>' +
+      '<span class="etiquette">' + convivesDuRepas(ui.semaine, jour, moment) + " à table</span></div>" +
+      '<div class="puces">' + etat.membres.map((m) =>
+        '<button class="puce ' + (absents.indexOf(m.id) !== -1 ? "on" : "") +
+        '" data-absent-membre="' + m.id + '">' +
+        esc((m.emoji || "🙂") + " " + m.prenom) + "</button>").join("") + "</div>" +
+      '<p class="aide" style="margin:.35rem 0 0">Cantine, resto entre amis… Les quantités ' +
+      "de la liste de courses suivent.</p>" +
 
       /* --- où en est ce repas --- */
       '<hr class="sep">' +
@@ -624,6 +651,19 @@ Formulaires.repas = function (jour, moment) {
         };
       });
 
+      f.querySelectorAll("[data-absent-membre]").forEach((b) => {
+        b.onclick = () => {
+          const id = b.dataset.absentMembre;
+          const l = absentsDuRepas(ui.semaine, jour, moment);
+          const i = l.indexOf(id);
+          if (i === -1) l.push(id); else l.splice(i, 1);
+          fermerFeuille();
+          Actions.definirAbsentsRepas(ui.semaine, jour, moment, l);
+          const n = Math.max(1, nbConvives() - l.length);
+          toast(n + " personne" + (n > 1 ? "s" : "") + " à table pour ce repas");
+        };
+      });
+
       f.querySelectorAll('[data-role="chef"]').forEach((b) => {
         b.onclick = () => {
           fermerFeuille();
@@ -691,10 +731,24 @@ Formulaires.consommerRepas = function (jour, moment) {
         "  (−" + esc(formaterQte(texteNombre(l.retire), l.unite)) + ")</small></div></label>").join("") +
         "</div>"
       : "") +
+    /* Unités inconvertibles : l'application ne peut pas deviner combien de
+       boîtes font quatre tomates — mais la personne qui vient de cuisiner
+       le sait. On demande, au lieu d'ignorer. */
     (douteux.length
-      ? '<div class="bandeau">⚠️<div><b>' + douteux.length + " article(s) à vérifier :</b> " +
-        esc(douteux.map((l) => l.nom + " (" + l.demande + " vs " + l.avant + ")").join(", ")) +
-        " — les unités ne se convertissent pas, l'application n'y touche pas.</div></div>"
+      ? '<div class="sous-titre"><h3>À vous de dire</h3>' +
+        '<span class="etiquette chaud">' + douteux.length + "</span></div>" +
+        '<p class="aide" style="margin:-.3rem 0 .5rem">La recette et la réserve ne ' +
+        "sont pas dans la même unité. Indiquez ce que vous avez sorti — laissez vide " +
+        "pour ne rien retirer.</p>" +
+        '<div class="carte">' + douteux.map((l) =>
+          '<div class="ligne"><span style="font-size:1.1rem">⚖️</span>' +
+          '<div class="ligne-corps"><b>' + esc(l.nom) + "</b><small>recette : " +
+          esc(l.demande || "?") + " • en réserve : " + esc(l.avant) + "</small></div>" +
+          '<input type="number" inputmode="decimal" min="0" step="any" ' +
+          'data-saisie="' + esc(l.stockId) + '" placeholder="0" ' +
+          'style="width:5rem;flex:0 0 auto;text-align:right">' +
+          '<span class="etiquette">' + esc(l.unite || "unité") + "</span></div>").join("") +
+        "</div>"
       : "") +
     '<div class="rangee-btn" style="margin-top:1rem">' +
     '<button class="btn" data-action="fermer">Annuler</button>' +
@@ -704,8 +758,13 @@ Formulaires.consommerRepas = function (jour, moment) {
     f.querySelector('[data-role="ok"]').onclick = () => {
       const garder = Array.from(f.querySelectorAll("input[data-stock]"))
         .filter((c) => !c.checked).map((c) => c.dataset.stock);
+      const saisies = {};
+      f.querySelectorAll("input[data-saisie]").forEach((i) => {
+        const v = nombre(i.value);
+        if (v !== null && v > 0) saisies[i.dataset.saisie] = v;
+      });
       fermerFeuille();
-      const n = Actions.retirerDeLaReserve(nets, garder);
+      const n = Actions.retirerDeLaReserve(nets, garder, saisies);
       toast(n ? n + " article(s) mis à jour dans la réserve 🥫" : "Rien n'a été retiré");
     };
   });
@@ -919,7 +978,7 @@ Formulaires.ingredientsVersCourses = function () {
     toast("Aucun plat de la bibliothèque prévu cette semaine");
     return;
   }
-  const dejaLa = new Set(etat.courses.filter((c) => !c.coche).map((c) => c.nom.toLowerCase().trim()));
+  const dejaLa = new Set(etat.courses.filter((c) => !c.coche).map((c) => cleArticle(c.nom)));
 
   /* Pour chaque ingrédient : besoin, stock, reste à acheter. */
   const lignes = ing.map((i) => {
@@ -931,7 +990,7 @@ Formulaires.ingredientsVersCourses = function () {
       manque: m.manque,
       connu: m.connu,
       couvert: m.connu && m.manque !== null && m.manque <= 0,
-      dejaListe: dejaLa.has(i.nom.toLowerCase().trim())
+      dejaListe: dejaLa.has(cleArticle(i.nom))
     };
   });
 
@@ -1019,7 +1078,7 @@ Formulaires.recette = function (rid) {
     '<div data-ing="' + k + '" style="margin-bottom:.7rem;padding-bottom:.7rem;border-bottom:1px solid var(--border)">' +
     '<div style="display:flex;gap:.5rem;margin-bottom:.4rem">' +
     '<input type="text" data-c="nom" value="' + esc(i.nom || "") + '" placeholder="Ingrédient" style="flex:1">' +
-    '<button type="button" class="btn mini" data-role="suppr-ing" style="flex:0 0 auto">🗑️</button></div>' +
+    '<button type="button" class="btn mini icone" data-role="suppr-ing" style="flex:0 0 auto">🗑️</button></div>' +
     '<div class="duo">' +
     '<input type="text" data-c="qte" value="' + esc(i.qte || "") + '" placeholder="Quantité" ' +
     'inputmode="decimal" maxlength="10" style="flex:.8">' +
@@ -1459,7 +1518,7 @@ Formulaires.invitation = function () {
       bp.onclick = () => {
         if (navigator.share) {
           navigator.share({
-            title: "Rejoindre " + etat.famille.nom + " sur Tribu",
+            title: "Rejoindre " + etat.famille.nom + " sur Ma Tribu",
             text: "Voici ton invitation pour rejoindre notre organisation familiale :",
             url: lien
           }).catch(() => { });
@@ -1475,7 +1534,7 @@ Formulaires.invitation = function () {
 
 /* ==================== CONNECTER UN AUTRE APPAREIL ==================== */
 
-/* Le cas typique, et déroutant : on ajoute Tribu à l'écran d'accueil de son
+/* Le cas typique, et déroutant : on ajoute Ma Tribu à l'écran d'accueil de son
    iPhone, et l'icône ouvre une application vierge qui propose de créer une
    famille. Elle n'a pas accès à la mémoire du navigateur — pour le téléphone,
    c'est une autre application. Il lui faut donc sa propre invitation, comme
@@ -1494,16 +1553,20 @@ Formulaires.monAppareil = function () {
     "<b>Créez le code ci-dessous</b><small>Il vaut pour votre profil " +
     esc(moi.emoji || "🙂") + " " + esc(moi.prenom) + ", et ne sert qu'une fois.</small></div></div>" +
     '<div class="ligne"><span class="etape">2</span><div class="ligne-corps">' +
-    "<b>Ouvrez Tribu depuis l'icône</b><small>Celle de l'écran d'accueil, pas le navigateur.</small></div></div>" +
+    "<b>Ouvrez Ma Tribu depuis l'icône</b><small>Celle de l'écran d'accueil, pas le navigateur.</small></div></div>" +
     '<div class="ligne"><span class="etape">3</span><div class="ligne-corps">' +
     "<b>« J'ai reçu une invitation »</b><small>Tapez le code, puis votre code à " +
     "4 chiffres habituel.</small></div></div></div>" +
 
-    (admin
-      ? '<button class="btn principal plein" data-role="creer">Créer mon code d\'invitation</button>'
-      : '<p class="aide">Seul un administrateur peut créer une invitation. Demandez-lui d\'en ' +
-      "créer une à votre nom : sur son téléphone, <b>Administration ▸ Inviter</b>, en " +
-      "choisissant votre prénom.</p>") +
+    /* Tout le monde peut créer un code POUR SOI : c'est le seul moyen de
+       connecter l'icône de son propre écran d'accueil sans déranger un
+       administrateur. Le serveur vérifie que le code vise bien son profil. */
+    '<button class="btn principal plein" data-role="creer">Créer mon code d\'invitation</button>' +
+    (admin ? "" :
+      '<p class="aide" style="margin-top:.6rem">Ce code ne vaut que pour <b>votre</b> ' +
+      "profil et ne donne aucun droit supplémentaire. Si le serveur le refuse, " +
+      "demandez-en un à un administrateur : <b>Administration ▸ Inviter</b>, " +
+      "en choisissant votre prénom.</p>") +
     '<div id="resultat-appareil" style="margin-top:1rem"></div>' +
     '<button class="btn plein" data-action="fermer" style="margin-top:1rem">Fermer</button></div>';
 
@@ -1520,7 +1583,15 @@ Formulaires.monAppareil = function () {
       bouton.disabled = true;
       const inv = await Invitations.creer(7, moi.id);
       bouton.disabled = false;
-      if (!inv) { toast("Création impossible"); return; }
+      if (!inv) {
+        /* Le message court a déjà été affiché ; ici on laisse le chemin de
+           secours sous les yeux, sans jargon. */
+        zone.innerHTML = '<div class="bandeau">⚠️<div><b>Le serveur a refusé ce code.</b> ' +
+          "C'est le cas tant que les règles Firebase n'ont pas été republiées dans leur " +
+          "dernière version. En attendant, demandez un code à un administrateur : sur son " +
+          "téléphone, <b>Administration ▸ Inviter</b>, en choisissant votre prénom.</div></div>";
+        return;
+      }
       const lien = Invitations.lien(inv.jeton);
       zone.innerHTML = '<div class="code-famille">' + esc(codeLisible(inv.jeton)) + "</div>" +
         '<p class="aide centre" style="margin:.4rem 0 .7rem">Valable 7 jours, une seule fois. ' +
@@ -2272,4 +2343,198 @@ Formulaires.objectif = function () {
       toast(actif ? "Objectif commun activé 🤝" : "Objectif commun désactivé");
     };
   });
+};
+
+/* ==================== COLLER UNE LISTE DE COURSES ====================
+
+   Une liste arrive rarement article par article : elle est dictée, recopiée
+   d'un message, ou tapée d'un trait. On accepte donc un bloc de texte. */
+
+Formulaires.plusieursCourses = function () {
+  const listes = listesCourses();
+  const html = '<form id="f-plusieurs">' +
+    '<label class="champ"><span>Un article par ligne, ou séparés par des virgules</span>' +
+    '<textarea name="liste" rows="7" style="min-height:150px" ' +
+    'placeholder="pain&#10;lait demi-écrémé&#10;œufs&#10;papier toilette"></textarea></label>' +
+    '<p class="aide" style="margin:-.4rem 0 1rem">Chaque article est rangé automatiquement ' +
+    "dans son rayon. Vous pourrez ajuster les quantités ensuite.</p>" +
+    (listes.length > 1
+      ? '<label class="champ"><span>Dans quelle liste ?</span><select name="liste-cible">' +
+        listes.map((l) => '<option value="' + l.id + '"' +
+          (l.id === listeCourante().id ? " selected" : "") + ">" +
+          esc((l.emoji || typeListe(l).emoji) + " " + l.nom) + "</option>").join("") +
+        "</select></label>"
+      : "") +
+    '<div class="rangee-btn" style="margin-top:.6rem">' +
+    '<button type="button" class="btn" data-action="fermer">Annuler</button>' +
+    '<button type="submit" class="btn principal">Ajouter</button></div></form>';
+
+  ouvrirFeuille("Coller une liste", html, (f) => {
+    f.onsubmit = (ev) => {
+      ev.preventDefault();
+      const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
+      const champ = f.querySelector('[name="liste-cible"]');
+      fermerFeuille();
+      const n = Actions.ajouterPlusieursCourses(String(d.get("liste") || ""),
+        champ ? { listeId: champ.value } : undefined);
+      if (!n) toast("Rien à ajouter");
+      else if (n === 1) toast("1 article ajouté 🛒");
+    };
+  });
+};
+
+/* ==================== REPRENDRE UNE SEMAINE DÉJÀ FAITE ==================== */
+
+Formulaires.reprendreSemaine = function () {
+  const semaines = semainesRemplies(8);
+  if (!semaines.length) {
+    ouvrirFeuille("Reprendre une semaine",
+      rienDu("📋", "Aucune semaine précédente à reprendre.<br>Celle-ci sera la première.") +
+      '<button class="btn plein" data-action="fermer">Fermer</button>');
+    return;
+  }
+  const fmt = { day: "numeric", month: "long" };
+
+  const html = '<div id="f-reprendre">' +
+    '<p class="aide" style="margin-bottom:.8rem">Seuls les <b>plats</b> sont recopiés. ' +
+    "Le cuisinier, les repas déjà validés et les absences de cette semaine-ci ne " +
+    "sont pas touchés.</p>" +
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:center">' +
+    '<input type="checkbox" id="remplacer-repas" style="width:auto">' +
+    '<span style="margin:0">Remplacer les repas déjà prévus</span></label>' +
+    '<div class="carte">' + semaines.map((x) => {
+      const dim = new Date(x.lundi); dim.setDate(dim.getDate() + 6);
+      return '<button class="ligne" data-role="prendre" data-cle="' + esc(x.cle) + '" ' +
+        'style="width:100%;background:none;border:none;border-top:1px solid var(--border);text-align:left">' +
+        '<span style="font-size:1.3rem">📋</span>' +
+        '<span class="ligne-corps"><b>' + esc(x.lundi.toLocaleDateString("fr-FR", fmt)) +
+        " – " + esc(dim.toLocaleDateString("fr-FR", fmt)) + "</b><small>" +
+        x.nb + " plat" + (x.nb > 1 ? "s" : "") + " • " + esc(x.exemples.join(", ")) +
+        "…</small></span></button>";
+    }).join("") + "</div>" +
+    '<button class="btn plein" data-action="fermer" style="margin-top:1rem">Annuler</button></div>';
+
+  ouvrirFeuille("Reprendre une semaine", html, (f) => {
+    f.querySelectorAll('[data-role="prendre"]').forEach((b) => {
+      b.onclick = () => {
+        const remplacer = f.querySelector("#remplacer-repas").checked;
+        fermerFeuille();
+        const n = reprendreSemaine(b.dataset.cle, remplacer);
+        toast(n ? n + " repas repris 📋" : "Rien à reprendre — les cases sont déjà occupées");
+      };
+    });
+  });
+};
+
+/* ==================== LE MENU À AFFICHER ====================
+
+   Beaucoup de familles collent le menu de la semaine sur le frigo.
+   L'application sait tout ; il lui manquait juste de le présenter ainsi :
+   en grand, sans boutons, lisible à un mètre. */
+
+Formulaires.menuAAfficher = function () {
+  const sem = etat.repas[ui.semaine] || {};
+  const lundi = lundiDeCle(ui.semaine);
+  const dim = new Date(lundi); dim.setDate(dim.getDate() + 6);
+  const fmt = { day: "numeric", month: "long" };
+  const auj = isoDate(new Date());
+
+  const nom = (c) => {
+    if (!c) return "";
+    if (estAbsence(c)) {
+      const mo = infoMotif(c.motif);
+      return mo.emoji + " " + (c.texte || mo.nom);
+    }
+    if (c.recetteId) {
+      const r = etat.recettes.find((x) => x.id === c.recetteId);
+      if (r) return (r.emoji || "🍽️") + " " + r.nom + (c.restes ? " (restes)" : "");
+    }
+    return c.texte ? "📝 " + c.texte : "";
+  };
+
+  const lignes = JOURS.map((j, i) => {
+    const d = new Date(lundi); d.setDate(d.getDate() + i);
+    const cest = isoDate(d) === auj;
+    const midi = nom(sem[j + "-midi"]), soir = nom(sem[j + "-soir"]);
+    return '<div class="jour-affiche' + (cest ? " aujourdhui" : "") + '">' +
+      '<div class="jour-affiche-nom">' + j.charAt(0).toUpperCase() + j.slice(1) +
+      ' <small>' + d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + "</small></div>" +
+      '<div class="jour-affiche-repas"><span>' + (midi ? esc(midi) : "—") + "</span>" +
+      "<span>" + (soir ? esc(soir) : "—") + "</span></div></div>";
+  }).join("");
+
+  ouvrirFeuille("",
+    '<div id="menu-affiche">' +
+    '<h2 style="font-family:var(--font-display);text-align:center;margin:.2rem 0 .1rem">' +
+    esc(etat.famille.nom) + "</h2>" +
+    '<p class="aide centre" style="margin:0 0 .9rem">Menus du ' +
+    esc(lundi.toLocaleDateString("fr-FR", fmt)) + " au " +
+    esc(dim.toLocaleDateString("fr-FR", fmt)) + "</p>" +
+    '<div class="entete-affiche"><span></span><span>Midi</span><span>Soir</span></div>' +
+    lignes +
+    '<div class="rangee-btn sans-impression" style="margin-top:1.2rem">' +
+    '<button class="btn" data-action="fermer">Fermer</button>' +
+    '<button class="btn principal" data-role="imprimer">🖨️ Imprimer</button></div></div>',
+    (f) => {
+      const b = f.querySelector('[data-role="imprimer"]');
+      if (b) b.onclick = () => window.print();
+    });
+};
+
+/* ==================== LE BILAN DE LA SEMAINE ====================
+
+   Ce qui a été fait, pas ce qui reste à faire. C'est ce qui donne le
+   sentiment d'avancer — et la seule vue de l'application qui regarde en
+   arrière. Aucune saisie : tout vient du journal des points. */
+
+Formulaires.bilanSemaine = function (cleSem) {
+  const cle = cleSem || ui.semaine;
+  const b = bilanSemaine(cle);
+  const lundi = lundiDeCle(cle);
+  const dim = new Date(lundi); dim.setDate(dim.getDate() + 6);
+  const fmt = { day: "numeric", month: "long" };
+  const o = objectifActif();
+
+  const chiffre = (n, mot, emoji) =>
+    '<div style="flex:1;text-align:center">' +
+    '<div style="font-size:1.6rem;line-height:1">' + emoji + "</div>" +
+    '<div style="font-family:var(--font-display);font-size:1.5rem;line-height:1.1">' + n + "</div>" +
+    '<div class="aide" style="margin:0">' + mot + "</div></div>";
+
+  const html = '<div id="f-bilan">' +
+    '<p class="aide centre" style="margin:0 0 .9rem">Du ' +
+    esc(lundi.toLocaleDateString("fr-FR", fmt)) + " au " +
+    esc(dim.toLocaleDateString("fr-FR", fmt)) + "</p>" +
+
+    (b.rien
+      ? rienDu("🌱", "Rien n'a encore été validé cette semaine.<br>" +
+        "Le bilan se remplira au fur et à mesure.")
+      : '<div class="carte" style="display:flex;gap:.4rem">' +
+        chiffre(b.taches, "tâche" + (b.taches > 1 ? "s" : "") + " validée" + (b.taches > 1 ? "s" : ""), "🧹") +
+        chiffre(b.repasCuisines + "/" + b.repasPrevus, "repas cuisinés", "🍽️") +
+        chiffre(b.pointsGagnes, "points gagnés", "🌟") +
+        "</div>" +
+
+        (b.classement.length
+          ? '<div class="sous-titre"><h3>Qui a fait quoi</h3></div>' +
+            '<div class="carte">' + b.classement.map((x) =>
+              '<div class="ligne">' + avatarDe(x.membre) +
+              '<div class="ligne-corps"><b>' + esc(x.membre.prenom) + "</b></div>" +
+              '<span class="etiquette or">+' + x.pts + " pts</span></div>").join("") +
+            "</div>"
+          : "") +
+
+        (o
+          ? '<div class="sous-titre"><h3>Objectif commun</h3></div>' +
+            '<div class="carte" style="text-align:center">' +
+            '<div style="font-size:1.6rem;line-height:1">' + esc(o.emoji || "🎯") + "</div>" +
+            '<div style="font-family:var(--font-display);margin:.2rem 0 .5rem">' + esc(o.nom) + "</div>" +
+            '<div class="barre-progression"><i style="width:' +
+            Math.min(100, Math.round(pointsCollectifs() / o.cible * 100)) + '%"></i></div>' +
+            '<div style="margin-top:.4rem;font-weight:700">' + pointsCollectifs() + " / " + o.cible + "</div></div>"
+          : "")) +
+
+    '<button class="btn plein" data-action="fermer" style="margin-top:1rem">Fermer</button></div>';
+
+  ouvrirFeuille("🏁 La semaine en bref", html);
 };

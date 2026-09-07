@@ -1,6 +1,6 @@
-# 🏡 Tribu — l'organisation de la maison, en famille
+# 🏡 Ma Tribu — l'organisation de la maison, en famille
 
-> ### 🧪 Version 0.15 — BÊTA
+> ### 🧪 Version 0.21 — BÊTA
 > L'application est utilisable au quotidien, mais elle est encore jeune : des
 > bugs sont possibles et la forme des données peut encore changer.
 > Un bouton **« Signaler un problème / proposer une idée »** est disponible
@@ -126,6 +126,38 @@ Dans la grille de la semaine, un coup d'œil suffit : l'avatar de qui cuisine,
 > s'attribuer de points : il peut seulement dire « c'est fait ». Seul un
 > administrateur valide, et le montant est comparé au réglage de la famille.
 
+### 📋 Reprendre une semaine déjà faite
+
+*Menus → **📋 Reprendre une semaine***. Les familles mangent par cycles :
+inutile de refaire quatorze cases chaque dimanche. Choisissez une des huit
+semaines précédentes et les plats se recopient.
+
+**Seuls les plats sont repris.** Pas le cuisinier (le tour aura changé), pas
+l'état « fait / validé » (ce serait s'attribuer des points d'avance), pas les
+absences de cette semaine-là. Et de ce côté-ci, une absence déjà posée ou un
+repas déjà validé ne se font jamais écraser.
+
+### 🖨️ Le menu à afficher
+
+*Menus → **🖨️ Afficher***. La semaine en grand, sans boutons, lisible à un
+mètre — pour la coller sur le frigo ou la laisser ouverte sur une tablette.
+Le bouton **Imprimer** produit une page propre : la barre du bas, les boutons
+et le reste de l'application n'y figurent pas.
+
+### 🏁 Le bilan de la semaine
+
+Ce que la famille a **fait**, pas ce qui reste à faire :
+
+> 🧹 **2** tâches validées · 🍽️ **5/12** repas cuisinés · 🌟 **40** points gagnés
+> Tom +25 · Léa +15
+
+Aucune saisie : tout vient du journal des points. Les cadeaux échangés ne font
+pas baisser le total — on compte ce qui a été gagné.
+
+La carte apparaît sur l'accueil **du samedi au lundi**, quand la semaine se
+referme. Le reste du temps, elle reste accessible depuis *Points & cadeaux →
+La semaine en bref*.
+
 ### 🚪 Quand personne n'est à la maison
 
 Dans la case d'un repas, une rangée **« Personne à la maison ? »** avec six
@@ -149,6 +181,22 @@ Après une génération, l'application vous le confirme : *« 12 repas proposés
 
 Pour revenir en arrière : **↩️ Finalement, on mange à la maison**.
 
+### 🍴 Quand il en manque un ou deux
+
+Différent d'une absence de toute la maison : là on cuisine, mais pour moins de
+monde. Dans la case du repas, une rangée **« Qui ne mange pas ? »** avec les
+prénoms, et un compteur *« 3 à table »*.
+
+**Les quantités de la liste de courses suivent**, repas par repas :
+
+```
+Ratatouille pour 4 :  2 aubergines · 2 courgettes · 4 tomates
+Deux à la cantine  :  1 aubergine  · 1 courgette  · 2 tomates
+```
+
+La case affiche alors **3 🍴**. Changer le plat ne remet personne à table :
+qui mange ne dépend pas de la recette.
+
 ### ♻️ Les restes
 
 Dans la case d'un repas, une case **« Ce sont des restes »**. Le plat reste
@@ -168,9 +216,18 @@ Courgettes   4 → 2   (−2)
 ```
 
 Rien n'est fait sans confirmation, et vous décochez ce que vous n'avez pas
-utilisé — on ne met jamais exactement ce que dit la recette. Si les unités ne
-se convertissent pas (3 boîtes de tomates contre 4 tomates), l'application
-**n'y touche pas** et vous le dit.
+utilisé — on ne met jamais exactement ce que dit la recette.
+
+**Quand les unités ne se convertissent pas** — la recette demande 4 tomates,
+votre réserve est en boîtes — l'application ne devine pas : elle **vous
+demande**. Une section *« À vous de dire »* affiche l'article avec un champ,
+dans l'unité de la réserve :
+
+> ⚖️ **Tomates** — recette : 4 • en réserve : 4 boîte(s)   `[ 1 ]` boîte(s)
+
+Vous tapez ce que vous avez réellement sorti, et c'est retiré. Laissé vide,
+rien n'est touché. Le même champ apparaît au retour du magasin, dans l'autre
+sens : *acheté 2 paquet(s) • en réserve : 1 kg* → vous indiquez **1 kg**.
 
 ### Les points et les cadeaux
 
@@ -227,6 +284,11 @@ quand ça devient urgent.
 Les articles sont rangés par rayon, avec une quantité et une unité (2 l de lait,
 500 g de farine…).
 
+**Ajouter plusieurs articles d'un coup** : le champ du haut accepte les
+virgules — *pain, lait, œufs* fait trois lignes. Et le lien **Coller une
+liste** ouvre une zone où l'on peut coller un message ou dicter d'un trait,
+un article par ligne. Chacun est rangé automatiquement dans son rayon.
+
 **🥫 Ma réserve** — ce que vous gardez en permanence à la maison : épicerie,
 conserves, produits d'entretien. Pour chaque article :
 
@@ -276,7 +338,11 @@ apparaît alors :
 
 En une pression, les articles quittent la liste **et rejoignent votre réserve** :
 
-- ce qui y est **déjà** est réapprovisionné tout seul — *Riz : 1 kg → 3 kg* ;
+- ce qui y est **déjà** est réapprovisionné tout seul — *Riz : 1 kg → 3 kg*.
+  La reconnaissance tolère les écarts d'écriture : *Tomate* retrouve
+  *Tomates*, *Oeufs* retrouve *Œufs*, *Pomme de terre* retrouve *Pommes de
+  terre*. En revanche **un nom plus précis reste un autre produit** :
+  *lait de coco* n'est pas du *lait*, et *farine T55* n'est pas *farine* ;
 - ce qui n'y est **pas encore** est ajouté aussi, et vous est montré avant :
   les cases sont **cochées par défaut**. Le gâteau d'anniversaire n'a rien à
   faire dans une réserve — décochez-le, il disparaîtra simplement de la liste ;
@@ -339,6 +405,13 @@ bœuf ne fait pas un repas de viande.
 - **Plats plus légers le soir**, **plats rapides du lundi au vendredi**.
 - **Privilégier les recettes Thermomix** (99 plats fournis s'y prêtent).
 - **Ne pas resservir un plat vu depuis…** 2, 3, 4 ou 6 semaines.
+
+**La variété du genre de plat.** Le générateur ne se contente pas d'éviter la
+même recette deux fois : il évite aussi **quatre soupes dans la même semaine**.
+Chaque plat classe dans un genre — soupe, salade, tarte ou quiche, pâtes, riz,
+mijoté, gratin, poêlée — et chaque plat du même genre déjà posé rend le suivant
+moins probable. La règle est **souple** : si votre cahier ne contient que des
+soupes, la semaine sera remplie de soupes plutôt que de rester vide.
 
 Si vous demandez plus de repas qu'il n'y a de cases à remplir, l'application
 place ce qu'elle peut et vous le dit.
@@ -533,6 +606,19 @@ deux différences :
 Pour marquer un de vos plats comme dessert, cochez **🍰 Dessert** dans le
 formulaire de la recette.
 
+### Retrouver un plat parmi 353
+
+Le cahier est long : sans repères, c'est cinquante écrans à faire défiler.
+Trois outils, du plus rapide au plus complet :
+
+- **La recherche** en haut, qui cherche dans les noms **et** les ingrédients.
+- **L'index alphabétique** — une rangée de lettres sous le titre : une
+  pression et vous êtes à la lettre. Il n'apparaît qu'en tri A → Z.
+- **🔎 Filtrer**, qui replie les quatre rangées de filtres. Elles prenaient
+  600 pixels avant la première recette — les trois quarts d'un écran de
+  téléphone. Ce qui est actif reste affiché en permanence, et se retire d'une
+  pression sur la puce.
+
 ### Ranger le cahier
 
 Juste au-dessus de la liste, trois façons de la trier :
@@ -548,7 +634,7 @@ se range à **E**, *Œufs cocotte* à **O**, *Bœuf bourguignon* à **B**.
 
 ### Partager vos recettes avec d'autres familles
 
-Les familles qui utilisent Tribu disposent d'un **catalogue commun**, accessible
+Les familles qui utilisent Ma Tribu disposent d'un **catalogue commun**, accessible
 depuis *Mes recettes* → **🌍 Recettes partagées par d'autres familles**. Vous
 pouvez y feuilleter les plats publiés, les prévisualiser, et en recopier un chez
 vous d'un geste.
@@ -592,7 +678,7 @@ Comme pour l'application *reventes* :
 
 ### ⚠️ L'icône de l'écran d'accueil est un appareil de plus
 
-C'est le piège le plus déroutant, surtout sur iPhone. Quand vous ajoutez Tribu
+C'est le piège le plus déroutant, surtout sur iPhone. Quand vous ajoutez Ma Tribu
 à l'écran d'accueil, le téléphone en fait une **application séparée**, avec sa
 **propre mémoire**. Elle ne voit pas la session ouverte dans Safari ou Chrome :
 elle affiche donc l'écran de départ et propose de **créer une famille**.
@@ -600,14 +686,22 @@ elle affiche donc l'écran de départ et propose de **créer une famille**.
 **Ne créez pas une deuxième famille** — elle serait vide, et vos données
 resteraient dans l'autre. Faites plutôt :
 
-1. Dans le **navigateur** (ou sur le téléphone d'un administrateur) :
+1. Dans le **navigateur**, avant de poser l'icône :
    *Mon profil ▸ **📱 Connecter un appareil*** ▸ **Créer mon code d'invitation**.
-2. Ouvrez Tribu **depuis l'icône** de l'écran d'accueil.
+   **Chacun peut créer le sien**, administrateur ou non — le code ne vaut que
+   pour son propre profil et ne donne aucun droit supplémentaire.
+2. Ouvrez Ma Tribu **depuis l'icône** de l'écran d'accueil.
 3. **« J'ai reçu une invitation »**, tapez le code, puis votre code à
    4 chiffres habituel.
 
 L'icône retrouve alors toute la famille. Vos deux accès (navigateur et icône)
 continuent de fonctionner en parallèle.
+
+> ⚠️ **Une invitation ne sert qu'une fois.** Celle qui vous a servi à
+> rejoindre la famille dans le navigateur est déjà consommée : l'icône a
+> besoin de la sienne. C'est pour cela que l'accueil vous propose de créer
+> votre code **avant** que vous posiez l'icône — une fois dedans, il est trop
+> tard pour le faire depuis là.
 
 *Pourquoi ne pas faire ça tout seul ?* Parce que c'est précisément la
 protection : un appareil n'entre dans une famille qu'avec une invitation

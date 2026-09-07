@@ -15,6 +15,13 @@ function nomDe(idm) {
   const m = membre(idm);
   return m ? m.prenom : "quelqu'un";
 }
+/* Ancre facultative sur une carte : sert à sauter directement à une section
+   de l'administration, qui compte maintenant dix cartes. */
+function blocAncre(ancre, titre, contenu, lienTexte, lienAction, lienVue) {
+  const html = bloc(titre, contenu, lienTexte, lienAction, lienVue);
+  return html ? html.replace('<div class="carte">', '<div class="carte" id="admin-' + ancre + '">') : html;
+}
+
 function bloc(titre, contenu, lienTexte, lienAction, lienVue) {
   /* Une carte qui renvoie vers un onglet masqué n'a plus lieu d'être : sinon
      son bouton « Tout voir » ramènerait bêtement à l'accueil. */
@@ -80,15 +87,32 @@ Vues.accueil = function () {
   const salut = heure < 5 ? "Bonne nuit" : heure < 12 ? "Bonjour" : heure < 18 ? "Bon après-midi" : "Bonsoir";
   const auj = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
-  h.push('<h2 class="titre-section">' + salut + " " + esc(moi.prenom) +
-    ' 👋<span class="badge-beta">bêta</span></h2>');
+  h.push('<h2 class="titre-section">' + salut + " " + esc(moi.prenom) + " 👋</h2>");
   h.push('<p class="aide" style="margin:-.6rem 0 1rem;text-transform:capitalize">' + esc(auj) + "</p>");
 
-  h.push('<div class="bandeau">🧪<div><b>Version d\'essai (' + esc(VERSION) + ').</b> ' +
+  /* Le rappel « c'est une bêta » reste discret : il ne doit pas voler la
+     vedette aux bandeaux qui, eux, demandent une action. */
+  h.push('<div class="bandeau discret">🧪<div><b>Version d\'essai (' + esc(VERSION) + ').</b> ' +
     "Des bugs sont possibles et les données pourraient changer de forme. " +
     '<button class="lien" data-action="retour">Signaler un problème ou proposer une idée</button></div></div>');
 
   h.push(bandeauMaj());
+
+  /* Le conseil doit arriver AVANT le piège, pas après : une fois l'icône
+     posée sur l'écran d'accueil, on se retrouve dans une application vierge
+     dont on ne sait pas sortir. Tant qu'on est connecté ici, le code est à
+     une pression. Se masque définitivement. */
+  if (Store.mode === "nuage" && !ouvertDepuisIcone() &&
+    !localStorage.getItem("tribu:conseilEcranAccueil")) {
+    h.push('<div class="bandeau info">📱<div><b>Vous comptez ajouter Ma Tribu à votre ' +
+      "écran d'accueil ?</b><br>L'icône est une application séparée : il lui faudra " +
+      "son propre code, et celui qui vous a servi ici ne fonctionne plus. " +
+      "Créez-le maintenant, pendant que vous êtes connecté." +
+      '<div class="rangee-btn" style="margin-top:.6rem">' +
+      '<button class="btn mini" data-action="masquer-conseil-icone">Plus tard</button>' +
+      '<button class="btn mini principal" data-action="mon-appareil">Créer mon code</button>' +
+      "</div></div></div>");
+  }
 
   if (Store.mode === "local") {
     h.push('<div class="bandeau">⚠️<div><b>Mode hors partage.</b> Les données restent sur cet appareil. ' +
@@ -296,6 +320,21 @@ Vues.accueil = function () {
   const cl = classement();
   if (cl.length > 1) {
     h.push(carteObjectif());
+    /* Le bilan se propose quand la semaine se termine — samedi, dimanche et
+       lundi. Le reste du temps il reste accessible depuis Points & cadeaux :
+       une carte de plus tous les jours serait du bruit. */
+    const jourSem = new Date().getDay();          // 0 = dimanche, 6 = samedi
+    if (jourSem === 0 || jourSem === 6 || jourSem === 1) {
+      const bs = bilanSemaine(cleSemaine(new Date()));
+      if (!bs.rien) {
+        h.push(bloc("🏁 La semaine en bref",
+          '<div class="ligne ligne-maj" data-action="bilan-semaine">' +
+          '<span style="font-size:1.4rem">🏁</span>' +
+          '<div class="ligne-corps"><b>' + bs.taches + " tâche" + (bs.taches > 1 ? "s" : "") +
+          ", " + bs.repasCuisines + " repas, " + bs.pointsGagnes + " points</b>" +
+          "<small>Appuyez pour voir le détail</small></div></div>"));
+      }
+    }
     h.push(bloc("🌟 Classement de la tribu",
       cl.map((x, i) =>
         '<div class="ligne"><span class="rang' + (i === 0 ? " or" : "") + '">' + (i + 1) + "</span>" +
@@ -345,15 +384,15 @@ function ligneTache(x, compact) {
       : "") +
     "</div>" +
     (estAdmin() && !compact
-      ? '<button class="btn mini" data-action="tache-editer" data-id="' + t.id + '">✏️</button>' : "") +
+      ? '<button class="btn mini icone" data-action="tache-editer" data-id="' + t.id + '">✏️</button>' : "") +
     boutons.join("") + "</div>";
 }
 
 Vues.taches = function () {
   const h = [];
-  h.push('<div class="puces" style="margin:.2rem 0 1rem">' +
-    '<button class="puce ' + (ui.filtreTaches === "moi" ? "on" : "") + '" data-action="taches-filtre" data-valeur="moi">Les miennes</button>' +
-    '<button class="puce ' + (ui.filtreTaches === "toutes" ? "on" : "") + '" data-action="taches-filtre" data-valeur="toutes">Toute la famille</button>' +
+  h.push('<div class="segments">' +
+    '<button class="' + (ui.filtreTaches === "moi" ? "on" : "") + '" data-action="taches-filtre" data-valeur="moi">Les miennes</button>' +
+    '<button class="' + (ui.filtreTaches === "toutes" ? "on" : "") + '" data-action="taches-filtre" data-valeur="toutes">Toute la famille</button>' +
     "</div>");
 
   const toutes = tachesDuMoment();
@@ -399,10 +438,10 @@ Vues.courses = function () {
   const surStock = ui.ongletCourses === "stock";
   const bas = stockSousMinimum().length;
 
-  h.push('<div class="puces" style="margin:.2rem 0 .7rem">' +
-    '<button class="puce ' + (!surStock ? "on" : "") + '" data-action="courses-onglet" data-valeur="liste">' +
+  h.push('<div class="segments">' +
+    '<button class="' + (!surStock ? "on" : "") + '" data-action="courses-onglet" data-valeur="liste">' +
     "🛒 Mes listes</button>" +
-    '<button class="puce ' + (surStock ? "on" : "") + '" data-action="courses-onglet" data-valeur="stock">' +
+    '<button class="' + (surStock ? "on" : "") + '" data-action="courses-onglet" data-valeur="stock">' +
     "🥫 Ma réserve" + (bas ? " · " + bas : "") + "</button></div>");
 
   return h.join("") + (surStock ? vueReserve() : vueListeCourses());
@@ -431,16 +470,18 @@ function vueListeCourses() {
   h.push('<div class="entete-liste">' +
     "<div><b>" + esc(active.nom) + "</b><small>" + esc(t.nom) +
     (active.magasin ? " • " + esc(active.magasin) : "") + "</small></div>" +
-    '<button class="btn mini" data-action="liste-editer">✏️</button></div>');
+    '<button class="btn mini icone" data-action="liste-editer">✏️</button></div>');
 
   if (!t.alerte) {
     h.push('<div class="bandeau info">📅<div>Liste préparée tranquillement : elle ne compte ' +
       "pas dans les rappels de l'accueil.</div></div>");
   }
 
-  h.push('<form id="form-course-rapide" style="display:flex;gap:.5rem;margin:0 0 1rem">' +
-    '<input type="text" id="champ-course" placeholder="Ajouter un article…" autocomplete="off">' +
-    '<button class="btn principal" type="submit" style="flex-shrink:0">Ajouter</button></form>');
+  h.push('<form id="form-course-rapide" style="display:flex;gap:.5rem;margin:0 0 .4rem">' +
+    '<input type="text" id="champ-course" placeholder="pain, lait, œufs…" autocomplete="off">' +
+    '<button class="btn principal" type="submit" style="flex-shrink:0">Ajouter</button></form>' +
+    '<p class="aide" style="margin:0 0 1rem">Séparez par des virgules pour en ajouter ' +
+    'plusieurs. <button class="lien" data-action="courses-plusieurs">Coller une liste</button></p>');
 
   const bas = stockSousMinimum();
   if (bas.length && t.alerte) {
@@ -497,9 +538,9 @@ function ligneCourse(c) {
     '<div class="ligne-corps"><b>' + esc(c.nom) + "</b>" +
     (details ? "<small>" + esc(details) + "</small>" : "") + "</div>" +
     (listesCourses().length > 1
-      ? '<button class="btn mini" data-action="course-deplacer" data-id="' + c.id + '">↔</button>' : "") +
-    '<button class="btn mini" data-action="course-editer" data-id="' + c.id + '">✏️</button>' +
-    '<button class="btn mini" data-action="course-suppr" data-id="' + c.id + '">🗑️</button></div>';
+      ? '<button class="btn mini icone" data-action="course-deplacer" data-id="' + c.id + '">↔</button>' : "") +
+    '<button class="btn mini icone" data-action="course-editer" data-id="' + c.id + '">✏️</button>' +
+    '<button class="btn mini icone" data-action="course-suppr" data-id="' + c.id + '">🗑️</button></div>';
 }
 
 /* ------------------------------- la réserve ------------------------------- */
@@ -573,7 +614,7 @@ function ligneStock(s) {
     "</div>" +
     '<button class="btn mini" data-action="stock-moins" data-id="' + s.id + '">−</button>' +
     '<button class="btn mini" data-action="stock-plus" data-id="' + s.id + '">+</button>' +
-    '<button class="btn mini" data-action="stock-editer" data-id="' + s.id + '">✏️</button></div>';
+    '<button class="btn mini icone" data-action="stock-editer" data-id="' + s.id + '">✏️</button></div>';
 }
 
 /* ================================ MENUS ================================ */
@@ -594,15 +635,25 @@ Vues.menus = function () {
   h.push('<div class="rangee-btn" style="margin-bottom:1rem">' +
     '<button class="btn principal" data-action="menus-generer">🎲 Générer</button>' +
     '<button class="btn doux" data-action="menus-courses">🛒 Aux courses</button>' +
-    '<button class="btn" data-action="aller" data-vue="recettes">📖 Recettes</button></div>');
+    /* Le raccourci vers les recettes ne sert plus qu'aux familles qui ont
+       masqué l'onglet : ailleurs il fait doublon avec la barre du bas et
+       vole un tiers de la rangée aux deux vrais boutons de cet écran. */
+    (ongletMasque("recettes")
+      ? '<button class="btn" data-action="aller" data-vue="recettes">📖 Recettes</button>'
+      : "") + "</div>");
+
+  h.push('<div class="rangee-btn" style="margin-bottom:1rem">' +
+    '<button class="btn doux" data-action="menus-reprendre">📋 Reprendre une semaine</button>' +
+    '<button class="btn doux" data-action="menus-afficher">🖨️ Afficher</button></div>');
 
   /* Ce que donne la semaine, en un coup d'oeil : c'est le meilleur retour
      sur les nombres demandés au générateur. */
   const compo = compositionSemaine(ui.semaine);
   if (compo.total) {
-    h.push('<p class="aide centre" style="margin:-.5rem 0 .9rem">' +
-      CATEGORIES_REPAS.map((c) => c.emoji + " " + (compo[c.val] || 0)).join(" &nbsp;·&nbsp; ") +
-      (compo.autre ? " &nbsp;·&nbsp; 🍳 " + compo.autre : "") + "</p>");
+    h.push('<div class="resume-compo">' +
+      CATEGORIES_REPAS.map((c) => '<span title="' + esc(c.nom) + '">' + c.emoji + " " +
+        (compo[c.val] || 0) + "</span>").join("") +
+      (compo.autre ? '<span title="Autre">🍳 ' + compo.autre + "</span>" : "") + "</div>");
   }
 
   const sem = etat.repas[ui.semaine] || {};
@@ -640,8 +691,11 @@ function caseRepas(jour, moment, contenu) {
   const cuisinier = contenu && contenu.cuisinier ? membre(contenu.cuisinier) : null;
   let marque = "";
   if (!libre && !estAbsence(contenu)) {
+    const manquants = absentsDuRepas(ui.semaine, jour, moment).length;
     if (e.statut === "valide") marque = '<span class="etiquette vert">✓</span>';
     else if (e.statut === "fait") marque = '<span class="etiquette chaud">à valider</span>';
+    else if (manquants) marque = '<span class="etiquette">' +
+      Math.max(1, nbConvives() - manquants) + " 🍴</span>";
     else if (cuisinier) marque = '<span class="avatar xs">' + esc(cuisinier.emoji || "🙂") + "</span>";
   }
   return '<button class="case-repas" data-action="repas-case" data-jour="' + jour + '" data-moment="' + moment + '">' +
@@ -656,8 +710,6 @@ function caseRepas(jour, moment, contenu) {
 
 Vues.recettes = function () {
   const h = [];
-  h.push('<button class="lien" data-action="aller" data-vue="menus" style="margin-bottom:.8rem">‹ Retour aux menus</button>');
-
   h.push('<input type="text" id="champ-recherche-recette" placeholder="Rechercher un plat ou un ingrédient…" ' +
     'value="' + esc(ui.rechercheRecette) + '" autocomplete="off" style="margin-bottom:.7rem">');
 
@@ -672,31 +724,54 @@ Vues.recettes = function () {
     ["plat", "🍽️ Plats"],
     ["dessert", "🍰 Desserts"]
   ];
-  h.push('<div class="puces" style="margin-bottom:.8rem">' +
-    filtres.map(([v, l]) =>
-      '<button class="puce ' + (ui.filtresRecettes.includes(v) ? "on" : "") +
-      '" data-action="recettes-filtre" data-valeur="' + v + '">' + l + "</button>").join("") +
-    "</div>");
+  const nomFiltre = (v) => {
+    if (v.indexOf("sante:") === 0) {
+      const p = infoProfil(v.slice(6));
+      return p ? p.emoji + " " + p.nom : v;
+    }
+    const f = filtres.find((x) => x[0] === v);
+    return f ? f[1] : v;
+  };
 
-  h.push('<button class="btn plein doux" data-action="recettes-partagees" style="margin-bottom:1rem">' +
-    "🌍 Recettes partagées par d'autres familles</button>");
+  /* Les filtres se sont multipliés : quatre rangées de puces, c'était 600
+     pixels avant la première recette — les trois quarts d'un écran de
+     téléphone. Ils se replient donc, et ne s'ouvrent que si on le demande.
+     Ce qui est actif reste visible en permanence, sinon on filtrerait sans
+     s'en souvenir. */
+  const actifs = ui.filtresRecettes.slice();
+  h.push('<div class="rangee-btn" style="margin-bottom:.7rem">' +
+    '<button class="btn ' + (actifs.length ? "principal" : "doux") + '" data-action="recettes-filtres">' +
+    "🔎 Filtrer" + (actifs.length ? " (" + actifs.length + ")" : "") + "</button>" +
+    '<button class="btn doux" data-action="recettes-partagees">🌍 Partagées</button></div>');
+
+  if (actifs.length && !ui.filtresOuverts) {
+    h.push('<div class="puces" style="margin-bottom:.7rem">' +
+      actifs.map((v) => '<button class="puce on" data-action="recettes-filtre" data-valeur="' +
+        esc(v) + '">' + nomFiltre(v) + " ✕</button>").join("") +
+      '<button class="puce" data-action="recettes-filtre-vider">Tout enlever</button></div>');
+  }
+
+  if (ui.filtresOuverts) {
+    h.push('<div class="puces" style="margin-bottom:.7rem">' +
+      filtres.map(([v, l]) =>
+        '<button class="puce ' + (ui.filtresRecettes.includes(v) ? "on" : "") +
+        '" data-action="recettes-filtre" data-valeur="' + v + '">' + l + "</button>").join("") +
+      "</div>");
+    h.push('<div class="sous-titre" style="margin:.2rem 0 .45rem"><h3>Façons de cuisiner</h3>' +
+      '<button class="lien" data-action="sante-info">Ça veut dire quoi ?</button></div>');
+    const rangeeProfils = (f) => '<div class="puces" style="margin-bottom:.7rem">' +
+      profilsDeFamille(f).map((p) => {
+        const cle = "sante:" + p.val;
+        return '<button class="puce ' + (ui.filtresRecettes.includes(cle) ? "on" : "") +
+          '" data-action="recettes-filtre" data-valeur="' + cle + '" title="' + esc(p.resume) + '">' +
+          p.emoji + " " + esc(p.nom) + "</button>";
+      }).join("") + "</div>";
+    h.push(rangeeProfils("cuisine"));
+    h.push('<div class="sous-titre" style="margin:.2rem 0 .45rem"><h3>Ce qu’on évite</h3></div>');
+    h.push(rangeeProfils("eviter"));
+  }
 
   h.push(bandeauMaj());
-
-  /* Les profils santé sur leur propre rangée, avec le lien qui explique ce
-     qu'ils veulent dire — et surtout ce qu'ils ne veulent pas dire. */
-  h.push('<div class="sous-titre" style="margin:.2rem 0 .45rem"><h3>Façons de cuisiner</h3>' +
-    '<button class="lien" data-action="sante-info">Ça veut dire quoi ?</button></div>');
-  const rangeeProfils = (f) => '<div class="puces" style="margin-bottom:.7rem">' +
-    profilsDeFamille(f).map((p) => {
-      const cle = "sante:" + p.val;
-      return '<button class="puce ' + (ui.filtresRecettes.includes(cle) ? "on" : "") +
-        '" data-action="recettes-filtre" data-valeur="' + cle + '" title="' + esc(p.resume) + '">' +
-        p.emoji + " " + esc(p.nom) + "</button>";
-    }).join("") + "</div>";
-  h.push(rangeeProfils("cuisine"));
-  h.push('<div class="sous-titre" style="margin:.2rem 0 .45rem"><h3>Ce qu’on évite</h3></div>');
-  h.push(rangeeProfils("eviter"));
 
   const liste = recettesFiltrees();
   const actif = ui.filtresRecettes.length || ui.rechercheRecette.trim();
@@ -715,9 +790,9 @@ Vues.recettes = function () {
 
   /* Le tri. Avec près de deux cents plats, l'ordre du cahier compte autant
      que les filtres : on le met à portée, juste au-dessus de la liste. */
-  h.push('<div class="puces" style="margin-bottom:.7rem">' +
+  h.push('<div class="segments">' +
     [["alpha", "🔤 A → Z"], ["recent", "🕐 Récentes"], ["saison", "☀️ De saison"]].map(([v, l]) =>
-      '<button class="puce ' + (ui.triRecettes === v ? "on" : "") +
+      '<button class="' + (ui.triRecettes === v ? "on" : "") +
       '" data-action="recettes-tri" data-valeur="' + v + '">' + l + "</button>").join("") +
     "</div>");
 
@@ -742,12 +817,14 @@ Vues.recettes = function () {
     }).join("") +
     profilsDe(r).map((v) => {
       const p = infoProfil(v);
-      return p ? '<span class="etiquette vert">' + p.emoji + "</span>" : "";
+      return p ? '<span class="etiquette sante" title="' + esc(p.nom) + '">' +
+        p.emoji + "</span>" : "";
     }).join("") +
     (r.partageId ? '<span class="etiquette vert">🌍 partagée</span>' : "") +
     (r.origine === "importee" ? '<span class="etiquette">importée</span>' : "") +
     "</span></div>" +
-    '<button class="btn mini" data-action="recette-editer" data-id="' + r.id + '">✏️</button></div>';
+    '<button class="btn mini icone" data-action="recette-editer" data-id="' + r.id +
+    '" aria-label="Modifier">✏️</button></div>';
 
   if (ui.triRecettes !== "alpha") {
     h.push('<div class="carte">' + liste.map(ligneRecette).join("") + "</div>");
@@ -758,19 +835,31 @@ Vues.recettes = function () {
      permettent de retrouver un plat en faisant défiler, sans chercher. */
   let lettre = null;
   let bloc = [];
+  const sections = [];
   const vider = () => {
     if (!bloc.length) return;
-    h.push('<div class="sous-titre" style="margin:.9rem 0 .4rem"><h3>' + lettre + "</h3>" +
-      '<span class="etiquette">' + bloc.length + "</span></div>");
-    h.push('<div class="carte">' + bloc.join("") + "</div>");
+    sections.push('<div class="sous-titre" id="lettre-' + lettre + '" style="margin:.9rem 0 .4rem">' +
+      "<h3>" + lettre + "</h3>" +
+      '<span class="etiquette">' + bloc.length + "</span></div>" +
+      '<div class="carte">' + bloc.join("") + "</div>");
     bloc = [];
   };
+  const lettres = [];
   liste.forEach((r) => {
     const l = lettreRecette(r);
-    if (l !== lettre) { vider(); lettre = l; }
+    if (l !== lettre) { vider(); lettre = l; lettres.push(l); }
     bloc.push(ligneRecette(r));
   });
   vider();
+
+  /* 353 plats, c'est cinquante écrans à faire défiler. L'index rend le
+     cahier utilisable comme un vrai cahier : on va à la lettre. */
+  if (lettres.length > 4) {
+    h.push('<div class="index-lettres">' + lettres.map((l) =>
+      '<button data-action="recettes-lettre" data-valeur="' + l + '">' + l + "</button>").join("") +
+      "</div>");
+  }
+  h.push(sections.join(""));
   return h.join("");
 };
 
@@ -808,7 +897,7 @@ function ligneNote(n, sansQuand) {
     (badge || n.note ? '<span class="etiquettes">' + badge +
       (n.repetition && n.repetition !== "aucune" ? '<span class="etiquette">↻</span>' : "") + "</span>" : "") +
     "</div>" +
-    '<button class="btn mini" data-action="note-editer" data-id="' + n.id + '">✏️</button></div>';
+    '<button class="btn mini icone" data-action="note-editer" data-id="' + n.id + '">✏️</button></div>';
 }
 
 Vues.notes = function () {
@@ -816,9 +905,9 @@ Vues.notes = function () {
 
   /* Trois usages, trois onglets : l'agenda des rendez-vous datés, les
      pense-bêtes sans date, et ce qui est fait. */
-  h.push('<div class="puces" style="margin:.2rem 0 .7rem">' +
+  h.push('<div class="segments">' +
     [["agenda", "📅 Agenda"], ["pensebetes", "📝 Pense-bêtes"], ["faits", "✅ Terminés"]]
-      .map(([v, l]) => '<button class="puce ' + (ui.filtreNotes === v ? "on" : "") +
+      .map(([v, l]) => '<button class="' + (ui.filtreNotes === v ? "on" : "") +
         '" data-action="notes-filtre" data-valeur="' + v + '">' + l + "</button>").join("") +
     "</div>");
 
@@ -898,6 +987,7 @@ Vues.points = function () {
       " points pour « " + esc(prochain.nom) + " »</div></div>"
       : "") +
     '<button class="lien" data-action="points-historique" style="margin-top:.9rem">Voir mon historique</button>' +
+    ' · <button class="lien" data-action="bilan-semaine">La semaine en bref</button>' +
     "</div>");
 
   /* Demandes a traiter */
@@ -970,7 +1060,16 @@ Vues.admin = function () {
     return h.join("");
   }
 
-  h.push(bloc("👨‍👩‍👧 Membres de la famille",
+  /* Dix cartes, quatre écrans : sans raccourcis, changer un réglage demande
+     de faire défiler tout le reste à chaque fois. */
+  h.push('<div class="puces" style="margin-bottom:.9rem">' +
+    [["membres", "👨‍👩‍👧 Membres"], ["inviter", "✉️ Inviter"], ["taches", "🧹 Tâches"],
+     ["cadeaux", "🎁 Cadeaux"], ["recettes", "📖 Recettes"], ["reglages", "⚙️ Réglages"],
+     ["objectif", "🤝 Objectif"], ["onglets", "📱 Onglets"]]
+      .map(([a2, l]) => '<button class="puce" data-action="admin-aller" data-valeur="' + a2 + '">' +
+        l + "</button>").join("") + "</div>");
+
+  h.push(blocAncre("membres", "👨‍👩‍👧 Membres de la famille",
     etat.membres.map((m) =>
       '<div class="ligne">' + avatarDe(m) +
       '<div class="ligne-corps"><b>' + esc(m.prenom) + "</b><small>" +
@@ -979,10 +1078,10 @@ Vues.admin = function () {
       (!m.sansAppareil && !aUnAppareil(m) ? " • en attente d'invitation" : "") + "</small>" +
       (m.sansAppareil ? '<span class="etiquettes"><span class="etiquette">🧒 sans téléphone</span></span>' : "") +
       "</div>" +
-      '<button class="btn mini" data-action="membre-editer" data-id="' + m.id + '">✏️</button></div>').join(""),
+      '<button class="btn mini icone" data-action="membre-editer" data-id="' + m.id + '">✏️</button></div>').join(""),
     "Ajouter", "membre-nouveau"));
 
-  h.push(bloc("✉️ Inviter quelqu'un",
+  h.push(blocAncre("inviter", "✉️ Inviter quelqu'un",
     '<p class="aide">Pour ajouter une personne — ou un nouveau téléphone pour quelqu\'un qui est ' +
     "déjà dans la famille — créez une invitation. C'est un lien <b>à usage unique</b> qui expire " +
     "au bout de quelques jours.</p>" +
@@ -1010,7 +1109,7 @@ Vues.admin = function () {
     '<p class="aide" style="margin-top:.5rem">💡 Prévoyez <b>deux administrateurs</b> : si le seul ' +
     "administrateur perd son accès, plus personne ne peut valider les tâches.</p>"));
 
-  h.push(bloc("🧹 Tâches (" + etat.taches.length + ")",
+  h.push(blocAncre("taches", "🧹 Tâches (" + etat.taches.length + ")",
     etat.taches.length
       ? etat.taches.map((t) =>
         '<div class="ligne"><span style="font-size:1.2rem">' + esc(t.emoji || "🧹") + "</span>" +
@@ -1018,23 +1117,23 @@ Vues.admin = function () {
         (t.frequence === "jour" ? "chaque jour" : t.frequence === "mois" ? "chaque mois" : "chaque semaine") +
         " • " + t.points + " pts • " + participantsValides(t).length + " participant(s)" +
         (t.actif === false ? " • en pause" : "") + "</small></div>" +
-        '<button class="btn mini" data-action="tache-editer" data-id="' + t.id + '">✏️</button></div>').join("")
+        '<button class="btn mini icone" data-action="tache-editer" data-id="' + t.id + '">✏️</button></div>').join("")
       : rienDu("🧹", "Aucune tâche."),
     "Ajouter", "tache-nouvelle"));
 
-  h.push(bloc("🎁 Cadeaux (" + etat.cadeaux.length + ")",
+  h.push(blocAncre("cadeaux", "🎁 Cadeaux (" + etat.cadeaux.length + ")",
     etat.cadeaux.length
       ? etat.cadeaux.map((c) =>
         '<div class="ligne"><span style="font-size:1.2rem">' + esc(c.emoji || "🎁") + "</span>" +
         '<div class="ligne-corps"><b>' + esc(c.nom) + "</b><small>" + c.cout + " pts" +
         (c.actif === false ? " • retiré" : "") + "</small></div>" +
-        '<button class="btn mini" data-action="cadeau-editer" data-id="' + c.id + '">✏️</button></div>').join("")
+        '<button class="btn mini icone" data-action="cadeau-editer" data-id="' + c.id + '">✏️</button></div>').join("")
       : rienDu("🎁", "Aucun cadeau."),
     "Ajouter", "cadeau-nouveau"));
 
   const aCompleter = etat.recettes.filter((r) => r.saisons === undefined).length;
   const nouvelles = recettesManquantes().length;
-  h.push(bloc("📖 Recettes (" + etat.recettes.length + ")",
+  h.push(blocAncre("recettes", "📖 Recettes (" + etat.recettes.length + ")",
     '<p class="aide">La bibliothèque de plats sert au générateur de menus.</p>' +
     (aCompleter
       ? '<div class="bandeau" style="margin-top:.6rem">🔄<div><b>' + aCompleter +
@@ -1048,7 +1147,7 @@ Vues.admin = function () {
     '<button class="btn plein" data-action="recettes-maj" style="margin-top:.5rem">🔄 Mettre à jour les recettes fournies</button>'));
 
   const g = reglagesFamille();
-  h.push(bloc("⚙️ Réglages de la famille",
+  h.push(blocAncre("reglages", "⚙️ Réglages de la famille",
     '<div class="ligne"><span style="font-size:1.3rem">🍽️</span>' +
     '<div class="ligne-corps"><b>' + g.convives + " personne" + (g.convives > 1 ? "s" : "") +
     " à table</b><small>Les quantités des recettes sont ajustées à ce nombre.</small></div></div>" +
@@ -1061,7 +1160,7 @@ Vues.admin = function () {
     '<button class="btn plein doux" data-action="admin-reglages" style="margin-top:.7rem">Modifier</button>'));
 
   const ob = objectifFamille();
-  h.push(bloc("🤝 Objectif commun",
+  h.push(blocAncre("objectif", "🤝 Objectif commun",
     '<p class="aide">Le classement met chacun contre les autres ; l’objectif ' +
     "commun met toute la maison du même côté. Facultatif.</p>" +
     (ob.actif
@@ -1078,7 +1177,7 @@ Vues.admin = function () {
 
   /* Onglets visibles : toutes les familles ne se servent pas de tout. */
   const caches = ongletsMasques();
-  h.push(bloc("📱 Onglets visibles",
+  h.push(blocAncre("onglets", "📱 Onglets visibles",
     '<p class="aide">Ce que la famille voit dans la barre du bas. Masquer un onglet ' +
     "ne supprime rien : le contenu est simplement rangé hors de vue.</p>" +
     '<div class="puces" style="margin-top:.7rem">' +
@@ -1115,7 +1214,7 @@ const Connexion = {
 
   entete(sousTitre) {
     return '<div class="logo-tribu">🏡</div>' +
-      '<h1>Tribu<span class="badge-beta">bêta</span></h1>' +
+      '<h1>Ma Tribu<span class="badge-beta">bêta</span></h1>' +
       '<p class="intro">' + sousTitre + "</p>";
   },
 
@@ -1131,12 +1230,10 @@ const Connexion = {
        mémoire. Elle ne connaît donc pas la famille ouverte dans le navigateur,
        et propose d'en créer une — ce qui ferait une deuxième famille, vide.
        On le dit avant, franchement, plutôt que de laisser le piège se refermer. */
-    const iconeMaison = !derniere && (
-      window.navigator.standalone === true ||
-      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches));
+    const iconeMaison = !derniere && ouvertDepuisIcone();
     const avertissement = iconeMaison
       ? '<div class="bandeau" style="margin-bottom:1.2rem">📱<div>' +
-      "<b>Vous ouvrez Tribu depuis l'icône de l'écran d'accueil.</b><br>" +
+      "<b>Vous ouvrez Ma Tribu depuis l'icône de l'écran d'accueil.</b><br>" +
       "Le téléphone la traite comme une application séparée : elle ne connaît pas " +
       "la famille déjà ouverte dans votre navigateur.<br><br>" +
       "<b>Ne créez pas une deuxième famille</b> — elle serait vide. " +

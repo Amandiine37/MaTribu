@@ -85,7 +85,7 @@ de Firebase. Il faut l'autoriser.
 1. En haut à gauche, cliquez sur la **roue dentée ⚙️** → **Paramètres du projet**.
 2. Descendez jusqu'à **« Vos applications »**.
 3. Cliquez sur l'icône **`</>`** (application Web).
-4. Surnom de l'application : `Tribu`. Ne cochez **pas** « Firebase Hosting ».
+4. Surnom de l'application : `Ma Tribu`. Ne cochez **pas** « Firebase Hosting ».
 5. Cliquez sur **Enregistrer l'application**.
 6. Firebase affiche un bloc de texte qui ressemble à ça :
 

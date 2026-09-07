@@ -87,7 +87,7 @@ const EMOJIS_LISTES = [
   "🥩", "🧊", "🧽", "🧼", "🧴", "💊", "🎁", "🎂", "🎄", "🎒",
   "✏️", "🏕️", "🌻", "🔧", "📦", "👶", "🐾", "🐶", "🍼", "🎨"];
 
-const VERSION = "0.15 bêta";
+const VERSION = "0.22 bêta";
 
 /* Unites utilisables pour les ingredients, le stock et les courses.
    "" = pas d'unite, on compte simplement (4 carottes). */
@@ -406,6 +406,7 @@ const ui = {
   rechercheRecette: "",
   filtresRecettes: [],           // "perso", "vege", "rapide", "leger"
   triRecettes: "alpha",          // "alpha", "recent", "saison"
+  filtresOuverts: false,         // les rangées de filtres sont repliées
   focus: null
 };
 
@@ -1215,7 +1216,22 @@ async function entrerDansFamille(code, membreId, opts) {
   if (opts && opts.reprendreVue) restaurerVue();
   memoriserVue();
   rendre();
+  prechaufferCahier();           // pour que la première génération soit vive
   return true;
+}
+
+/* Classer 353 plats coûte une demi-seconde la première fois. Fait au
+   démarrage, hors du chemin critique, cela ne se voit pas ; fait au moment
+   où l'on appuie sur « Générer », cela se voit beaucoup. On attend que
+   l'écran soit dessiné avant de s'y mettre. */
+function prechaufferCahier() {
+  const travail = () => {
+    try {
+      etat.recettes.forEach((r) => { categorieRepas(r); genrePlat(r); });
+    } catch (e) { /* sans importance : ce n'est qu'une avance de travail */ }
+  };
+  if (window.requestIdleCallback) window.requestIdleCallback(travail, { timeout: 3000 });
+  else setTimeout(travail, 1200);
 }
 
 /* Les familles créées avant l'annuaire des repères n'y figurent pas : leur nom
@@ -1398,22 +1414,45 @@ const Actions = {
 
   /* Retire de la réserve ce que le repas a consommé. `garder` = les articles
      que l'on a choisi de ne pas décompter. */
-  retirerDeLaReserve(lignes, garder) {
+  /* `lignes` = ce que l'application a su calculer, `garder` = ce qu'on ne
+     décompte pas, `saisies` = { idArticle: quantité } pour ce que l'on a
+     tapé soi-même quand les unités ne se convertissent pas. */
+  retirerDeLaReserve(lignes, garder, saisies) {
     const hors = new Set(garder || []);
+    const mains = saisies || {};
     let n = 0;
-    (lignes || []).forEach((l) => {
-      if (hors.has(l.stockId) || l.retire === null) return;
-      const s = etat.stock.find((x) => x.id === l.stockId);
-      if (!s) return;
-      s.qte = texteNombre(Math.max(0, (nombre(s.qte) || 0) - l.retire));
+    const retirer = (stockId, combien) => {
+      const s = etat.stock.find((x) => x.id === stockId);
+      if (!s || !(combien > 0)) return;
+      s.qte = texteNombre(Math.max(0, (nombre(s.qte) || 0) - combien));
       s.majLe = new Date().toISOString();
       n++;
+    };
+    (lignes || []).forEach((l) => {
+      if (hors.has(l.stockId) || l.retire === null) return;
+      retirer(l.stockId, l.retire);
     });
+    Object.keys(mains).forEach((id) => retirer(id, nombre(mains[id])));
     if (n) sauver("stock");
     return n;
   },
 
   /* --- Courses --- */
+
+  /* Une liste dictée ou recopiée arrive rarement article par article : on
+     accepte « pain, lait, œufs » comme trois lignes. Les séparateurs sont la
+     virgule, le point-virgule et le retour à la ligne. */
+  ajouterPlusieursCourses(texte, opts) {
+    const noms = String(texte || "").split(/[\n,;]+/)
+      .map((x) => x.trim()).filter(Boolean);
+    if (!noms.length) return 0;
+    /* On ajoute dans l'ordre lu : `ajouterCourse` empile en tête, donc on
+       parcourt à l'envers. */
+    noms.slice().reverse().forEach((n) => Actions.ajouterCourse(n, devinerRayon(n), "", "", opts));
+    if (noms.length > 1) toast(noms.length + " articles ajoutés 🛒");
+    return noms.length;
+  },
+
   ajouterCourse(nom, rayon, qte, unite, opts) {
     nom = (nom || "").trim();
     if (!nom) return;
@@ -1494,15 +1533,20 @@ const Actions = {
     if (!achetes.length) { toast("Aucun article coché"); return; }
 
     const aCreer = new Set(opts.nouveaux || []);
+    /* `saisies` = { idArticle: quantité } quand les unités ne se convertissent
+       pas et que l'on a tapé soi-même ce qu'on a rapporté. */
+    const saisies = opts.saisies || {};
     let majes = 0, crees = 0, ignores = 0;
 
     if (opts.enReserve !== false) {
       achetes.forEach((c) => {
         const s = articleStock(c.nom);
         if (s) {
-          const ajout = convertirUnite(c.qte, c.unite || "", s.unite || "");
+          let ajout = convertirUnite(c.qte, c.unite || "", s.unite || "");
           /* Unités incompatibles (2 boîtes vs 500 g) : on ne bricole pas un
-             chiffre faux, on le signale. */
+             chiffre faux. Si la quantité a été saisie à la main, on la prend ;
+             sinon on ne touche à rien et on le signale. */
+          if (ajout === null && saisies[s.id] !== undefined) ajout = nombre(saisies[s.id]);
           if (ajout === null) { ignores++; return; }
           s.qte = texteNombre((nombre(s.qte) || 0) + ajout);
           s.majLe = new Date().toISOString();
@@ -1562,8 +1606,10 @@ const Actions = {
   async racheterSousMinimum() {
     const bas = stockSousMinimum();
     if (!bas.length) { toast("Rien à racheter, tout est au-dessus du minimum"); return; }
-    const dejaLa = new Set(etat.courses.filter((c) => !c.coche).map((c) => c.nom.toLowerCase().trim()));
-    const aAjouter = bas.filter((s) => !dejaLa.has(s.nom.toLowerCase().trim()));
+    /* Même tolérance que pour la réserve : « Oeufs » dans la liste et « Œufs »
+       au minimum, c'est le même article — on ne l'ajoute pas deux fois. */
+    const dejaLa = new Set(etat.courses.filter((c) => !c.coche).map((c) => cleArticle(c.nom)));
+    const aAjouter = bas.filter((s) => !dejaLa.has(cleArticle(s.nom)));
     if (!aAjouter.length) { toast("Ils sont déjà dans la liste de courses"); return; }
     const ok = await confirmer("Ajouter " + aAjouter.length + " article(s) à la liste de courses ?",
       { titre: "Réapprovisionner", ok: "Ajouter" });
@@ -1599,12 +1645,23 @@ const Actions = {
     sauver("repas");
   },
 
+  /* Qui ne mange pas à ce repas — le repas a quand même lieu. */
+  definirAbsentsRepas(cleSem, jour, moment, ids) {
+    const c = repasDe(cleSem, jour, moment);
+    if (!c) { toast("Choisissez d'abord un plat"); return; }
+    c.absents = (ids || []).slice();
+    sauver("repas");
+  },
+
   definirRepas(cleSem, jour, moment, valeur) {
     if (!etat.repas[cleSem]) etat.repas[cleSem] = {};
     /* Changer le plat ne doit pas effacer qui cuisine : c'est souvent la même
        personne qui s'y colle, quel que soit le menu. */
     const avant = etat.repas[cleSem][jour + "-" + moment];
     if (valeur && avant && avant.cuisinier && !valeur.cuisinier) valeur.cuisinier = avant.cuisinier;
+    /* Qui mange ne dépend pas du plat : changer de recette ne doit pas
+       ramener à table ceux qui sont à la cantine. */
+    if (valeur && avant && avant.absents && !valeur.absents) valeur.absents = avant.absents.slice();
     etat.repas[cleSem][jour + "-" + moment] = valeur;
     sauver("repas");
   },
@@ -1745,7 +1802,11 @@ const Invitations = {
      code, pour pouvoir le vérifier). C'est indispensable : tant qu'il n'est
      pas inscrit, l'appareil invité n'a pas le droit de lire la famille. */
   async creer(joursValidite, pourMembreId) {
-    if (!estAdmin()) return null;
+    /* Un membre ordinaire peut créer une invitation POUR LUI-MÊME : c'est
+       ainsi qu'il ajoute l'icône de son écran d'accueil sans déranger un
+       administrateur. Pour tout le reste, il faut l'être. */
+    const pourMoi = !!(moi && pourMembreId && pourMembreId === moi.id);
+    if (!estAdmin() && !pourMoi) return null;
     const cible = pourMembreId ? membre(pourMembreId) : null;
     const inv = {
       jeton: codeInvitation(),
@@ -1767,7 +1828,12 @@ const Invitations = {
     };
     const ok = await Store.creerInvitation(inv);
     if (!ok) {
-      toast("Invitation refusée : règles Firebase à vérifier");
+      /* Un membre qui s'invite lui-même se heurte au serveur tant que les
+         règles Firebase n'ont pas été republiées. On le dit clairement,
+         avec le chemin de secours, au lieu d'un message technique. */
+      toast(estAdmin()
+        ? "Invitation refusée : règles Firebase à vérifier"
+        : "Refusé par le serveur — demandez le code à un administrateur");
       return null;
     }
     return inv;
@@ -2113,13 +2179,27 @@ function citeUnProduit(r, liste) {
   });
 }
 
-/* "vege" | "poisson" | "viande" | "autre" (œufs, fromage, pâtes...) */
+/* "vege" | "poisson" | "viande" | "autre" (œufs, fromage, pâtes...)
+   Gardé en mémoire : le générateur pose la question pour chaque plat à
+   chaque case de la semaine — 353 x 14 fois. Sans cela, cette seule
+   fonction coûtait un demi-quart de seconde par génération. La table est
+   liée aux OBJETS recettes et se vide donc d'elle-même au rechargement ;
+   la signature des ingrédients la remet à jour si on modifie la recette. */
+const _cacheCategorie = new WeakMap();
 function categorieRepas(r) {
-  if (r.vegetarien) return "vege";
+  if (!r) return "autre";
+  const cle = (r.vegetarien ? "v|" : "") +
+    (r.ingredients || []).map((i) => (i && i.nom) + "/" + (i && i.rayon)).join("|");
+  const vu = _cacheCategorie.get(r);
+  if (vu && vu.cle === cle) return vu.cat;
+
+  let cat = "autre";
   const ing = r.ingredients || [];
-  if (ing.some((i) => i.rayon === "Poissonnerie") || citeUnProduit(r, MOTS_POISSON)) return "poisson";
-  if (ing.some((i) => i.rayon === "Boucherie") || citeUnProduit(r, MOTS_VIANDE)) return "viande";
-  return "autre";
+  if (r.vegetarien) cat = "vege";
+  else if (ing.some((i) => i.rayon === "Poissonnerie") || citeUnProduit(r, MOTS_POISSON)) cat = "poisson";
+  else if (ing.some((i) => i.rayon === "Boucherie") || citeUnProduit(r, MOTS_VIANDE)) cat = "viande";
+  _cacheCategorie.set(r, { cle: cle, cat: cat });
+  return cat;
 }
 const CATEGORIES_REPAS = [
   { val: "poisson", nom: "Poisson", emoji: "🐟" },
@@ -2458,6 +2538,51 @@ function aLeProfil(r, val) {
   return profilsDe(r).indexOf(val) !== -1;
 }
 
+/* --- Le genre d'un plat -------------------------------------------------
+   Une semaine de quatre soupes n'est pas une semaine variée, même si les
+   quatre recettes sont différentes. Le générateur n'avait aucune notion de
+   « type de plat » : il ne s'interdisait que de répéter la même recette.
+   On classe donc grossièrement, d'après le nom — c'est suffisant pour
+   éviter la monotonie, et « autre » n'est jamais pénalisé. */
+const GENRES_PLAT = [
+  { val: "soupe", mots: ["soupe", "veloute", "potage", "gaspacho", "bouillabaisse",
+    "minestrone", "consomme"] },
+  { val: "salade", mots: ["salade", "taboule", "poke bowl", "buddha bowl", "bowl"] },
+  { val: "tarte", mots: ["tarte", "quiche", "pizza", "cake", "clafoutis", "tartelette"] },
+  { val: "pates", mots: ["pate", "spaghetti", "tagliatelle", "macaroni", "nouille",
+    "lasagne", "gnocchi", "raviole", "penne", "coquillette", "one pot pasta"] },
+  { val: "riz", mots: ["riz", "risotto", "paella", "quinoa", "boulgour", "semoule",
+    "polenta", "orge", "sarrasin"] },
+  { val: "mijote", mots: ["curry", "tajine", "colombo", "dahl", "chili", "mafe",
+    "blanquette", "bourguignon", "navarin", "osso buco", "marengo", "pot au feu"] },
+  { val: "gratin", mots: ["gratin", "tian", "parmentier", "hachis", "moussaka", "farci"] },
+  { val: "poele", mots: ["poelee", "wok", "saute", "brochette", "papillote", "grille"] }
+];
+/* Le coût du deuxième plat d'un même genre dans la semaine. Réglé à
+   l'observation : trop haut, on n'a jamais deux fois des pâtes ; trop bas,
+   on retombe sur quatre soupes. */
+const PENALITE_GENRE = 4;
+
+/* Le genre est demandé pour CHAQUE recette à CHAQUE case de la semaine :
+   353 plats x 14 repas. Sans mise en mémoire, la génération passait de
+   270 ms à 710 ms — soit deux à trois secondes sur un téléphone. */
+const _cacheGenre = new Map();
+function genrePlat(r) {
+  const nom = String((r && r.nom) || "");
+  const vu = _cacheGenre.get(nom);
+  if (vu !== undefined) return vu;
+  const mots = motsDe(nom);
+  let trouve = "autre";
+  for (let i = 0; i < GENRES_PLAT.length && trouve === "autre"; i++) {
+    const g = GENRES_PLAT[i];
+    for (let j = 0; j < g.mots.length; j++) {
+      if (contientProduit(mots, g.mots[j])) { trouve = g.val; break; }
+    }
+  }
+  _cacheGenre.set(nom, trouve);
+  return trouve;
+}
+
 /* Ce que contient une semaine déjà prévue. C'est le meilleur retour sur les
    nombres demandés au générateur : on voit tout de suite ce qu'on mange. */
 function compositionSemaine(cleSem) {
@@ -2585,6 +2710,8 @@ function genererMenus(cleSem, opt) {
     ? !!opt.antiGaspi : reglagesFamille().antiGaspi !== false;
   const recents = recettesUtiliseesRecemment(cleSem, Math.max(0, Number(opt.semaines) || 3));
   const utilises = new Set();
+  /* Combien de plats de chaque genre sont déjà posés dans la semaine. */
+  const genresPoses = {};
   const bilan = { poisson: 0, viande: 0, vege: 0, autre: 0 };
 
   if (!etat.repas[cleSem]) etat.repas[cleSem] = {};
@@ -2597,14 +2724,23 @@ function genererMenus(cleSem, opt) {
       const cat = categorieRepas(r);
       if (utilises.has(r.id)) s -= 40;
       if (recents.has(r.id)) s -= 6;
+      /* Variété : chaque plat du même genre déjà posé rend le suivant moins
+         probable. Le premier est gratuit, le deuxième coûte, le troisième
+         coûte le double. Assez fort pour tenir tête aux bonus cumulés,
+         assez souple pour céder quand le choix est vraiment étroit. */
+      const genre = genrePlat(r);
+      if (genre !== "autre") s -= PENALITE_GENRE * (genresPoses[genre] || 0);
       /* La répartition demandée passe avant le reste. */
       if (voulu !== "libre") s += (cat === voulu ? 30 : -30);
       else if (fixees.indexOf(cat) !== -1) s -= 20;   // son compte est déjà fait
       /* Hors saison, on écarte franchement : un gratin de courgettes en
          janvier, ce n'est pas une bonne idée. */
       if (opt.saisons !== false && !estDeSaison(r)) s -= 25;
-      if (opt.saisons !== false && !saisonsToutelAnnee(r) && estDeSaison(r)) s += 3;
-      if (opt.soirLeger && c.moment === "soir" && r.type === "leger") s += 4;
+      /* Hors saison, on écarte fort (−25) ; en saison on encourage juste un
+         peu. À +3, ce bonus s'ajoutait à « léger » et « rapide » et écrasait
+         le hasard : les mêmes plats revenaient chaque semaine. */
+      if (opt.saisons !== false && !saisonsToutelAnnee(r) && estDeSaison(r)) s += 1.5;
+      if (opt.soirLeger && c.moment === "soir" && r.type === "leger") s += 2.5;
       if (opt.soirLeger && c.moment === "midi" && r.type === "consistant") s += 1.5;
       if (opt.rapideSemaine && c.jour !== "samedi" && c.jour !== "dimanche" && r.rapide) s += 2.5;
       if (opt.thermomix && r.thermomix) s += 3;
@@ -2618,6 +2754,8 @@ function genererMenus(cleSem, opt) {
     });
     if (!meilleur) return;
     utilises.add(meilleur.id);
+    const gm = genrePlat(meilleur);
+    if (gm !== "autre") genresPoses[gm] = (genresPoses[gm] || 0) + 1;
     bilan[categorieRepas(meilleur)]++;
     etat.repas[cleSem][c.jour + "-" + c.moment] = { recetteId: meilleur.id, texte: "" };
   });
@@ -2637,14 +2775,18 @@ function genererMenus(cleSem, opt) {
 function ingredientsDeLaSemaine(cleSem) {
   const sem = etat.repas[cleSem] || {};
   const parNom = new Map();
-  Object.values(sem).forEach((c) => {
+  Object.keys(sem).forEach((cleCase) => {
+    const c = sem[cleCase];
     if (!c || !c.recetteId) return;
     /* Un repas de restes ne fait acheter personne : c'est justement ce qu'on
        a déjà cuisiné la veille. */
     if (c.restes) return;
     const r = etat.recettes.find((x) => x.id === c.recetteId);
     if (!r) return;
-    const facteur = facteurConvives(r);
+    /* Les quantités se comptent repas par repas : si deux personnes mangent
+       à la cantine jeudi midi, on n'achète pas pour elles. */
+    const p = cleCase.split("-");
+    const facteur = facteurConvives(r, convivesDuRepas(cleSem, p[0], p[1]));
     (r.ingredients || []).forEach((ing) => {
       const cle = ing.nom.toLowerCase().trim();
       if (!parNom.has(cle)) {
@@ -2706,6 +2848,97 @@ function cuisinierDuTour(cleSem, jour, moment) {
   return l[(rang + sem) % l.length].id;
 }
 
+/* --- Le bilan de la semaine -------------------------------------------
+   Tout est déjà dans le journal des points : on ne demande rien de plus,
+   on se contente de refermer la semaine et de la montrer. */
+function bilanSemaine(cleSem) {
+  const lundi = lundiDeCle(cleSem);
+  const finIso = decalerIso(isoDate(lundi), 7);
+  const debutIso = isoDate(lundi);
+  const dansLaSemaine = (e) => {
+    const d = String(e.date || "").slice(0, 10);
+    return d >= debutIso && d < finIso;
+  };
+  const lignes = etat.journal.filter(dansLaSemaine);
+  const parMembre = {};
+  let taches = 0, repas = 0, gagnes = 0;
+  lignes.forEach((e) => {
+    if (e.delta > 0) {
+      gagnes += e.delta;
+      parMembre[e.membreId] = (parMembre[e.membreId] || 0) + e.delta;
+    }
+    if (e.type === "tache") taches++;
+    if (e.type === "repas") repas++;
+  });
+  /* Les repas prévus et effectivement cuisinés, même sans points. */
+  let cuisines = 0, prevus = 0;
+  JOURS.forEach((j) => ["midi", "soir"].forEach((m) => {
+    const c = repasDe(cleSem, j, m);
+    if (c && !estAbsence(c) && (c.recetteId || c.texte)) prevus++;
+    if (etatRepas(cleSem, j, m).statut === "valide") cuisines++;
+  }));
+  return {
+    taches: taches, repasPoints: repas, repasCuisines: cuisines, repasPrevus: prevus,
+    pointsGagnes: gagnes,
+    classement: Object.keys(parMembre)
+      .map((id) => ({ membre: membre(id), pts: parMembre[id] }))
+      .filter((x) => x.membre)
+      .sort((a, b) => b.pts - a.pts),
+    rien: !lignes.length && !cuisines && !prevus
+  };
+}
+
+/* --- Reprendre une semaine déjà faite ---------------------------------
+   Les familles mangent par cycles : refaire les quatorze cases chaque
+   dimanche est une corvée inutile quand la semaine d'il y a trois semaines
+   convenait très bien. */
+function semainesRemplies(combien) {
+  const l = [];
+  const lundi = lundiDeCle(ui.semaine);
+  for (let k = 1; k <= (combien || 8); k++) {
+    const d = new Date(lundi); d.setDate(d.getDate() - 7 * k);
+    const cle = cleSemaine(d);
+    const sem = etat.repas[cle];
+    if (!sem) continue;
+    const plats = Object.keys(sem).filter((c) => sem[c] && sem[c].recetteId && !sem[c].absent);
+    if (!plats.length) continue;
+    l.push({
+      cle: cle, lundi: new Date(d), nb: plats.length,
+      exemples: plats.slice(0, 3).map((c) => {
+        const r = etat.recettes.find((x) => x.id === sem[c].recetteId);
+        return r ? r.nom : "";
+      }).filter(Boolean)
+    });
+  }
+  return l;
+}
+
+/* On recopie les PLATS, rien d'autre : ni le cuisinier (le tour aura changé),
+   ni l'état « fait/validé » (ce serait s'attribuer des points d'avance), ni
+   les absences (elles appartenaient à cette semaine-là). */
+function reprendreSemaine(cleSource, remplacer) {
+  const source = etat.repas[cleSource];
+  if (!source) return 0;
+  if (!etat.repas[ui.semaine]) etat.repas[ui.semaine] = {};
+  const cible = etat.repas[ui.semaine];
+  let n = 0;
+  JOURS.forEach((j) => ["midi", "soir"].forEach((m) => {
+    const cle = j + "-" + m;
+    const c = source[cle];
+    if (!c || c.absent || (!c.recetteId && !c.texte)) return;
+    /* Une absence déjà posée cette semaine-ci ne se fait pas écraser, et un
+       repas déjà validé non plus. */
+    const dejaLa = cible[cle];
+    if (estAbsence(dejaLa)) return;
+    if (etatRepas(ui.semaine, j, m).statut === "valide") return;
+    if (dejaLa && !remplacer) return;
+    cible[cle] = { recetteId: c.recetteId || null, texte: c.texte || "", restes: !!c.restes };
+    n++;
+  }));
+  if (n) sauver("repas");
+  return n;
+}
+
 /* Les repas cuisinés qui attendent un administrateur. On regarde la semaine
    affichée et la précédente : un dimanche soir se valide souvent le lundi. */
 function repasAValider() {
@@ -2759,7 +2992,7 @@ function ingredientsARetirer(cleSem, jour, moment) {
   if (!c || !c.recetteId || c.restes) return [];
   const r = etat.recettes.find((x) => x.id === c.recetteId);
   if (!r) return [];
-  const facteur = facteurConvives(r);
+  const facteur = facteurConvives(r, convivesDuRepas(cleSem, jour, moment));
   const lignes = [];
   (r.ingredients || []).forEach((ing) => {
     const s = articleStock(ing.nom);
@@ -2845,9 +3078,34 @@ function assurerListes() {
 
 /* ============================ Stock (la réserve) ============================ */
 
+/* Le nom d'un article, ramené à sa forme comparable : sans accent, au
+   singulier, « œ » relu « oe ». Sans cela, « Tomate » ne retrouvait pas
+   « Tomates » et « Oeufs » ne retrouvait pas « Œufs » — l'article repartait
+   alors en double dans la réserve au lieu d'être réapprovisionné.
+   Le résultat est gardé en mémoire : cette comparaison tourne des dizaines
+   de milliers de fois pendant une génération de menus. */
+const _cacheNomArticle = new Map();
+function cleArticle(nom) {
+  const brut = String(nom || "");
+  let v = _cacheNomArticle.get(brut);
+  if (v === undefined) {
+    v = motsDe(brut).join(" ");
+    _cacheNomArticle.set(brut, v);
+  }
+  return v;
+}
+/* Deux libellés désignent-ils le même produit ? On reste STRICT sur les mots :
+   « lait » et « lait de coco » ne sont pas le même article, et les confondre
+   ferait bien plus de dégâts qu'un doublon. */
+function memeArticle(a, b) {
+  const x = cleArticle(a);
+  return !!x && x === cleArticle(b);
+}
+
 function articleStock(nom) {
-  const n = String(nom || "").toLowerCase().trim();
-  return etat.stock.find((s) => s.nom.toLowerCase().trim() === n) || null;
+  const n = cleArticle(nom);
+  if (!n) return null;
+  return etat.stock.find((s) => cleArticle(s.nom) === n) || null;
 }
 
 /* Un article est « à racheter » quand sa quantité passe sous le minimum. */
@@ -2898,7 +3156,7 @@ function rendre() {
     (maj.length ? '<span class="point-maj"></span>' : "");
   $("#btn-profil").title = maj.length
     ? maj.length + " mise(s) à jour disponible(s)" : "Mon profil";
-  $("#titre-vue").textContent = TITRES[v] ? TITRES[v][0] : "Tribu";
+  $("#titre-vue").textContent = TITRES[v] ? TITRES[v][0] : "Ma Tribu";
   $("#sous-titre-vue").textContent = v === "accueil" ? etat.famille.nom : (TITRES[v] ? TITRES[v][1] : "");
   $("#mes-points").textContent = pointsDe(moi.id);
 
@@ -2979,9 +3237,23 @@ function nbConvives() {
 }
 /* De combien il faut multiplier les quantités d'une recette pour la table.
    Une recette peut annoncer son propre nombre de parts. */
-function facteurConvives(r) {
+function facteurConvives(r, combien) {
   const base = Number(r && r.portions) > 0 ? Number(r.portions) : PORTIONS_BASE;
-  return nbConvives() / base;
+  const n = combien === undefined ? nbConvives() : combien;
+  return n / base;
+}
+
+/* Qui manque à ce repas-là. Différent d'une absence de toute la maison :
+   ici on cuisine quand même, mais pour moins de monde. */
+function absentsDuRepas(cleSem, jour, moment) {
+  const c = repasDe(cleSem, jour, moment);
+  const l = (c && c.absents) || [];
+  /* Un membre supprimé depuis ne doit pas continuer à compter. */
+  return l.filter((id) => !!membre(id));
+}
+function convivesDuRepas(cleSem, jour, moment) {
+  const n = nbConvives() - absentsDuRepas(cleSem, jour, moment).length;
+  return Math.max(1, n);
 }
 /* Une quantité mise à l'échelle, arrondie de façon lisible : personne
    n'achète 1,3333 oignon. */
@@ -2991,6 +3263,14 @@ function qteAjustee(qte, facteur) {
   const v = n * facteur;
   const arrondi = v >= 10 ? Math.round(v) : Math.round(v * 10) / 10;
   return texteNombre(arrondi);
+}
+
+/* Tourne-t-on depuis l'icône de l'écran d'accueil plutôt que dans le
+   navigateur ? Les deux façons de le savoir : iOS pose `standalone`, les
+   autres répondent à la requête média. */
+function ouvertDepuisIcone() {
+  return window.navigator.standalone === true ||
+    !!(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
 }
 
 function ongletsMasques() {
@@ -3082,6 +3362,7 @@ document.addEventListener("click", (e) => {
     case "course-toggle": Actions.basculerCourse(v); break;
     case "course-suppr": Actions.supprimerCourse(v); break;
     case "course-nouvelle": Formulaires.course(); break;
+    case "courses-plusieurs": Formulaires.plusieursCourses(); break;
     case "course-editer": Formulaires.course(v); break;
     case "courses-vider": Formulaires.terminerCourses(); break;
     case "reserve-auto": {
@@ -3118,6 +3399,9 @@ document.addEventListener("click", (e) => {
     }
     case "repas-case": Formulaires.repas(b.dataset.jour, b.dataset.moment); break;
     case "menus-generer": Formulaires.generateur(); break;
+    case "menus-reprendre": Formulaires.reprendreSemaine(); break;
+    case "menus-afficher": Formulaires.menuAAfficher(); break;
+    case "bilan-semaine": Formulaires.bilanSemaine(b.dataset.valeur || ui.semaine); break;
     case "menus-courses": Formulaires.ingredientsVersCourses(); break;
 
     case "recette-nouvelle": Formulaires.recette(null); break;
@@ -3134,6 +3418,15 @@ document.addEventListener("click", (e) => {
     }
     case "recettes-filtre-vider": ui.filtresRecettes = []; ui.rechercheRecette = ""; rendre(); break;
     case "recettes-tri": ui.triRecettes = b.dataset.valeur; rendre(); break;
+    case "recettes-filtres": ui.filtresOuverts = !ui.filtresOuverts; rendre(); break;
+    case "recettes-lettre": {
+      /* Saut instantané, pas « smooth » : sur trente mille pixels le
+         défilement animé est long et donne le tournis — et il est purement
+         et simplement ignoré par certains navigateurs. */
+      const cible = document.getElementById("lettre-" + b.dataset.valeur);
+      if (cible) cible.scrollIntoView({ block: "start" });
+      break;
+    }
     case "sante-info": Formulaires.profilsSante(b.dataset.valeur || null); break;
 
     case "note-toggle": Actions.basculerNote(v); break;
@@ -3142,6 +3435,11 @@ document.addEventListener("click", (e) => {
     case "notes-filtre": ui.filtreNotes = b.dataset.valeur; rendre(); break;
     case "notes-qui": ui.filtreQuiNotes = b.dataset.valeur || ""; rendre(); break;
     case "admin-onglets": Formulaires.onglets(); break;
+    case "admin-aller": {
+      const cible = document.getElementById("admin-" + b.dataset.valeur);
+      if (cible) cible.scrollIntoView({ block: "start" });
+      break;
+    }
     case "admin-reglages": Formulaires.reglagesFamille(); break;
     case "admin-objectif": Formulaires.objectif(); break;
     /* `data-semaine` est facultatif : l'accueil peut proposer un repas de la
@@ -3174,6 +3472,10 @@ document.addEventListener("click", (e) => {
       break;
     case "menu-profil": Formulaires.menuProfil(); break;
     case "mon-appareil": Formulaires.monAppareil(); break;
+    case "masquer-conseil-icone":
+      localStorage.setItem("tribu:conseilEcranAccueil", "1");
+      rendre();
+      break;
     case "maj-liste": Formulaires.misesAJour(); break;
     case "deconnexion": fermerFeuille(); deconnecter(); break;
 
@@ -3204,7 +3506,7 @@ document.addEventListener("submit", (e) => {
   if (!val) return;
   champ.value = "";
   ui.focus = "champ-course";
-  Actions.ajouterCourse(val, devinerRayon(val), "");
+  Actions.ajouterPlusieursCourses(val);
 });
 
 /* Recherche dans la bibliotheque de recettes */
