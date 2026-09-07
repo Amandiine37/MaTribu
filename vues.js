@@ -81,6 +81,17 @@ function bandeauMaj() {
     "Appuyez ici pour voir ce qui est nouveau et le mettre à jour.</div></div>";
 }
 
+/* Le bandeau de déménagement, sur l'ancienne adresse uniquement. Il passe
+   avant tout le reste : c'est la seule information de cet écran qui a une
+   date de péremption. */
+function bandeauDemenagement() {
+  if (!surAncienneAdresse()) return "";
+  return '<div class="bandeau ligne-maj" data-action="demenagement">🚚<div>' +
+    "<b>Ma Tribu a une nouvelle adresse : matribu-app.fr</b><br>" +
+    "Cette adresse-ci continue de fonctionner, rien ne presse. " +
+    "Appuyez ici pour savoir comment déménager votre famille.</div></div>";
+}
+
 Vues.accueil = function () {
   const h = [];
   const heure = new Date().getHours();
@@ -89,6 +100,8 @@ Vues.accueil = function () {
 
   h.push('<h2 class="titre-section">' + salut + " " + esc(moi.prenom) + " 👋</h2>");
   h.push('<p class="aide" style="margin:-.6rem 0 1rem;text-transform:capitalize">' + esc(auj) + "</p>");
+
+  h.push(bandeauDemenagement());
 
   /* Le rappel « c'est une bêta » reste discret : il ne doit pas voler la
      vedette aux bandeaux qui, eux, demandent une action. */
@@ -1243,7 +1256,19 @@ const Connexion = {
       "</div></div>"
       : "";
 
+    /* Sur l'ancienne adresse, on prévient avant même la connexion : quelqu'un
+       qui arrive ici par un vieux favori doit savoir où est passée l'app. */
+    const demenagement = surAncienneAdresse()
+      ? '<div class="bandeau" style="margin-bottom:1.2rem">🚚<div>' +
+      "<b>Ma Tribu a une nouvelle adresse : matribu-app.fr</b><br>" +
+      "Cette adresse-ci reste ouverte le temps que chacun déménage. " +
+      "Si votre famille est déjà ici, <b>connectez-vous d'abord ici</b> : " +
+      "c'est de cet écran que partent les codes pour la nouvelle adresse." +
+      "</div></div>"
+      : "";
+
     return this.entete("L'organisation de la maison, à partager en famille.") +
+      demenagement +
       avertissement +
       (derniere
         ? '<button class="btn principal plein" id="b-reprendre" style="margin-bottom:.6rem">Continuer sur cet appareil</button>'

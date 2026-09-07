@@ -87,7 +87,23 @@ const EMOJIS_LISTES = [
   "🥩", "🧊", "🧽", "🧼", "🧴", "💊", "🎁", "🎂", "🎄", "🎒",
   "✏️", "🏕️", "🌻", "🔧", "📦", "👶", "🐾", "🐶", "🍼", "🎨"];
 
-const VERSION = "0.22 bêta";
+const VERSION = "0.24 bêta";
+
+/* ---------- Demenagement vers matribu-app.fr ----------
+   L'application vit a DEUX adresses pendant la transition : l'ancienne
+   (github.io) et la nouvelle. C'est volontaire. Brancher le domaine sur
+   l'ancien depot aurait redirige tout le monde, et comme une invitation ne
+   peut etre creee que par un membre DEJA reconnu par le serveur, chaque
+   famille se serait retrouvee enfermee dehors : ses donnees intactes, mais
+   plus personne pour les ouvrir. Tant que les deux adresses repondent,
+   chacun migre a son rythme et personne ne risque rien.
+   Le bandeau n'apparait donc que sur l'ancienne adresse. */
+const ADRESSE_NOUVELLE = "https://matribu-app.fr";
+const HOTE_ANCIEN = "amandiine37.github.io";
+
+function surAncienneAdresse() {
+  return location.hostname === HOTE_ANCIEN;
+}
 
 /* Unites utilisables pour les ingredients, le stock et les courses.
    "" = pas d'unite, on compte simplement (4 carottes). */
@@ -783,6 +799,31 @@ const Store = {
     return true;
   },
 
+  /* App Check : atteste que la requête vient bien de NOTRE site, et pas d'une
+     copie de l'application branchée sur la même base. Le code étant public,
+     c'est le seul garde-fou contre quelqu'un qui viendrait consommer le quota
+     gratuit avec un clone.
+
+     Deux précautions importantes :
+     - sans clé configurée, on ne charge rien du tout : l'application marche
+       exactement comme avant ;
+     - un échec n'interrompt jamais le démarrage. Tant que la « contrainte »
+       n'est pas activée dans la console Firebase, un jeton manquant est
+       simplement ignoré par le serveur. */
+  async _activerAppCheck(a, base) {
+    const cle = (window.CONFIG_FIREBASE || {}).cleAppCheck;
+    if (!cle || cle === "A_REMPLIR") return;
+    try {
+      const ac = await import(base + "firebase-app-check.js");
+      ac.initializeAppCheck(a, {
+        provider: new ac.ReCaptchaV3Provider(cle),
+        isTokenAutoRefreshEnabled: true
+      });
+    } catch (err) {
+      console.warn("App Check indisponible, on continue sans :", err);
+    }
+  },
+
   async preparer() {
     this.raison = "";
     if (!this.configOk()) {
@@ -799,6 +840,7 @@ const Store = {
         import(base + "firebase-firestore.js")
       ]);
       const a = app.initializeApp(window.CONFIG_FIREBASE);
+      await this._activerAppCheck(a, base);
       const au = auth.getAuth(a);
       const cred = await auth.signInAnonymously(au);
       this._fs = fs;
@@ -3472,6 +3514,7 @@ document.addEventListener("click", (e) => {
       break;
     case "menu-profil": Formulaires.menuProfil(); break;
     case "mon-appareil": Formulaires.monAppareil(); break;
+    case "demenagement": Formulaires.demenagement(); break;
     case "masquer-conseil-icone":
       localStorage.setItem("tribu:conseilEcranAccueil", "1");
       rendre();

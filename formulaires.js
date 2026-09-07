@@ -1532,6 +1532,83 @@ Formulaires.invitation = function () {
   });
 };
 
+/* ==================== DÉMÉNAGEMENT VERS matribu-app.fr ====================
+
+   Ce qu'il faut comprendre pour que cette fiche ait du sens : une invitation
+   ne peut être créée que par un membre que le serveur reconnaît DÉJÀ. Sur la
+   nouvelle adresse, aucun appareil n'est encore reconnu. Les codes doivent
+   donc partir d'ICI, de l'ancienne adresse, tant qu'elle répond.
+   C'est pour cette raison qu'on ne l'a pas redirigée. */
+
+Formulaires.demenagement = function () {
+  const admin = estAdmin();
+
+  const html =
+    '<div class="bandeau info">🚚<div><b>Ma Tribu déménage.</b> La nouvelle adresse ' +
+    "est plus courte et plus facile à dire. Rien n'est perdu : vos points, vos " +
+    "tâches, les menus, les courses et les recettes vous suivent.</div></div>" +
+
+    '<div class="carte" style="text-align:center">' +
+    '<div style="font-family:var(--font-display);font-size:1.3rem;font-weight:600;' +
+    'word-break:break-all;margin-bottom:.7rem">matribu-app.fr</div>' +
+    '<button class="btn doux plein" data-action="copier" data-texte="' +
+    esc(ADRESSE_NOUVELLE) + '">Copier l\'adresse</button></div>' +
+
+    '<p class="aide" style="margin:.2rem 0 1rem">Cette adresse-ci reste ouverte ' +
+    "le temps que tout le monde déménage. Prenez votre temps : vous pouvez " +
+    "revenir ici autant de fois qu'il le faut.</p>" +
+
+    "<hr class=\"sep\">" +
+
+    '<div class="carte-titre">Il faut un code par appareil</div>' +
+    '<p class="aide" style="margin:0 0 .8rem">Sur la nouvelle adresse, votre ' +
+    "téléphone repart inconnu : il lui faut une invitation, comme au premier " +
+    "jour. Et <b>l'icône de l'écran d'accueil compte pour un appareil de plus</b> " +
+    "— prévoyez donc deux codes par personne : un pour le navigateur, un pour " +
+    "l'icône.</p>" +
+
+    (admin
+      ? '<button class="btn principal plein" data-action="inviter" ' +
+        'style="margin-bottom:.5rem">✉️ Créer les codes de ma famille</button>' +
+        '<p class="aide" style="margin:0 0 1rem">Choisissez le <b>prénom existant</b> ' +
+        "de chaque personne — surtout pas « une nouvelle personne », sinon elle " +
+        "perdrait ses points et son historique. Durée : <b>30 jours</b>.</p>"
+      : '<button class="btn principal plein" data-action="mon-appareil" ' +
+        'style="margin-bottom:.5rem">📱 Créer mon code</button>' +
+        '<p class="aide" style="margin:0 0 1rem">Ce bouton fabrique un code pour ' +
+        "vous seul. S'il est refusé, demandez-le à l'administrateur de votre " +
+        "famille : lui peut toujours en créer.</p>") +
+
+    "<hr class=\"sep\">" +
+
+    '<div class="carte-titre">Ensuite, sur chaque téléphone</div>' +
+    '<div class="ligne"><span class="etape">1</span><div class="ligne-corps">' +
+    "<b>Supprimez l'ancienne icône</b><small>Appui long, puis Supprimer. Elle " +
+    "pointe vers l'ancienne adresse.</small></div></div>" +
+    '<div class="ligne"><span class="etape">2</span><div class="ligne-corps">' +
+    "<b>Ouvrez matribu-app.fr</b><small>Sur iPhone, avec Safari : c'est le seul " +
+    "navigateur qui sait poser l'icône sur l'écran d'accueil.</small></div></div>" +
+    '<div class="ligne"><span class="etape">3</span><div class="ligne-corps">' +
+    "<b>Appuyez sur « J'ai reçu une invitation »</b><small>Et surtout pas sur " +
+    "« Créer ma famille » : cela fabriquerait une famille vide.</small></div></div>" +
+    '<div class="ligne"><span class="etape">4</span><div class="ligne-corps">' +
+    "<b>Entrez le code, puis votre code à 4 chiffres</b><small>Vous retrouvez " +
+    "votre profil, vos points et tout le reste.</small></div></div>" +
+    '<div class="ligne"><span class="etape">5</span><div class="ligne-corps">' +
+    "<b>Reposez l'icône, et donnez-lui le second code</b><small>Elle redemandera " +
+    "un code : c'est normal, c'est un appareil de plus.</small></div></div>" +
+
+    '<button class="btn plein" data-action="fermer" style="margin-top:1.2rem">' +
+    "Fermer</button>";
+
+  ouvrirFeuille("Déménager ma famille", html, (f) => {
+    /* Les deux boutons ouvrent une autre feuille : on ferme celle-ci d'abord,
+       sinon la seconde remplacerait la première sans qu'on sache d'où on vient. */
+    f.querySelectorAll('[data-action="inviter"], [data-action="mon-appareil"]')
+      .forEach((b) => b.addEventListener("click", fermerFeuille));
+  });
+};
+
 /* ==================== CONNECTER UN AUTRE APPAREIL ==================== */
 
 /* Le cas typique, et déroutant : on ajoute Ma Tribu à l'écran d'accueil de son
