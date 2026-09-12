@@ -2108,8 +2108,16 @@ const Store = {
     }
   },
 
-  /* Combien de temps on laisse au serveur avant de se contenter du cache. */
+  /* Combien de temps on laisse au serveur avant de se contenter du CACHE.
+     Ne joue que si le cache a repondu : sans cache, on attend le serveur. */
   DELAI_HORS_LIGNE: 2500,
+  /* Garde-fou, sans cache ni reponse : au-dela, on renonce plutot que de
+     rester plante sur « Chargement… ». L'ecran de demarrage propose alors de
+     reessayer. Avant le 13/09/2026, cette limite valait 2,5 s et confondait
+     « pas encore de reponse » avec « pas d'acces » : a la premiere ouverture
+     apres un depot (cache vide) sur un reseau lent, Amandine a vu l'ecran de
+     panne puis a du reessayer. */
+  DELAI_SANS_REPONSE: 20000,
 
   /* Ouvre l'ecoute ET attend le premier etat de la tribu.
 
@@ -2142,18 +2150,28 @@ const Store = {
       return Promise.resolve(d);
     }
     return new Promise((resoudre) => {
-      let fini = false, duCache = null;
+      let fini = false, duCache = null, delaiEcoule = false;
       const finir = (v) => {
         if (fini) return;
         fini = true;
         clearTimeout(minuterie);
+        clearTimeout(garde);
         this._surDoc = null;
         this._surRefus = null;
         resoudre(v);
       };
-      const minuterie = setTimeout(() => finir(duCache), this.DELAI_HORS_LIGNE);
+      /* Le serveur se tait mais le cache connait la tribu : on entre (hors
+         ligne). Sans cache, on continue d'attendre — un reseau lent n'est
+         pas un refus. */
+      const minuterie = setTimeout(() => {
+        delaiEcoule = true;
+        if (duCache) finir(duCache);
+      }, this.DELAI_HORS_LIGNE);
+      const garde = setTimeout(() => finir(duCache), this.DELAI_SANS_REPONSE);
       this._surDoc = (donnees, duServeur) => {
-        if (duServeur) finir(donnees); else duCache = donnees;
+        if (duServeur) { finir(donnees); return; }
+        duCache = donnees;
+        if (delaiEcoule) finir(donnees);     // cache arrive tard : on n'attend plus
       };
       this._surRefus = () => finir(null);
       this.abonner(code, cb);
@@ -2543,6 +2561,35 @@ const Store = {
     } catch (err) { this.derniereErreur = err; return { ok: false, n: 0, err: err }; }
   },
 
+  /* MENAGE des signalements de plus de 12 mois (12/09/2026).
+     La page de confidentialite promet qu'un signalement est efface au bout
+     de 12 mois au plus : c'est ici que la promesse se tient. On retrouve ceux
+     de la tribu (requete filtree, droit d'administrateur), on ne garde que
+     ceux dont l'instant d'envoi a plus d'un an, et on les efface — les regles
+     Firestore refusent tout retour plus recent. Ceux envoyes par la 0.48
+     n'ont pas d'instant numerique : ils ne partent qu'avec la tribu. */
+  DELAI_RETOUR: 365 * 86400000,
+
+  async purgerRetoursDe(code) {
+    if (this.mode !== "nuage") return { ok: true, n: 0 };
+    try {
+      const fs = this._fs;
+      const q = await fs.getDocs(fs.query(fs.collection(this._db, "retours"),
+        fs.where("famille", "==", code)));
+      const limite = Date.now() - this.DELAI_RETOUR;
+      const refs = [];
+      q.forEach((s) => {
+        const d = s.data() || {};
+        if (typeof d.envoyeA === "number" && d.envoyeA > 0 && d.envoyeA < limite) refs.push(s.ref);
+      });
+      if (!refs.length) return { ok: true, n: 0 };
+      return await this._effacerRefs(refs);
+    } catch (err) {
+      console.warn("Ménage des signalements impossible :", err);
+      return { ok: false, n: 0, err: err };
+    }
+  },
+
   /* MENAGE des invitations MORTES d'une tribu (12/09/2026).
 
      Sur le telephone, ce menage existait deja : `_invitationsLocales()` efface
@@ -2797,8 +2844,51 @@ const Store = {
   }
 };
 
+/* LES COURSES SUIVENT LE MENU (12/09/2026, bug signale par Amandine).
+
+   Un article envoye depuis le menu porte la semaine qui l'a produit
+   (champ `menu`). Quand les repas de cette semaine changent — plat vide,
+   remplace, regenere, recette supprimee — on recalcule les besoins et :
+   - un article dont l'ingredient n'est plus demande par aucun plat est retire ;
+   - un article encore demande prend la quantite recalculee (deux plats qui
+     partagent un ingredient etaient fusionnes en une ligne : retirer l'un
+     des deux doit REDUIRE la ligne, pas la supprimer) ;
+   - un article ajoute a la main (sans marque), ou deja coche (deja achete),
+     n'est jamais touche ;
+   - rien n'est jamais AJOUTE ici : ajouter reste le geste de la personne,
+     par « Ingredients de la semaine ».
+   Limite assumee : une quantite retouchee a la main sur un article marque
+   sera realignee sur le besoin calcule au prochain changement de menu.
+   Renvoie true si quelque chose a change. */
+function reconcilierCoursesDuMenu() {
+  const semaines = [...new Set(etat.courses.filter((c) => c.menu && !c.coche).map((c) => c.menu))];
+  let change = false;
+  semaines.forEach((sem) => {
+    const besoins = new Map(ingredientsDeLaSemaine(sem).map((i) => [cleArticle(i.nom), i]));
+    etat.courses = etat.courses.filter((c) => {
+      if (c.menu !== sem || c.coche) return true;
+      const b = besoins.get(cleArticle(c.nom));
+      if (!b) { change = true; return false; }
+      const m = manquePour(b.nom, b.qte, b.unite);
+      const qte = (m.connu && m.manque !== null && m.enStock !== null)
+        ? texteNombre(m.manque)
+        : (nombre(b.qte) !== null ? texteNombre(nombre(b.qte)) : b.besoinTexte);
+      if (qte !== c.qte || (b.unite || "") !== (c.unite || "")) {
+        c.qte = qte; c.unite = b.unite; change = true;
+      }
+      return true;
+    });
+  });
+  return change;
+}
+
 /* Enregistre le document principal + redessine. */
 function sauver(...cles) {
+  /* Tout changement de menu passe ici : c'est l'unique point ou accrocher la
+     reconciliation des courses. Une seule ecriture pour les deux rubriques. */
+  if (cles.indexOf("repas") !== -1 && reconcilierCoursesDuMenu() && cles.indexOf("courses") === -1) {
+    cles.push("courses");
+  }
   if (cles.some((c) => ["membres", "taches", "cadeaux"].indexOf(c) !== -1)) {
     /* Seul un administrateur ecrit les membres et le registre des appareils :
        la migration ne se fait donc que depuis son appareil. */
@@ -3017,7 +3107,8 @@ async function supprimerFamilleEntiere(code, suivi, dejaMarquee) {
   ["tribu:session", "tribu:derniereFamille", "tribu:vue",
     "tribu:recettesMaj:" + code, "tribu:repereVerifie:" + code, "tribu:donnees:" + code,
     "tribu:vu:" + code, "tribu:fondatrice:" + code, "tribu:fondatriceFetee:" + code,
-    "tribu:menageInv:" + code, "tribu:recettesAPart:" + code]
+    "tribu:menageInv:" + code, "tribu:recettesAPart:" + code, "tribu:bienvenue:" + code,
+    "tribu:menageRet:" + code]
     .forEach((k) => { try { localStorage.removeItem(k); } catch (e) { } });
 
   bilan.ok = true;
@@ -3089,6 +3180,7 @@ async function entrerDansFamille(code, membreId, opts) {
   noterOuverture(code);          // idem : la date du jour, pour le ménage
   suivreProgrammeFondatrices(code);   // idem : la place dans le programme
   menageInvitations(code);       // idem : on efface les invitations mortes
+  menageRetours(code);           // idem : les signalements de plus de 12 mois
   migrerRecettesSiBesoin(code);  // idem : les recettes dans leur propre document
   majRecettesSiBesoin();         // idem : complète les recettes d'avant
   $("#ecran-connexion").hidden = true;
@@ -3100,7 +3192,19 @@ async function entrerDansFamille(code, membreId, opts) {
   memoriserVue();
   rendre();
   prechaufferCahier();           // pour que la première génération soit vive
+  montrerBienvenueSiBesoin(code);
   return true;
+}
+
+/* La présentation de bienvenue, UNE fois par appareil et par tribu : le
+   nouveau membre la voit sur son téléphone, l'ancien pas deux fois. Un peu
+   après le dessin de l'écran, pour qu'elle glisse sur une page déjà là. */
+function montrerBienvenueSiBesoin(code) {
+  try { if (localStorage.getItem("tribu:bienvenue:" + code)) return; } catch (e) { return; }
+  setTimeout(() => {
+    if (Store.code !== code || !moi) return;
+    try { Formulaires.bienvenue(); } catch (e) { console.warn("Présentation non ouverte :", e); }
+  }, 600);
 }
 
 /* Classer 353 plats coûte une demi-seconde la première fois. Fait au
@@ -3163,6 +3267,21 @@ async function migrerRecettesSiBesoin(code) {
   const fait = await Store.migrerRecettes(code);
   try { localStorage.setItem(cle, "1"); } catch (e) { /* sans importance */ }
   if (fait) rendre();
+}
+
+/* Efface les signalements de la tribu vieux de plus de 12 mois, AU PLUS une
+   fois par jour et par appareil administrateur — la promesse de la page de
+   confidentialité, tenue sans que personne n'y pense. Rien n'est annoncé. */
+async function menageRetours(code) {
+  if (Store.mode !== "nuage" || !estAdmin()) return;
+  const cle = "tribu:menageRet:" + code;
+  const jour = new Date().toISOString().slice(0, 10);
+  try {
+    if (localStorage.getItem(cle) === jour) return;
+    localStorage.setItem(cle, jour);
+  } catch (e) { /* mémoire indisponible : on fait le ménage quand même */ }
+  const r = await Store.purgerRetoursDe(code);
+  if (r && r.n) console.info("Signalements de plus de 12 mois effacés : " + r.n);
 }
 
 /* Efface les invitations mortes de la tribu, AU PLUS une fois par jour et par
@@ -3313,6 +3432,9 @@ async function oublierPlace() {
    la memoire du navigateur, pas dans la tribu : c'est un evenement d'ecran,
    pas une donnee de famille — et chaque telephone merite son moment. */
 function feterFondatrice(code) {
+  /* La presentation de bienvenue est ouverte : la fete attendra l'ouverture
+     suivante plutot que de l'ecraser (une seule feuille a la fois). */
+  if (ui.bienvenueOuverte) return;
   const cle = "tribu:fondatriceFetee:" + code;
   try {
     if (localStorage.getItem(cle)) return;
@@ -4309,16 +4431,21 @@ function reparerRecettes() {
       });
     }
 
-    /* Quantité et unité collées : « 800 g » -> 800 + g. En cas de doute sur
-       l'unité, on ne touche à rien : mieux vaut l'ancien format qu'une perte. */
-    (r.ingredients || []).forEach((i) => {
-      if (i.unite !== undefined && i.unite !== null) return;
+    /* Quantité et unité collées : « 800 g » -> 800 + g.
+       Quand on ne sait pas lire (« une pincée », « 2 gros », rien du tout), on
+       ne perd rien : la quantité reste telle quelle, et l'unité devient
+       « sans unité » — la valeur que l'application utilise déjà pour compter
+       (4 carottes). AVANT (jusqu'au 12/09/2026), on « ne touchait à rien » :
+       l'unité restait absente, le diagnostic la recomptait à chaque fois, et
+       le bouton « Mettre à jour » ne s'éteignait jamais. La réparation doit
+       pouvoir régler TOUT ce que le diagnostic compte, sinon il ment. */
+    if (!Array.isArray(r.ingredients)) r.ingredients = [];
+    r.ingredients.forEach((i) => {
+      if (!i || (i.unite !== undefined && i.unite !== null)) return;
       const m = String(i.qte || "").trim().match(/^([0-9]+(?:[.,][0-9]+)?)\s*(.*)$/);
-      if (!m) return;
-      const u = normaliserUnite(m[2]);
-      if (u === null) return;
-      i.qte = m[1];
-      i.unite = u;
+      const u = m ? normaliserUnite(m[2]) : null;
+      if (m && u !== null) { i.qte = m[1]; i.unite = u; }
+      else i.unite = "";
       unitesSeparees++;
     });
   });
@@ -5684,7 +5811,7 @@ function majBarre() {
   if (nav.dataset.signature !== signature) {
     nav.innerHTML = visibles.map((o) =>
       '<button data-vue="' + o.vue + '"><span class="ic">' + o.emoji + "</span>" +
-      esc(o.nom) + "</button>").join("");
+      '<span class="lib">' + esc(o.nom) + "</span></button>").join("");
     nav.dataset.signature = signature;
   }
   nav.querySelectorAll("button").forEach((b) => {
@@ -6072,6 +6199,7 @@ document.addEventListener("click", (e) => {
     case "effacer-appareil": Formulaires.effacerAppareil(); break;
     case "demenagement": Formulaires.demenagement(); break;
     case "fondatrice": Formulaires.fondatrice(); break;
+    case "bienvenue": fermerFeuille(); setTimeout(() => Formulaires.bienvenue(), 260); break;
     case "masquer-conseil-icone":
       localStorage.setItem("tribu:conseilEcranAccueil", "1");
       rendre();
