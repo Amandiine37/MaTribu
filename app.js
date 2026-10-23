@@ -183,7 +183,7 @@ const EMOJIS_LISTES = [
   "🥩", "🧊", "🧽", "🧼", "🧴", "💊", "🎁", "🎂", "🎄", "🎒",
   "✏️", "🏕️", "🌻", "🔧", "📦", "👶", "🐾", "🐶", "🍼", "🎨"];
 
-const VERSION = "0.67 bêta";
+const VERSION = "0.68 bêta";
 
 /* ---------- Demenagement vers matribu-app.fr ----------
    L'application vit a DEUX adresses pendant la transition : l'ancienne
@@ -317,8 +317,70 @@ const CALENDRIER = {
    de ce que la famille peut voir et utiliser. */
 const ACTUS = [
   {
+    version: "0.68",
+    date: "2026-10-23",
+    titre: "Les petits à table",
+    points: [
+      {
+        quoi: "👶 Les repères de l'âge sous chaque recette",
+        court: "la texture et ce qu'il faut adapter, sans rien demander sur l'enfant",
+        detail: "<p>Dans <i>Administration › Réglages de la famille</i>, cochez les âges " +
+          "présents à la maison — de 4 mois à 5 ans. Chaque recette porte alors sa partie " +
+          "<b>Pour les petits</b> : la texture attendue, et ce qu'il faut adapter (pas de " +
+          "miel, bien cuit, pas de sel ajouté…).</p>" +
+          "<p><b>Rien n'est rattaché à un enfant</b> : ni prénom, ni date de naissance. " +
+          "C'est une caractéristique du foyer, rien de plus.</p>" +
+          "<p>Ce sont des repères généraux de la diversification. Ils ne remplacent ni " +
+          "votre médecin, ni votre PMI, et ne savent rien d'une allergie.</p>",
+        si: () => typeof cartePetits === "function",
+        ou: { libelle: "Cocher les âges", action: "admin-reglages", admin: true }
+      },
+      {
+        quoi: "🥣 Un cahier de 46 recettes de bébé",
+        court: "des premières purées aux plats qu'on réclame à quatre ans",
+        detail: "<p>Quarante-six recettes écrites pour les tout-petits et rangées par " +
+          "âge : premières purées à une seule saveur, compotes sans sucre, premiers " +
+          "morceaux à attraper, puis les plats de la famille en plus doux.</p>" +
+          "<p>Aucun sel, aucun sucre ajouté avant un an, aucun miel, rien de cru, rien " +
+          "de rond et dur.</p>" +
+          "<p>Elles n'apparaissent que si vous avez coché un âge, et seulement pour les " +
+          "âges qui vous concernent. Elles ne partent <b>jamais</b> dans le menu de la " +
+          "semaine. Pour les recevoir : <i>Administration › Mettre à jour les recettes " +
+          "fournies</i>.</p>",
+        si: () => typeof cartePetits === "function",
+        ou: { libelle: "Ouvrir le cahier", action: "aller", vue: "recettes" }
+      },
+      {
+        quoi: "🍽️ Le même légume, cuisiné pour chacun",
+        court: "purée de carotte pour bébé, carottes autrement pour la famille",
+        detail: "<p>Un seul panier, deux repas. Sous une recette de bébé, l'application " +
+          "propose des plats de la famille avec <b>le même légume</b> ; sous un plat de " +
+          "la famille, elle propose la version pour bébé. Et quand le repas de la semaine " +
+          "est choisi, elle dit ce que bébé peut manger ce jour-là.</p>" +
+          "<p>Trois propositions au plus, celles de saison d'abord.</p>",
+        si: () => typeof cartePetits === "function"
+      },
+      {
+        quoi: "🧸 Des icônes pour les enfants, et la barre du bas qu'on range",
+        court: "jouets, livres, vêtements — et les onglets dans l'ordre qui vous arrange",
+        detail: "<p>De nouvelles icônes pour les membres (👶 🍼 🧒) et pour les tâches " +
+          "(🧸 les jouets, 📚 les livres, 🧩 🎨, 🩳 🧢 les vêtements) : les tâches des " +
+          "enfants se reconnaissent d'un coup d'œil.</p>" +
+          "<p>La <b>barre du bas</b> se range : masquez ce que la famille n'utilise pas, " +
+          "et mettez le reste dans l'ordre qui vous arrange. L'écran <i>Administration</i> " +
+          "se replie en cartes au lieu de dérouler une page interminable.</p>" +
+          "<p>Et dans le générateur de menus, vous pouvez demander la <b>viande et le " +
+          "poisson plutôt le midi</b> : beaucoup de familles préfèrent les dîners légers.</p>",
+        ou: { libelle: "Ranger la barre du bas", action: "admin-onglets", admin: true }
+      }
+    ]
+  },
+  {
     version: "0.67",
     date: "2026-10-18",
+    /* Toute cette version parle du module des événements : sans le fichier,
+       elle n'a rien à raconter (23/10/2026). */
+    si: () => typeof evenementsActifs === "function",
     titre: "MaTribu Événements",
     points: [
       {
@@ -524,7 +586,22 @@ const ACTUS = [
 /* Ce que cet appareil a déjà lu. Sur l'appareil, pas dans la famille : on ne
    va pas marquer la nouvelle comme lue pour tout le monde parce qu'une seule
    personne l'a ouverte. */
-function actuDerniere() { return ACTUS[0] || null; }
+/* LES NOUVEAUTÉS QU'ON A LE DROIT D'ANNONCER (23/10/2026).
+
+   Une note de version est du CONTENU : les garde-fous `typeof` posés sur le
+   code ne la retenaient pas. Le socle déposé sans evenements.js annonçait
+   donc « MaTribu Événements », avec un bouton vers une case inexistante.
+
+   La condition se pose sur une version ENTIÈRE (`si`) ou sur un POINT
+   précis — une même version peut apporter du livré et du non livré. Une
+   version dont tous les points ont disparu ne s'affiche plus du tout. */
+function pointsVisibles(a) {
+  return ((a && a.points) || []).filter((p) => !p.si || p.si());
+}
+function actusVisibles() {
+  return ACTUS.filter((a) => (!a.si || a.si()) && pointsVisibles(a).length);
+}
+function actuDerniere() { return actusVisibles()[0] || null; }
 function actuANoter() {
   const d = actuDerniere();
   if (!d) return false;

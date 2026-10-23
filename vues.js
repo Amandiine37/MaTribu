@@ -2158,7 +2158,12 @@ Vues.admin = function () {
     '<p class="aide">Ce que la famille voit dans la barre du bas. Masquer un onglet ' +
     "ne supprime rien : le contenu est simplement rangé hors de vue.</p>" +
     '<div class="puces" style="margin-top:.7rem">' +
-    ONGLETS.map((o) =>
+    /* UN ONGLET QUI N'EXISTE PAS NE SE MONTRE PAS, MÊME EN APERÇU
+       (23/10/2026). Cet aperçu parcourait ONGLETS brut : le socle déposé
+       sans le module des événements affichait quand même « 🎉 Événements »,
+       et allumé, par-dessus le marché. La feuille « Choisir les onglets »
+       filtrait déjà, elle ; c'est la carte qui avait été oubliée. */
+    ONGLETS.filter((o) => !o.si || o.si()).map((o) =>
       '<span class="puce ' + (o.obligatoire || caches.indexOf(o.vue) === -1 ? "on" : "") + '">' +
       o.emoji + " " + esc(o.nom) + "</span>").join("") + "</div>" +
     (caches.length

@@ -1328,8 +1328,9 @@ Formulaires.actu = function () {
       "</div></details></li>";
   };
 
-  html += ACTUS.map((a, i) => {
-    const corps = "<ul>" + a.points.map(pointActu).join("") + "</ul>";
+  /* On n'annonce que ce qui est livré, point par point (23/10/2026). */
+  html += actusVisibles().map((a, i) => {
+    const corps = "<ul>" + pointsVisibles(a).map(pointActu).join("") + "</ul>";
     if (i === 0) {
       return '<div class="actu actu-neuve">' +
         '<div class="actu-tete"><span class="etiquette chaud">Version ' + esc(a.version) +
@@ -1864,7 +1865,10 @@ Formulaires.recette = function (rid) {
     "</select></label>" +
     '<p class="aide" style="margin:-.6rem 0 1rem">Seuls les <b>plats principaux</b> sont ' +
     "proposés par le générateur de menus de la semaine. Les autres se rangent dans le " +
-    "cahier et servent aux menus des événements.</p>" +
+    /* Sans le module, il n'y a pas de menu d'événement : on ne le promet
+       pas (23/10/2026). */
+    "cahier" + (typeof evenementsActifs === "function" ?
+      " et servent aux menus des événements" : "") + ".</p>" +
     '<label class="champ"><span>Saisons</span></label>' +
     puceMultiple("saisons", SAISONS.map((x) => ({ val: x.val, html: x.emoji + " " + x.nom })),
       cour.saisons || []) +
