@@ -102,6 +102,12 @@ Formulaires.tache = function (tid) {
       : "") +
     /* Tous les N (19/09/2026) : le rythme et le départ, remplis par majRythme(). */
     '<div id="zone-rythme"></div>' +
+    /* L'heure (24/09/2026), facultative. On dit tout de suite ce qu'elle fait
+       — et ce qu'elle ne fait pas —, pour ne pas laisser espérer une sonnerie. */
+    '<label class="champ"><span>À quelle heure ? (facultatif)</span>' +
+    '<input type="time" name="heure" value="' + esc(cour.heure || "") + '"></label>' +
+    '<p class="aide" style="margin:-.6rem 0 1rem">Elle s\'affiche à côté de la tâche et ' +
+    "range la journée dans l'ordre. MaTribu ne sonnera pas à cette heure-là.</p>" +
     (pointsActifs()
       ? '<label class="champ"><span>Points gagnés</span>' +
         '<input type="number" name="points" value="' + (cour.points || 10) + '" min="0" max="500" required></label>'
@@ -111,6 +117,11 @@ Formulaires.tache = function (tid) {
       ? puceMultiple("part", etat.membres.map((m) => ({ val: m.id, html: esc(m.emoji + " " + m.prenom) })),
         cour.participants || [])
       : '<p class="aide">Ajoutez d\'abord des membres.</p>') +
+    /* On distingue les deux gestes, sinon on vient ici pour un échange d'un
+       soir et l'on change la tâche pour toujours (28/09/2026). */
+    '<p class="aide" style="margin:-.5rem 0 1rem">Ceci vaut pour <b>toutes les fois</b>. ' +
+    "Pour changer <b>juste pour cette fois</b> — un échange, quelqu'un qui n'est pas là —, " +
+    "touchez le <b>prénom</b> sous la tâche, dans la liste.</p>" +
     /* Mode planning, brique 3 : l'appli répartit elle-même, à la place du
        tour. Pas pour une tâche « chaque mois ». */
     (planningActif()
@@ -232,26 +243,18 @@ Formulaires.tache = function (tid) {
         /* Mode planning : quand la fréquence ou les jours changent, la
            rotation repart de la première personne choisie (avant : de zéro,
            ce qui reste le cas pour les autres fréquences). */
-        const joursAvant = JSON.stringify(joursDeTache(t));
-        const freqChange = t.frequence !== freq;
-        const rythmeAvant = rythmeDe(t) + "|" + (t.tousDepuis || "");
-        t.frequence = freq;
-        if (freq === "jours") t.jours = jours; else delete t.jours;
-        /* Tous les N : un nouveau rythme fait, lui aussi, commencer la première
-           personne choisie au prochain passage. */
-        poserRythme(t, freq, tous, depart);
-        const rythmeChange = rythmeDe(t) + "|" + (t.tousDepuis || "") !== rythmeAvant;
-        if (freq === "jours" && (freqChange || JSON.stringify(jours) !== joursAvant)) {
-          t.decalage = calageRotation(t, part.length);
-          t.joursDepuis = isoDate(new Date());   // la semaine ne remonte pas avant
-        } else if (rythmeChange) t.decalage = calageRotation(t, part.length);
-        else if (freqChange) t.decalage = 0;
-        if (freq !== "jours") delete t.joursDepuis;
+        /* La règle vit dans appliquerFrequence() : la fiche et l'étiquette
+           de la liste la partagent depuis le 28/09/2026. Les participants
+           sont posés AVANT, car le recalage du tour compte sur eux. */
+        t.participants = part;
+        appliquerFrequence(t, freq, jours, tous, depart);
         /* Points éteints : le champ n'est pas affiché. On GARDE la valeur
            existante, sinon modifier une tâche la remettrait à zéro et le
            réglage ne serait plus réversible sans perte. */
         if (pointsActifs()) t.points = Number(d.get("points")) || 0;
-        t.participants = part;
+        /* Heure effacée : on retire le champ plutôt que d'y laisser du vide. */
+        const heure = String(d.get("heure") || "").trim();
+        if (heure) t.heure = heure; else delete t.heure;
         t.rotation = !!d.get("rotation");
         /* Brique 3 : la case n'existe qu'en mode planning ; sans elle, on garde. */
         if (f.querySelector('[name="repartition"]')) {
@@ -270,6 +273,8 @@ Formulaires.tache = function (tid) {
           decalage: 0, actif: !d.get("pause"), creeLe: new Date().toISOString()
         };
         // on cale la rotation pour que la 1re personne choisie commence maintenant
+        const heureNeuve = String(d.get("heure") || "").trim();
+        if (heureNeuve) nouvelle.heure = heureNeuve;
         if (freq === "jours") { nouvelle.jours = jours; nouvelle.joursDepuis = isoDate(new Date()); }
         if (d.get("repartition")) { nouvelle.repartition = true; nouvelle.repartieDepuis = isoDate(new Date()); }
         poserRythme(nouvelle, freq, tous, depart);
@@ -450,6 +455,77 @@ Formulaires.stock = function (sid) {
         peremption: String(d.get("peremption") || "")
       }, s ? s.id : null);
       toast(s ? "Réserve mise à jour" : "Ajouté à la réserve 🥫");
+    };
+  });
+};
+
+/* RÉAPPROVISIONNER : ON MONTRE, ET ON CHOISIT (06/10/2026).
+
+   Avant, le bouton ajoutait d'un coup à la liste affichée, après une simple
+   question « Ajouter 4 articles à « Mes courses » ? ». Depuis l'onglet
+   Réserve, on ne savait même pas de quelle liste il s'agissait.
+
+   Maintenant la fenêtre dit ce qui part (avec les quantités), où cela va, et
+   ce qu'elle laisse de côté parce que c'est déjà noté ailleurs. */
+Formulaires.racheter = function () {
+  const sous = stockSousMinimum();
+  if (!sous.length) { toast("Rien à racheter, tout est au-dessus du minimum"); return; }
+  const listes = listesCourses();
+  const aNoter = [], ailleurs = [];
+  sous.forEach((s) => {
+    const ou = listesOuFigure(s.nom);
+    (ou.length ? ailleurs : aNoter).push({ s: s, ou: ou });
+  });
+  /* Tout est déjà noté : on le dit, et on n'ouvre rien. C'est le cas qui
+     faisait noter les mêmes articles sur chaque liste. */
+  if (!aNoter.length) {
+    toast(pluriel(ailleurs.length, "article est déjà noté", "articles sont déjà notés") +
+      " sur vos listes");
+    return;
+  }
+  let cible = listeCourante().id;
+
+  const ligne = (x) =>
+    '<div class="ligne"><span style="font-size:1.1rem">🥫</span>' +
+    '<div class="ligne-corps"><b>' + esc(x.s.nom) + "</b><small>" +
+    esc(formaterQte(quantiteARacheter(x.s), x.s.unite)) + "</small></div></div>";
+
+  const html =
+    '<p class="aide" style="margin:0 0 .8rem">Ces articles sont passés sous le minimum ' +
+    "de votre réserve.</p>" +
+    '<div class="carte" style="margin-bottom:1rem">' + aNoter.map(ligne).join("") + "</div>" +
+    (listes.length > 1
+      ? '<div class="sous-titre"><h3>Dans quelle liste ?</h3></div>' +
+        '<div class="puces" id="choix-liste" style="margin-bottom:1rem">' +
+        listes.map((l) => '<button type="button" class="puce' + (l.id === cible ? " on" : "") +
+          '" data-liste="' + esc(l.id) + '">' +
+          esc((l.emoji || typeListe(l).emoji) + " " + l.nom) + "</button>").join("") + "</div>"
+      : "") +
+    (ailleurs.length
+      ? '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
+        '<input type="checkbox" id="aussi-ailleurs" style="width:auto;margin-top:.25rem">' +
+        '<span style="margin:0">Ajouter aussi ' +
+        esc(ailleurs.map((x) => x.s.nom).join(", ")) +
+        '<br><small style="font-weight:400">Déjà noté sur ' +
+        esc([...new Set(ailleurs.map((x) => x.ou.map((l) => l.nom).join(", ")))].join(" · ")) +
+        ".</small></span></label>"
+      : "") +
+    '<div class="rangee-btn">' +
+    '<button type="button" class="btn" data-action="fermer">Annuler</button>' +
+    '<button type="button" class="btn principal" data-role="ok">Ajouter</button></div>';
+
+  ouvrirFeuille("Réapprovisionner", html, (f) => {
+    const zone = f.querySelector("#choix-liste");
+    if (zone) zone.onclick = (ev) => {
+      const b = ev.target.closest("[data-liste]");
+      if (!b) return;
+      cible = b.dataset.liste;
+      zone.querySelectorAll(".puce").forEach((p) => p.classList.toggle("on", p === b));
+    };
+    f.querySelector('[data-role="ok"]').onclick = () => {
+      const aussi = f.querySelector("#aussi-ailleurs");
+      fermerFeuille();
+      Actions.racheterSousMinimum(cible, !!(aussi && aussi.checked));
     };
   });
 };
@@ -647,7 +723,10 @@ Formulaires.retour = function () {
 Formulaires.repas = function (jour, moment) {
   const cle = jour + "-" + moment;
   const actuel = (etat.repas[ui.semaine] || {})[cle] || null;
-  const liste = etat.recettes.slice().sort((a, b) => a.nom.localeCompare(b.nom));
+  /* Pas de purée de bébé dans le choix d'un repas de la semaine
+     (18/10/2026). */
+  const liste = etat.recettes.filter((r) => !estPourBebe(r))
+    .sort((a, b) => a.nom.localeCompare(b.nom));
   const r = actuel && actuel.recetteId ? etat.recettes.find((x) => x.id === actuel.recetteId) : null;
   const e = etatRepas(ui.semaine, jour, moment);
   /* Points éteints : plus aucune mention de points dans la fiche d'un repas
@@ -682,6 +761,10 @@ Formulaires.repas = function (jour, moment) {
       '<div class="ligne-corps"><b>' + esc(r ? r.nom : (actuel.texte || "Repas")) + "</b>" +
       (actuel.restes ? "<small>restes — aucune course, aucune réserve entamée</small>" : "") + "</div>" +
       (r ? '<button class="btn mini doux" data-role="consulter">📖</button>' : "") + "</div>" +
+
+      /* « Si tu prévois ça, voilà pour bébé » (18/10/2026) : le même panier,
+         deux repas. Rien sans le module, rien sans tout-petit à la maison. */
+      (typeof ligneBebeDuRepas === "function" ? ligneBebeDuRepas(r) : "") +
 
       /* --- qui cuisine --- */
       '<div class="sous-titre" style="margin:.6rem 0 .4rem"><h3>Qui cuisine ?</h3>' +
@@ -1018,6 +1101,22 @@ Formulaires.reglagesFamille = function () {
     "« c'est fait » et la validation. Rien n'est effacé, et tout revient si vous le " +
     "réactivez.</small></span></label>" +
 
+    /* LE MODE COLLECTIF (28/09/2026, demandé par Amandine). Sous le système
+       de points, car il n'a de sens que si celui-ci est allumé — le formulaire
+       le grise tout seul sinon. */
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start;' +
+    'margin-left:1.6rem" data-role="bloc-perso">' +
+    '<input type="checkbox" name="pointsPerso"' + (g.pointsPerso !== false ? " checked" : "") +
+    ' style="width:auto;margin-top:.25rem"><span style="margin:0">Compteurs personnels' +
+    '<br><small style="font-weight:400">Chacun voit ses points, le classement et les ' +
+    "cadeaux. Décoché, il ne reste que l'objectif commun : les tâches rapportent " +
+    "toujours, la jauge de la tribu se remplit, et chacun voit <b>ce qu'il a " +
+    "apporté</b> — sans classement, sans cadeaux et sans rien savoir des autres. " +
+    "Les cadeaux ne sont pas effacés : ils reviennent si vous recochez.</small></span></label>" +
+    '<p class="aide" data-role="sans-objectif" style="margin:-.4rem 0 1rem;display:none">' +
+    "⚠️ Sans objectif commun lancé, ce mode n'affiche presque rien : pensez à en " +
+    "lancer un depuis l'administration.</p>" +
+
     '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
     '<input type="checkbox" name="antiGaspi"' + (g.antiGaspi !== false ? " checked" : "") +
     ' style="width:auto;margin-top:.25rem"><span style="margin:0">Anti-gaspillage' +
@@ -1040,9 +1139,51 @@ Formulaires.reglagesFamille = function () {
     "« ⚖️ Répartir automatiquement » dans la fiche d'une tâche. " +
     "Décoché, les tâches déjà réglées sur des jours les gardent.</small></span></label>" +
 
+    '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
+    '<input type="checkbox" name="motDuJour"' + (g.motDuJour === true ? " checked" : "") +
+    ' style="width:auto;margin-top:.25rem"><span style="margin:0">Le mot du jour' +
+    '<br><small style="font-weight:400">Un petit jeu sur l\'accueil : un mot de 5 lettres à ' +
+    "trouver en 6 essais, le même pour toute la tribu. Chacun voit qui a trouvé, jamais le " +
+    "mot des autres. Décoché, le jeu disparaît.</small></span></label>" +
+
+    /* LES PETITS À TABLE (18/10/2026) — une caractéristique du FOYER, jamais
+       d'un enfant : pas de prénom, pas de date de naissance. Le bloc entier
+       disparaît si le module n'est pas livré. */
+    (typeof TRANCHES_PETITS === "undefined" ? "" :
+      '<div class="sous-titre" style="margin-top:.4rem"><h3>👶 Les petits à table</h3></div>' +
+      '<p class="aide" style="margin:-.3rem 0 .6rem">Cochez les âges présents à la maison. ' +
+      "Chaque recette portera alors sa partie « pour les petits » : la texture, et ce qu'il " +
+      "faut adapter. <b>Rien n'est rattaché à un enfant</b> — ni prénom, ni date de " +
+      "naissance.</p>" +
+      '<div class="puces" style="margin-bottom:1rem">' +
+      TRANCHES_PETITS.map((t) => '<label class="puce' +
+        (((g.petits || []).indexOf(t.val) !== -1) ? " on" : "") + '">' +
+        '<input type="checkbox" name="petits" value="' + t.val + '"' +
+        (((g.petits || []).indexOf(t.val) !== -1) ? " checked" : "") +
+        ' style="width:auto;margin-right:.3rem">' + t.emoji + " " + esc(t.nom) +
+        "</label>").join("") + "</div>") +
+
+    (typeof blocOptionEvenements === "function" ? blocOptionEvenements(g) : "") +
+
     boutonsFormulaire("Enregistrer", false) + "</form>";
 
   ouvrirFeuille("Réglages de la famille", html, (f) => {
+    /* Les deux cases vont ensemble : sans système de points, « compteurs
+       personnels » ne veut plus rien dire. On le montre au lieu de le
+       laisser deviner. */
+    const cPoints = f.querySelector('[name="points"]');
+    const cPerso = f.querySelector('[name="pointsPerso"]');
+    const blocPerso = f.querySelector('[data-role="bloc-perso"]');
+    const avert = f.querySelector('[data-role="sans-objectif"]');
+    const suivre = () => {
+      cPerso.disabled = !cPoints.checked;
+      blocPerso.style.opacity = cPoints.checked ? "" : ".45";
+      avert.style.display = cPoints.checked && !cPerso.checked && !objectifActif() ? "" : "none";
+    };
+    cPoints.onchange = suivre;
+    cPerso.onchange = suivre;
+    suivre();
+
     f.onsubmit = (ev) => {
       ev.preventDefault();
       const d = new FormData(ev.target);   // ev.target = le <form>, pas la feuille
@@ -1051,10 +1192,22 @@ Formulaires.reglagesFamille = function () {
       etat.reglages = Object.assign({}, etat.reglages, {
         convives: n,
         points: !!d.get("points"),
+        /* Une case grisée n'est pas envoyée : on garde alors la valeur d'avant,
+           pour ne pas effacer un choix qu'on n'a pas pu faire. */
+        pointsPerso: cPoints.checked ? !!d.get("pointsPerso") : g.pointsPerso !== false,
         pointsRepas: Math.max(0, Math.min(200, Number(d.get("pointsRepas")) || 0)),
         antiGaspi: !!d.get("antiGaspi"),
         macros: !!d.get("macros"),
-        planning: !!d.get("planning")
+        planning: !!d.get("planning"),
+        motDuJour: !!d.get("motDuJour"),
+        /* Sans le module, la case n'est pas à l'écran : on garde la valeur
+           déjà enregistrée au lieu de la remettre à faux (18/10/2026). */
+        evenements: typeof blocOptionEvenements === "function"
+          ? !!d.get("evenements") : (g.evenements === true),
+        /* Les tranches cochées, et rien d'autre : une liste de six valeurs
+           possibles, aucune donnée nominative (18/10/2026). */
+        petits: typeof TRANCHES_PETITS === "undefined" ? (g.petits || [])
+          : d.getAll("petits").map(String).filter((v) => TRANCHES_PETITS.some((t) => t.val === v))
       });
       fermerFeuille();
       sauver("reglages");
@@ -1073,6 +1226,10 @@ const REGLAGES_GEN_DEFAUT = {
   midi: true, soir: true, remplacer: false,
   regime: "libre", poisson: "", viande: "", vege: "", profil: "",
   saisons: true, reserve: true, soirLeger: true, rapide: true, thermomix: false,
+  /* « plutôt le midi » d'origine : c'est déjà, à peu près, ce que faisait
+     l'application pour une famille qui n'avait rien touché — et cela protège
+     en plus le poisson, que personne ne tenait à l'écart du soir. */
+  proteine: "midi",
   /* Les favoris comptent d'office (16/09/2026) : sans étoile nulle part, cela
      ne change rien ; avec des étoiles, c'est ce que la famille aime. */
   favoris: true, cuisinier: false,
@@ -1113,6 +1270,8 @@ function resumeReglagesGenerateur() {
   if (g.thermomix) l.push("Thermomix de préférence");
   if (g.rapide) l.push("rapide en semaine");
   if (g.soirLeger) l.push("léger le soir");
+  if (g.proteine === "midi") l.push("viande et poisson le midi");
+  else if (g.proteine === "soir") l.push("viande et poisson le soir");
   if (g.reserve) l.push("ma réserve d’abord");
   if (g.favoris) l.push("favoris ⭐ d’abord");
   if (g.cuisinier) l.push("chacun son tour en cuisine");
@@ -1152,13 +1311,44 @@ Formulaires.actu = function () {
 
   html += '<div class="sous-titre" style="margin-top:1.6rem"><h3>Les nouveautés</h3></div>';
 
-  html += ACTUS.map((a, i) => '<div class="actu' + (i === 0 ? " actu-neuve" : "") + '">' +
-    '<div class="actu-tete"><span class="etiquette' + (i === 0 ? " chaud" : "") + '">Version ' +
-    esc(a.version) + "</span><small>" + esc(jour(a.date)) + "</small></div>" +
-    "<h4>" + esc(a.titre) + "</h4><ul>" +
-    a.points.map((p) => "<li>" + p + "</li>").join("") + "</ul></div>").join("");
+  /* UNE NOUVEAUTÉ, UNE LIGNE (24/09/2026). Le détail ne s'ouvre que si on le
+     demande, et un bouton mène à l'écran concerné. Deux formes acceptées :
+     la simple chaîne des notes déjà écrites, et l'objet { quoi, court,
+     detail, ou } des nouvelles. */
+  const pointActu = (p) => {
+    if (typeof p === "string") return "<li>" + p + "</li>";
+    /* Un bouton réservé aux administrateurs ne s'affiche pas aux autres :
+       mieux vaut ne rien proposer que d'envoyer quelqu'un vers un refus. */
+    const ou = p.ou && (!p.ou.admin || estAdmin()) ? p.ou : null;
+    return '<li><details class="actu-point"><summary><b>' + esc(p.quoi) + "</b>" +
+      (p.court ? ' <span class="doux">— ' + esc(p.court) + "</span>" : "") + "</summary>" +
+      '<div class="actu-detail">' + p.detail +
+      (ou ? '<button class="btn mini principal" data-action="' + esc(ou.action) +
+        (ou.vue ? '" data-vue="' + esc(ou.vue) : "") + '">' + esc(ou.libelle) + "</button>" : "") +
+      "</div></details></li>";
+  };
 
-  ouvrirFeuille("✨ Quoi de neuf", html);
+  html += ACTUS.map((a, i) => {
+    const corps = "<ul>" + a.points.map(pointActu).join("") + "</ul>";
+    if (i === 0) {
+      return '<div class="actu actu-neuve">' +
+        '<div class="actu-tete"><span class="etiquette chaud">Version ' + esc(a.version) +
+        "</span><small>" + esc(jour(a.date)) + "</small></div>" +
+        "<h4>" + esc(a.titre) + "</h4>" + corps + "</div>";
+    }
+    /* Les versions passées se replient en entier : elles ont déjà été lues,
+       et dix notes dépliées décourageaient la lecture de la première. */
+    return '<div class="actu"><details class="actu-ancienne"><summary>' +
+      '<span class="etiquette">Version ' + esc(a.version) + "</span> " + esc(a.titre) +
+      "</summary>" + corps + "</details></div>";
+  }).join("");
+
+  ouvrirFeuille("✨ Quoi de neuf", html, (feuille) => {
+    /* Les boutons mènent ailleurs : on referme d'abord, sinon l'écran visé
+       resterait caché derrière cette page. */
+    feuille.querySelectorAll(".actu-detail [data-action]")
+      .forEach((b) => b.addEventListener("click", fermerFeuille));
+  });
   /* Lue : la pastille s'éteint, et la saison ne redira plus « bienvenue ».
      Le rendu qui suit est indispensable : sans lui, la pastille de l'en-tête
      et celle de la carte restaient allumées jusqu'au prochain changement
@@ -1170,6 +1360,14 @@ Formulaires.actu = function () {
 
 Formulaires.generateur = function () {
   const g = reglagesGenerateur();
+  /* « REMPLACER » NE SE RETIENT PLUS (05/10/2026). Gardé d'une fois sur
+     l'autre, il refaisait en silence une semaine qu'on venait de composer à la
+     main ; décoché, il laissait « Générer » sans rien faire sur une semaine
+     complète. C'est une décision du moment, pas une préférence : on la pose
+     d'après la semaine ouverte — cochée quand il ne reste plus une seule case
+     libre, puisque alors « compléter les cases vides » ne peut rien faire. */
+  const etatCases = casesDeLaSemaine(ui.semaine, g.midi, g.soir);
+  g.remplacer = etatCases.prevus.length > 0 && etatCases.libres.length === 0;
   const co = (n) => (g[n] ? " checked" : "");
   const ligneCase = (nom, texte, aide) =>
     '<label class="champ" style="display:flex;gap:.6rem;align-items:flex-start">' +
@@ -1199,6 +1397,7 @@ Formulaires.generateur = function () {
     ligneCase("soir", "Les soirs") +
     ligneCase("remplacer", "Remplacer les repas déjà prévus",
       "Sinon, seules les cases vides sont complétées.") +
+    '<p class="aide" id="note-remplacer" style="margin:-.3rem 0 .7rem" hidden></p>' +
 
     '<div class="sous-titre"><h3>Ce qu\'on mange</h3></div>' +
     '<label class="champ"><span>Régime de la semaine</span><select name="regime">' +
@@ -1235,6 +1434,16 @@ Formulaires.generateur = function () {
         ? "Les plats dont vous avez déjà les ingrédients passent devant (" + pluriel(nbStock, "article", "articles") + " en réserve)."
         : "Votre réserve est vide pour l'instant : cette option ne changera rien.") +
     ligneCase("soirLeger", "Plats plus légers le soir") +
+    '<label class="champ"><span>Viande et poisson, plutôt…</span><select name="proteine">' +
+    [["midi", "🌞 Le midi"], ["soir", "🌙 Le soir"], ["", "Peu importe"]]
+      .map(([v, l]) => '<option value="' + v + '"' +
+        ((g.proteine || "") === v ? " selected" : "") + ">" + l + "</option>").join("") +
+    "</select></label>" +
+    '<p class="aide" style="margin:-.6rem 0 1rem">La protéine animale demande plus de ' +
+    "travail à la digestion : beaucoup de familles la préfèrent au déjeuner. " +
+    "La <b>viande</b> suit ce choix de près, le <b>poisson</b> plus souplement — léger, " +
+    "il a sa place le soir. « Plats plus légers le soir », juste au-dessus, ne regarde " +
+    "que la texture du plat ; celui-ci regarde ce qu'il y a dedans.</p>" +
     ligneCase("rapide", "Plats rapides du lundi au vendredi") +
     ligneCase("thermomix", "Privilégier les recettes Thermomix",
       pluriel(nbThermo, "recette", "recettes") + " de votre cahier " +
@@ -1322,12 +1531,30 @@ Formulaires.generateur = function () {
           "poisson ou végétarien.";
       }
     };
+    /* Ce que la semaine ouverte contient déjà, dit en clair sous la case :
+       sans cela, « Générer » semblait ne rien faire (05/10/2026). */
+    const noteRemp = f.querySelector("#note-remplacer");
+    const majRemplacer = () => {
+      const c = casesDeLaSemaine(ui.semaine, coche("midi"), coche("soir"));
+      if (!c.prevus.length) { noteRemp.hidden = true; return; }
+      noteRemp.hidden = false;
+      noteRemp.textContent = coche("remplacer")
+        ? "Les " + pluriel(c.prevus.length, "repas déjà prévu sera refait",
+          "repas déjà prévus seront refaits") + "."
+        : !c.libres.length
+          ? "Toute la semaine est déjà prévue : sans cocher, il n'y aura rien à remplir."
+          : pluriel(c.prevus.length, "repas est déjà prévu : il sera gardé",
+            "repas sont déjà prévus : ils seront gardés") + ", et " +
+            (c.libres.length === 1 ? "la case libre sera remplie"
+              : "les " + c.libres.length + " cases libres seront remplies") + ".";
+    };
+    const majTout = () => { majNombres(); majRemplacer(); };
     f.querySelectorAll('[name="poisson"], [name="viande"], [name="vege"], ' +
       '[name="midi"], [name="soir"], [name="remplacer"]')
-      .forEach((el) => el.addEventListener("change", majNombres));
-    regime.onchange = () => { majRegime(); majNombres(); };
+      .forEach((el) => el.addEventListener("change", majTout));
+    regime.onchange = () => { majRegime(); majTout(); };
     majRegime();
-    majNombres();
+    majTout();
 
     f.onsubmit = (ev) => {
       ev.preventDefault();
@@ -1341,11 +1568,14 @@ Formulaires.generateur = function () {
         vege: d.get("vege") === null ? "" : d.get("vege"),
         saisons: !!d.get("saisons"), reserve: !!d.get("reserve"),
         soirLeger: !!d.get("soirLeger"), rapide: !!d.get("rapide"),
+        proteine: String(d.get("proteine") || ""),
         favoris: !!d.get("favoris"), cuisinier: !!d.get("cuisinier"),
         thermomix: !!d.get("thermomix"),
         semaines: Number(d.get("semaines")) || 3
       };
-      try { localStorage.setItem("tribu:generateur", JSON.stringify(o)); } catch (e) { /* tant pis */ }
+      /* « Remplacer » n'est pas gardé : voir le commentaire en tête. */
+      try { localStorage.setItem("tribu:generateur",
+        JSON.stringify(Object.assign({}, o, { remplacer: false }))); } catch (e) { /* tant pis */ }
       fermerFeuille();
 
       const res = genererMenus(ui.semaine, Object.assign({}, o, { rapideSemaine: o.rapide }));
@@ -1372,10 +1602,16 @@ Formulaires.generateur = function () {
 
 /* Les ingrédients de la semaine, moins ce que vous avez déjà en réserve.
    C'est le lien entre les menus et le stock. */
-Formulaires.ingredientsVersCourses = function () {
-  const ing = ingredientsDeLaSemaine(ui.semaine);
+/* « source.evenement » : le menu d'un événement au lieu de la semaine
+   (18/10/2026). Tout le reste — la réserve, le placard, le choix de la liste,
+   les unités — est exactement le même travail : on ne l'écrit pas deux fois. */
+Formulaires.ingredientsVersCourses = function (source) {
+  const ev = source && source.evenement;
+  const ing = ev && typeof ingredientsDeLEvenement === "function"
+    ? ingredientsDeLEvenement(ev) : ingredientsDeLaSemaine(ui.semaine);
   if (!ing.length) {
-    toast("Aucun plat de la bibliothèque prévu cette semaine");
+    toast(ev ? "Aucun plat du cahier dans ce menu"
+      : "Aucun plat de la bibliothèque prévu cette semaine");
     return;
   }
   /* « Déjà présent » se juge sur LA LISTE VISÉE, pas sur toutes à la fois.
@@ -1519,7 +1755,7 @@ Formulaires.ingredientsVersCourses = function () {
     '<button class="btn" data-action="fermer">Annuler</button>' +
     '<button class="btn principal" data-role="ok">Ajouter aux courses</button></div></div>';
 
-  ouvrirFeuille("Ingrédients de la semaine", html, (f) => {
+  ouvrirFeuille(ev ? "Ingrédients — " + (ev.nom || "l'événement") : "Ingrédients de la semaine", html, (f) => {
     /* Changer de liste change ce qui s'y trouve déjà : on relit les cases et
        les mentions, sinon l'écran parlerait d'une autre liste que celle visée. */
     const champListe0 = f.querySelector("#choix-liste");
@@ -1616,10 +1852,19 @@ Formulaires.recette = function (rid) {
     '<label class="puce"><input type="checkbox" name="vege" style="width:auto"' + (cour.vegetarien ? " checked" : "") + "> Végétarien</label>" +
     '<label class="puce"><input type="checkbox" name="rapide" style="width:auto"' + (cour.rapide ? " checked" : "") + "> Rapide</label>" +
     '<label class="puce"><input type="checkbox" name="thermomix" style="width:auto"' + (cour.thermomix ? " checked" : "") + "> 🍲 Robot</label>" +
-    '<label class="puce"><input type="checkbox" name="dessert" style="width:auto"' + (cour.plat === "dessert" ? " checked" : "") + "> 🍰 Dessert</label>" +
     "</div>" +
-    '<p class="aide" style="margin:-.6rem 0 1rem">Un dessert n’est jamais proposé ' +
-    "par le générateur de menus : il se range à part, dans le cahier.</p>" +
+    /* UN CHOIX, PLUS UNE CASE (18/10/2026). La case « Dessert » écrivait
+       « principal » dès qu'elle était décochée : un apéritif modifié devenait
+       un plat. Et les services d'un repas de fête en demandaient davantage. */
+    '<label class="champ"><span>Place au repas</span><select name="place">' +
+    [["principal", "🍽️ Plat principal"], ["apero", "🥂 Apéritif"], ["entree", "🥗 Entrée"],
+      ["accompagnement", "🥔 Accompagnement"], ["dessert", "🍰 Dessert"], ["boisson", "🍷 Boisson"]]
+      .map(([v, l]) => '<option value="' + v + '"' +
+        ((cour.plat || "principal") === v ? " selected" : "") + ">" + l + "</option>").join("") +
+    "</select></label>" +
+    '<p class="aide" style="margin:-.6rem 0 1rem">Seuls les <b>plats principaux</b> sont ' +
+    "proposés par le générateur de menus de la semaine. Les autres se rangent dans le " +
+    "cahier et servent aux menus des événements.</p>" +
     '<label class="champ"><span>Saisons</span></label>' +
     puceMultiple("saisons", SAISONS.map((x) => ({ val: x.val, html: x.emoji + " " + x.nom })),
       cour.saisons || []) +
@@ -1759,7 +2004,7 @@ Formulaires.recette = function (rid) {
         vegetarien: !!d.get("vege"),
         rapide: !!d.get("rapide"),
         thermomix: !!d.get("thermomix"),
-        plat: d.get("dessert") ? "dessert" : "principal",
+        plat: String(d.get("place") || "principal"),
         portions: Math.max(1, Math.min(30, Number(d.get("portions")) || PORTIONS_BASE)),
         lien: String(d.get("lien") || "").trim(),
         saisons: valeursMulti(f, "saisons"),
@@ -1777,6 +2022,7 @@ Formulaires.recette = function (rid) {
 };
 
 /* ================================ RAPPEL ================================ */
+
 
 Formulaires.note = function (nid) {
   const n = nid ? etat.notes.find((x) => x.id === nid) : null;
@@ -1994,6 +2240,85 @@ Formulaires.presence = function (mid) {
    choisit parmi ceux qui sont là — toute la famille, pas seulement les
    participants, lui compris. Le choix est rangé dans la tâche
    (t.attributions), écrite par les seuls administrateurs. */
+/* ================= À QUELLE FRÉQUENCE ? (28/09/2026) =================
+
+   On touche l'étiquette d'une tâche (« Chaque semaine », « mar. · ven. »…) et
+   on change sa fréquence sans ouvrir la fiche. Contrairement au prénom, qui
+   ne vaut que pour un passage, ceci vaut POUR TOUTES LES FOIS : la feuille le
+   dit en toutes lettres.
+
+   Les rythmes espacés restent à la fiche : ils demandent deux choix de plus,
+   et les entasser ici ferait de ce raccourci un second formulaire. */
+Formulaires.frequence = function (tid) {
+  if (!estAdmin()) return;
+  const t = etat.taches.find((x) => x.id === tid);
+  if (!t) return;
+  const avecJours = planningActif() || t.frequence === "jours";
+  const espace = rythmeDe(t) > 1;
+
+  const choix = [["jour", "Chaque jour"]]
+    .concat(avecJours ? [["jours", "Certains jours"]] : [])
+    .concat([["semaine", "Chaque semaine"], ["mois", "Chaque mois"]]);
+
+  const html = '<p class="aide" style="margin:0 0 .8rem"><b>' + esc((t.emoji || "🧹") + " " + t.nom) +
+    "</b> — à refaire quand ? Ce choix vaut <b>pour toutes les fois</b>.</p>" +
+    '<div class="puces" id="choix-freq" style="margin-bottom:1rem">' +
+    choix.map(([v, l]) => '<button type="button" class="puce' + (t.frequence === v ? " on" : "") +
+      '" data-freq="' + v + '">' + esc(l) + "</button>").join("") + "</div>" +
+    '<div id="choix-jours-court"' + (t.frequence === "jours" ? "" : " hidden") + ">" +
+    '<p class="aide" style="margin:0 0 .5rem">Quels jours ?</p>' +
+    '<div class="puces" id="jours-court" style="margin-bottom:1rem">' +
+    JOURS.map((nom, k) => '<button type="button" class="puce' +
+      (joursDeTache(t).indexOf(k + 1) !== -1 ? " on" : "") + '" data-jour="' + (k + 1) + '">' +
+      esc(nom.slice(0, 3)) + "</button>").join("") + "</div></div>" +
+    (espace
+      ? '<p class="aide">⚠️ Cette tâche revient <b>' + esc(libelleRythme(t.frequence, rythmeDe(t)).toLowerCase()) +
+        "</b>. En changeant ici, elle reviendra <b>chaque fois</b> ; le rythme espacé se règle dans la fiche ✏️.</p>"
+      : '<p class="aide">Pour un rythme plus espacé (toutes les 2 semaines, une fois par an…), ' +
+        "passez par la fiche ✏️.</p>") +
+    '<button type="button" class="btn plein" data-action="fermer" style="margin-top:.6rem">Fermer</button>';
+
+  ouvrirFeuille("À refaire", html, (feuille) => {
+    /* Les jours se cochent librement ; la fréquence, elle, ferme la feuille —
+       sauf « certains jours », qui attend justement qu'on choisisse les jours. */
+    const zoneJours = feuille.querySelector("#choix-jours-court");
+    const joursChoisis = () => [...feuille.querySelectorAll("#jours-court .on")]
+      .map((b) => Number(b.dataset.jour)).sort((a, b) => a - b);
+    const poser = (freq) => {
+      const jours = freq === "jours" ? joursChoisis() : [];
+      if (freq === "jours" && !jours.length) return;      // au moins un jour
+      if (appliquerFrequence(t, freq, jours, 1, 0)) sauver("taches");
+      rendre();
+    };
+    feuille.querySelector("#choix-freq").onclick = (ev) => {
+      const b = ev.target.closest("[data-freq]");
+      if (!b) return;
+      feuille.querySelectorAll("#choix-freq .puce").forEach((p) => p.classList.remove("on"));
+      b.classList.add("on");
+      const freq = b.dataset.freq;
+      zoneJours.hidden = freq !== "jours";
+      if (freq === "jours") {
+        /* Aucun jour encore coché : on propose celui d'aujourd'hui, pour que
+           le choix veuille déjà dire quelque chose. */
+        if (!joursChoisis().length) {
+          const auj = feuille.querySelector('[data-jour="' + numJour(new Date()) + '"]');
+          if (auj) auj.classList.add("on");
+        }
+        poser("jours");
+        return;
+      }
+      poser(freq);
+      fermerFeuille();
+    };
+    feuille.querySelector("#jours-court").onclick = (ev) => {
+      const b = ev.target.closest("[data-jour]");
+      if (!b) return;
+      b.classList.toggle("on");
+      poser("jours");
+    };
+  });
+};
+
 Formulaires.attribuer = function (tid, iso) {
   if (!estAdmin()) return;
   const t = etat.taches.find((x) => x.id === tid);
@@ -2490,6 +2815,9 @@ Formulaires.invitation = async function (pourId) {
       const inv = await Invitations.creer(jours, cible ? cible.id : null);
       bouton.disabled = false;
       if (!inv) { toast("Création impossible"); return; }
+      /* Pour pouvoir dire plus tard « envoyée il y a 3 jours, toujours pas
+         ouverte » : le serveur, lui, ne se relit pas. */
+      noterInvitationEnvoyee(inv.pour);
       const lien = Invitations.lien(inv.jeton);
       const fin = new Date(inv.expireLe).toLocaleDateString("fr-FR",
         { day: "numeric", month: "long", year: "numeric" });
@@ -2537,6 +2865,96 @@ Formulaires.invitation = async function (pourId) {
   });
 };
 
+/* ============== METTRE UN RAPPEL DANS SON AGENDA (24/09/2026) ==============
+
+   Trois chemins, parce qu'aucun ne marche partout — comme pour l'export des
+   données : la feuille de partage (iPhone, où un téléchargement lancé depuis
+   l'icône de l'écran d'accueil ne mène nulle part), le téléchargement
+   classique (Android, ordinateur), et Google Agenda, qui se passe de fichier.
+   L'écran montre d'abord ce qui partira : personne n'aime envoyer quelque
+   chose sans savoir quoi. */
+Formulaires.agenda = function (id) {
+  const n = (etat.notes || []).find((x) => x.id === id);
+  if (!n || !estRendezVous(n)) { toast("Ce rappel n'a pas de date"); return; }
+
+  const heure = heureJolie(n.heure);
+  const quand = dateJolie(n.date, true) + (heure ? " à " + heure : ", toute la journée");
+  const qui = (n.concernes || []).map((i) => membre(i)).filter(Boolean);
+
+  /* Téléphone ou ordinateur : ce n'est pas le même chemin le plus court.
+     Sur un téléphone, le fichier ouvre l'agenda tout seul ; sur un ordinateur,
+     il tombe dans les téléchargements sans rien montrer — Google Agenda, lui,
+     affiche aussitôt un rendez-vous rempli (24/09/2026). */
+  const surTelephone = /iPhone|iPad|iPod|Android/.test(navigator.userAgent || "");
+
+  /* Le partage de fichiers n'existe pas partout : on essaie avec CE
+     fichier-ci, pas avec un autre — le téléphone peut accepter une photo et
+     refuser un agenda. */
+  let partageOk = false;
+  try { partageOk = !!(navigator.canShare && navigator.canShare({ files: [fichierIcs(n)] })); }
+  catch (e) { partageOk = false; }
+
+  const html = '<div class="bandeau info">📅<div><b>' + esc(n.titre) + "</b><br>" + esc(quand) +
+    (n.lieu ? " · " + esc(n.lieu) : "") +
+    (qui.length ? "<br>Pour " + esc(qui.map((m) => m.prenom).join(", ")) : "") +
+    "</div></div>" +
+
+    '<p class="aide">Il ira dans <b>votre agenda</b>' +
+    (RYTHME_ICS[n.repetition] ? ", en se répétant comme ici" : "") +
+    ", avec une alerte <b>" + (n.heure ? "30 minutes avant" : "la veille au matin") +
+    "</b>. Vous pourrez tout changer avant d'enregistrer.</p>" +
+
+    (surTelephone
+      ? (partageOk
+        ? '<button class="btn principal plein" data-role="partager">📅 Ajouter à mon agenda</button>' +
+          '<button class="btn plein" data-role="fichier" style="margin-top:.5rem">Télécharger le fichier</button>'
+        : '<button class="btn principal plein" data-role="fichier">📅 Ajouter à mon agenda</button>') +
+        '<button class="btn plein" data-role="google" style="margin-top:.5rem">Ou passer par Google Agenda</button>'
+      /* Sur un ordinateur : Google d'abord, et l'on prévient que le fichier,
+         lui, ne fait qu'atterrir dans les téléchargements. */
+      : '<button class="btn principal plein" data-role="google">📅 Ouvrir dans Google Agenda</button>' +
+        '<button class="btn plein" data-role="fichier" style="margin-top:.5rem">Ou télécharger le fichier (.ics)</button>' +
+        '<p class="aide" style="margin-top:.6rem">Sur un ordinateur, le fichier va dans vos ' +
+        "téléchargements : il faut ensuite l'ouvrir pour que votre logiciel d'agenda le prenne.</p>") +
+
+    '<p class="aide" style="margin-top:.8rem">C\'est une <b>copie</b> : si vous modifiez ' +
+    "ce rappel dans MaTribu, l'agenda ne suivra pas. MaTribu, de son côté, ne lit " +
+    "jamais votre agenda.</p>" +
+    '<button class="btn plein" data-action="fermer" style="margin-top:1rem">Fermer</button>';
+
+  ouvrirFeuille("Dans mon agenda", html, (feuille) => {
+    const b = (role) => feuille.querySelector('[data-role="' + role + '"]');
+    /* Le téléchargement le dit : sur un ordinateur, rien ne s'ouvre, et on ne
+       devine pas qu'un fichier est parti quelque part. */
+    const enregistrer = () => {
+      telechargerIcs(n);
+      toast("Fichier d'agenda enregistré dans vos téléchargements");
+      fermerFeuille();
+    };
+    const partager = b("partager");
+    if (partager) {
+      partager.onclick = async () => {
+        try {
+          await navigator.share({ files: [fichierIcs(n)], title: n.titre });
+          fermerFeuille();
+        } catch (e) {
+          /* Annulé par la personne : elle est toujours devant l'écran, on ne
+             fait rien. Refusé par l'appareil — certains ne savent pas
+             partager un fichier d'agenda —, on bascule sur le téléchargement :
+             sans cela il ne se passait RIEN du tout (24/09/2026). */
+          if (e && e.name === "AbortError") return;
+          enregistrer();
+        }
+      };
+    }
+    b("fichier").onclick = enregistrer;
+    b("google").onclick = () => {
+      window.open(lienGoogleAgenda(n), "_blank", "noopener");
+      fermerFeuille();
+    };
+  });
+};
+
 /* ==================== PRÉSENTATION DE BIENVENUE ====================
 
    Un petit carrousel à la première ouverture sur un appareil : un volet par
@@ -2562,15 +2980,35 @@ Formulaires.bienvenue = function () {
       "une seule personne. Ils remontent sur l'accueil le jour venu."]
   };
   const volets = ongletsVisibles().filter((o) => textes[o.vue]).map((o) => textes[o.vue]);
-  if (pointsActifs()) volets.push(["🌟", "Les points", "Les tâches validées rapportent des points, " +
-    "à échanger contre de petits plaisirs en famille. Et un objectif commun, à atteindre tous ensemble."]);
+  if (pointsPersoActifs()) {
+    volets.push(["🌟", "Les points", "Les tâches validées rapportent des points, " +
+      "à échanger contre de petits plaisirs en famille. Et un objectif commun, à atteindre tous ensemble."]);
+  } else if (pointsActifs()) {
+    volets.push(["🤝", "Les points", "Les tâches validées rapportent des points à toute la tribu, " +
+      "pour atteindre ensemble un objectif commun. Chacun voit ce qu'il a apporté ; il n'y a " +
+      "ni classement ni compteur personnel."]);
+  }
+  /* LE DERNIER VOLET NE RACONTE PLUS, IL FAIT FAIRE (22/09/2026).
+     Deux tribus sur trois n'ont jamais rouvert l'application après le jour de
+     leur création. Ce qui distingue celles qui reviennent tient à ces deux
+     gestes-là : l'icône posée sur l'écran d'accueil (83 % reviennent, contre
+     21 %) et une deuxième personne qui rejoint (75 %, contre 9 %). Autant les
+     proposer là où tout le monde passe. */
   volets.push(["👋", "Bienvenue dans votre tribu, " + esc(moi ? moi.prenom : "") + " !",
-    "Tout est partagé en temps réel entre les appareils de la famille. " +
-    "Vous retrouverez cette présentation à tout moment depuis votre profil."]);
+    "Deux gestes, et elle est à vous : posez MaTribu sur votre écran d'accueil " +
+    "pour la retrouver demain, et faites entrer quelqu'un — tout se partage " +
+    "alors en temps réel entre vos appareils.",
+    '<div class="rangee-btn" style="margin-top:.9rem">' +
+    (ouvertDepuisIcone() ? "" :
+      '<button class="btn principal" data-role="icone">📲 Sur l\'écran d\'accueil</button>') +
+    (estAdmin()
+      ? '<button class="btn' + (ouvertDepuisIcone() ? " principal" : "") +
+        '" data-role="inviter">💌 Inviter quelqu\'un</button>'
+      : "") + "</div>"]);
 
   const html = '<div class="carrousel" id="carrousel">' +
     volets.map((v) => '<div class="volet"><div class="grand">' + v[0] + "</div><h4>" + v[1] +
-      "</h4><p>" + v[2] + "</p></div>").join("") + "</div>" +
+      "</h4><p>" + v[2] + "</p>" + (v[3] || "") + "</div>").join("") + "</div>" +
     '<div class="points-carrousel" id="points-carrousel">' +
     volets.map((v, i) => "<i" + (i === 0 ? ' class="on"' : "") + "></i>").join("") + "</div>" +
     '<div class="rangee-btn">' +
@@ -2615,6 +3053,13 @@ Formulaires.bienvenue = function () {
          Le balayage au doigt, lui, reste natif et fluide. */
       bande.scrollTo({ left: courant * bande.clientWidth, behavior: "auto" });
     };
+    /* Les deux gestes du dernier volet : on referme la présentation avant
+       d'ouvrir la feuille suivante, sinon elle se remplacerait elle-même. */
+    const bIcone = feuille.querySelector('[data-role="icone"]');
+    if (bIcone) bIcone.onclick = () => { terminer(); Formulaires.poserIcone(); };
+    const bInviter = feuille.querySelector('[data-role="inviter"]');
+    if (bInviter) bInviter.onclick = () => { terminer(); Formulaires.invitation(); };
+
     feuille.querySelector('[data-role="passer"]').onclick = terminer;
     /* Fermée autrement (voile, poignée) : c'est vu quand même. */
     const voile = document.getElementById("voile");
@@ -2826,6 +3271,117 @@ Formulaires.demenagement = function () {
   });
 };
 
+/* ==================== SUR L'ÉCRAN D'ACCUEIL ====================
+
+   Mesuré sur les 73 tribus du lancement (22/09/2026) : celles dont l'appli
+   est posée sur l'écran d'accueil sont revenues un autre jour dans 83 % des
+   cas, contre 21 % pour celles restées dans le navigateur. Sept appareils
+   sur quatre-vingt-huit l'avaient posée. Une adresse se perd dans les
+   onglets ; une icône, non.
+
+   Le geste n'est pas le même sur iPhone et sur Android, et il n'existe pas du
+   tout dans le navigateur d'Instagram ou de Facebook. Cette feuille ne
+   décrit donc que le téléphone qu'on a dans la main. */
+Formulaires.poserIcone = function () {
+  const ua = navigator.userAgent || "";
+  const pomme = /iPhone|iPad|iPod/.test(ua);
+  const android = /Android/.test(ua);
+  const integre = navigateurIntegre();
+  const h = [];
+
+  if (ouvertDepuisIcone()) {
+    h.push('<div class="bandeau info">✅<div><b>C\'est déjà fait sur cet appareil.</b> ' +
+      "Vous ouvrez MaTribu depuis son icône.</div></div>" +
+      '<p class="aide">L\'icône se pose une fois par appareil : chaque personne de ' +
+      "la famille a le sien à équiper.</p>");
+
+  } else if (integre) {
+    /* Le navigateur d'une application sociale : aucun bouton n'y pose
+       d'icône, et ce qu'on y crée reste enfermé dans sa mémoire à lui. */
+    /* « d'Instagram », mais « de Facebook » : la petite apostrophe compte. */
+    const deQui = (integre === "Instagram" ? "d'" : "de ") + integre;
+    h.push('<div class="bandeau">📱<div><b>Vous êtes dans le navigateur ' + esc(deQui) +
+      ".</b> Il ne sait pas poser d'icône, et il a sa propre mémoire : " +
+      "ouvrez d'abord MaTribu dans votre vrai navigateur.</div></div>");
+    h.push('<div class="carte"><div class="carte-titre">Pour en sortir</div>' +
+      '<div class="ligne"><span class="etape">1</span><div class="ligne-corps">' +
+      "<b>Touchez « " + (pomme ? "⋯" : "⋮") + " »</b><small>En haut à droite de l'écran.</small></div></div>" +
+      '<div class="ligne"><span class="etape">2</span><div class="ligne-corps">' +
+      "<b>« Ouvrir dans " + (pomme ? "Safari" : "Chrome") + " »</b><small>Ou « Ouvrir dans le navigateur ».</small></div></div>" +
+      '<div class="ligne"><span class="etape">3</span><div class="ligne-corps">' +
+      "<b>Revenez ici</b><small>Vous retrouverez ce bouton dans « Premiers pas », sur l'accueil.</small></div></div></div>");
+    h.push('<button class="btn plein" data-action="copier" data-texte="' + esc(ADRESSE_NOUVELLE) +
+      '">Copier l\'adresse de MaTribu</button>');
+
+  } else {
+    /* Le cas normal. Sur iPhone, l'icône est une application séparée : elle
+       repart inconnue, et il lui faut son propre code. Sur Android, elle
+       partage la mémoire du navigateur — on ne fait donc pas créer un code
+       pour rien, on le dit seulement en cas de surprise. */
+    h.push('<div class="bandeau info">📲<div><b>Pour la retrouver demain.</b> ' +
+      "Dans un navigateur, l'adresse se perd entre les onglets. Sur l'écran " +
+      "d'accueil, MaTribu s'ouvre comme une application, d'une seule " +
+      "pression.</div></div>");
+
+    if (pomme) {
+      h.push('<div class="carte"><div class="carte-titre">Sur votre iPhone, en trois gestes</div>' +
+        '<div class="ligne"><span class="etape">1</span><div class="ligne-corps">' +
+        "<b>Touchez « Partager »</b><small>Le carré avec une flèche vers le haut, " +
+        "en bas de l'écran de Safari.</small></div></div>" +
+        '<div class="ligne"><span class="etape">2</span><div class="ligne-corps">' +
+        "<b>« Sur l'écran d'accueil »</b><small>Faites défiler la liste : c'est plus bas.</small></div></div>" +
+        '<div class="ligne"><span class="etape">3</span><div class="ligne-corps">' +
+        "<b>« Ajouter »</b><small>En haut à droite. L'icône apparaît avec vos applications.</small></div></div></div>");
+      h.push('<div class="bandeau">⚠️<div><b>Sur iPhone, l\'icône est une application ' +
+        "à part.</b> Elle s'ouvrira sans connaître votre famille et proposera d'en " +
+        "créer une — n'en créez surtout pas une deuxième. Créez plutôt votre code " +
+        "maintenant, pendant que vous êtes connectée, et donnez-le-lui.</div></div>");
+      h.push('<button class="btn principal plein" data-action="mon-appareil">' +
+        "📱 Créer mon code, puis poser l'icône</button>");
+    } else if (android) {
+      h.push('<div class="carte"><div class="carte-titre">Sur votre téléphone, en deux gestes</div>' +
+        '<div class="ligne"><span class="etape">1</span><div class="ligne-corps">' +
+        "<b>Touchez « ⋮ »</b><small>En haut à droite du navigateur.</small></div></div>" +
+        '<div class="ligne"><span class="etape">2</span><div class="ligne-corps">' +
+        "<b>« Installer l'application »</b><small>Ou « Ajouter à l'écran d'accueil ».</small></div></div></div>");
+      h.push('<button class="btn principal plein" data-role="installer">📲 Poser l\'icône</button>');
+      h.push('<p class="aide" style="margin-top:.6rem">Si ce bouton ne fait rien, votre ' +
+        "navigateur préfère passer par son menu « ⋮ » : le geste ci-dessus marche toujours. " +
+        "Normalement, l'icône retrouve votre famille toute seule ; si elle s'ouvre vide, " +
+        'revenez ici et touchez <b>« Connecter un appareil »</b> dans votre profil.</p>');
+    } else {
+      h.push('<p class="aide">Sur un ordinateur, cherchez l\'icône d\'installation ' +
+        "à droite de la barre d'adresse (un écran avec une flèche), ou le menu " +
+        "« ⋮ » puis « Installer MaTribu ». Mais c'est sur le téléphone que " +
+        "l'icône change tout : c'est là qu'on ouvre l'application le matin.</p>");
+    }
+  }
+
+  h.push('<button class="btn plein" data-action="fermer" style="margin-top:1rem">Fermer</button>');
+
+  ouvrirFeuille("Sur l'écran d'accueil", h.join(""), (feuille) => {
+    /* Les boutons qui ouvrent une autre feuille ferment celle-ci d'abord,
+       sinon la seconde remplacerait la première sans qu'on sache d'où on vient. */
+    feuille.querySelectorAll('[data-action="mon-appareil"]')
+      .forEach((b) => b.addEventListener("click", fermerFeuille));
+
+    const bi = feuille.querySelector('[data-role="installer"]');
+    if (!bi) return;
+    bi.onclick = async () => {
+      if (!inviteInstallation) {
+        toast("Passez par le menu « ⋮ » du navigateur");
+        return;
+      }
+      inviteInstallation.prompt();
+      try { await inviteInstallation.userChoice; } catch (e) { }
+      /* Une proposition ne sert qu'une fois : le navigateur en renverra une
+         plus tard s'il le juge utile. */
+      inviteInstallation = null;
+      fermerFeuille();
+    };
+  });
+};
+
 /* ==================== CONNECTER UN AUTRE APPAREIL ==================== */
 
 /* Le cas typique, et déroutant : on ajoute MaTribu à l'écran d'accueil de son
@@ -2949,12 +3505,32 @@ Formulaires.ajustementPoints = function (mid) {
     '<input type="text" name="motif" maxlength="60" placeholder="Coup de main exceptionnel"></label>' +
     '<div class="rangee-btn" style="margin-top:1.2rem">' +
     '<button type="button" class="btn" data-action="fermer">Annuler</button>' +
-    '<button type="submit" class="btn principal">Appliquer</button></div></form>';
+    '<button type="submit" class="btn principal">Appliquer</button></div>' +
+    /* REMETTRE À ZÉRO (28/09/2026) : il fallait calculer soi-même le nombre
+       exact à retirer. C'est le geste d'un nouveau départ — celui qu'on fait
+       quand le défi commun repart de zéro. */
+    (pointsDe(m.id)
+      ? '<hr class="sep"><button type="button" class="btn doux plein" data-role="zero">' +
+        "🔄 Remettre le compteur à zéro</button>" +
+        '<p class="aide">L\'historique n\'est <b>pas effacé</b> : une ligne ' +
+        "« Remise à zéro » s'y ajoute. Le <b>défi commun</b> n'est pas touché."
+        + "</p>"
+      : "") + "</form>";
 
   ouvrirFeuille("Ajuster les points de " + m.prenom, html, (f) => {
     f.querySelector('[data-role="rapide"]').onclick = (ev) => {
       const b = ev.target.closest("[data-n]");
       if (b) f.querySelector('[name="delta"]').value = b.dataset.n;
+    };
+    const bz = f.querySelector('[data-role="zero"]');
+    if (bz) bz.onclick = async () => {
+      const avant = pointsDe(m.id);
+      const ok = await confirmer(m.prenom + " a " + avant + " points. Son compteur repart " +
+        "de zéro. Son historique et ses cadeaux déjà obtenus ne bougent pas.",
+        { titre: "Remettre à zéro", ok: "Remettre à zéro", danger: true });
+      if (!ok) return;
+      fermerFeuille();
+      if (await Actions.remettreAZero(m.id)) toast(m.prenom + " repart de zéro 🔄");
     };
     f.onsubmit = (ev) => {
       ev.preventDefault();
@@ -2963,6 +3539,90 @@ Formulaires.ajustementPoints = function (mid) {
       if (!delta) { fermerFeuille(); return; }
       fermerFeuille();
       Actions.ajusterPoints(m.id, delta, String(d.get("motif") || "").trim() || "Ajustement");
+    };
+  });
+};
+
+/* L'OBJECTIF COMMUN, VU DE N'IMPORTE OÙ (28/09/2026).
+
+   Ce que la pastille ouvre en mode collectif. On y met ce qu'on veut savoir
+   en un coup d'œil : où en est la tribu, et ce qu'on y a mis soi-même. Rien
+   sur les autres : c'est la règle de ce mode. */
+Formulaires.objectifCommun = function () {
+  const o = objectifActif();
+  const total = pointsCollectifs();
+  const part = contributionDe(moi.id);
+
+  const jauge = o
+    ? '<div class="carte" style="text-align:center">' +
+      '<div style="font-size:2rem;line-height:1">' + esc(o.emoji || "🎯") + "</div>" +
+      '<div style="font-family:var(--font-display);font-size:1.15rem;margin:.25rem 0 .1rem">' +
+      esc(o.nom) + "</div>" +
+      '<div class="barre-progression" style="margin-top:.6rem"><i style="width:' +
+      Math.min(100, Math.round(total / o.cible * 100)) + '%"></i></div>' +
+      '<div style="margin-top:.5rem;font-weight:700">' + total + " / " + o.cible + " points</div>" +
+      '<div class="aide">Points gagnés ' + depuisQuandObjectif() + "</div>" +
+      (total >= o.cible
+        ? '<div class="bandeau info" style="margin:.7rem 0 0;text-align:left">🎉<div>' +
+          "<b>Objectif atteint !</b> À vous de fêter ça.</div></div>"
+        : '<div class="aide" style="margin-top:.35rem">Encore ' + (o.cible - total) +
+          " points, tous ensemble</div>") + "</div>"
+    : '<div class="carte" style="text-align:center">' +
+      '<div style="font-size:2rem;line-height:1">🤝</div>' +
+      '<div style="font-family:var(--font-display);font-size:1.15rem;margin:.25rem 0 .1rem">' +
+      total + " points, tous ensemble</div>" +
+      '<div class="aide">Points gagnés ' + depuisQuandObjectif() + "</div>" +
+      (estAdmin()
+        ? '<p class="aide" style="margin-top:.6rem">Aucun objectif n\'est lancé. ' +
+          "Vous pouvez en poser un depuis l'administration.</p>"
+        : "") + "</div>";
+
+  const moiDedans = '<div class="carte"><div class="ligne">' + avatarDe(moi) +
+    '<div class="ligne-corps"><b>Vous y avez mis ' + part + " point" + (part > 1 ? "s" : "") +
+    "</b><small>" + (part
+      ? "sur les " + total + " de toute la tribu"
+      : "Validez une tâche ou un repas pour y contribuer.") + "</small></div></div></div>";
+
+  ouvrirFeuille("Objectif commun", jauge + moiDedans +
+    '<button class="btn plein" data-action="points-historique" style="margin-top:.8rem">' +
+    "🧾 Le détail de ce que j'ai gagné</button>" +
+    '<button class="btn plein" data-action="fermer" style="margin-top:.5rem">Fermer</button>');
+};
+
+/* REMETTRE TOUT LE MONDE À ZÉRO (28/09/2026).
+
+   C'est le geste qui accompagne un nouveau défi commun : on repart à zéro
+   ensemble. On annonce qui perd quoi AVANT de le faire — un compteur remis à
+   zéro sans prévenir, c'est une dispute assurée. */
+Formulaires.remiseAZeroTous = function () {
+  if (!estAdmin()) return;
+  const gens = classement().filter((x) => x.pts);
+  if (!gens.length) { toast("Tous les compteurs sont déjà à zéro"); return; }
+
+  const html = '<p class="aide" style="margin:0 0 .9rem">Les compteurs repartent de zéro. ' +
+    "<b>L'historique n'est pas effacé</b> : chacun garde le détail de ce qu'il a gagné, " +
+    "et les cadeaux déjà obtenus restent acquis.</p>" +
+    '<div class="carte">' + gens.map((x) =>
+      '<div class="ligne">' + avatarDe(x.m) + '<div class="ligne-corps"><b>' + esc(x.m.prenom) +
+      "</b><small>" + x.pts + " points → 0</small></div></div>").join("") + "</div>" +
+    '<div class="bandeau info">🤝<div>Le <b>défi commun</b> n\'est pas touché : il compte les ' +
+    "points gagnés, jamais les retraits. Pour le relancer, c'est dans " +
+    "<b>Administration → Objectif commun</b>.</div></div>" +
+    '<button type="button" class="btn danger plein" data-role="zero">🔄 Tout remettre à zéro</button>' +
+    '<button type="button" class="btn plein" data-action="fermer" style="margin-top:.6rem">Annuler</button>';
+
+  ouvrirFeuille("Remettre les compteurs à zéro", html, (f) => {
+    f.querySelector('[data-role="zero"]').onclick = async () => {
+      const ok = await confirmer("Les compteurs de " + gens.length + " personne" +
+        (gens.length > 1 ? "s repartent" : " repart") + " de zéro. " +
+        "Les historiques et les cadeaux déjà obtenus ne bougent pas.",
+        { titre: "Tout remettre à zéro", ok: "Remettre à zéro", danger: true });
+      if (!ok) return;
+      fermerFeuille();
+      let faits = 0;
+      for (const x of gens) { if (await Actions.remettreAZero(x.m.id)) faits++; }
+      toast(faits === gens.length ? "Tout le monde repart de zéro 🔄"
+        : faits + " compteur" + (faits > 1 ? "s remis" : " remis") + " à zéro sur " + gens.length);
     };
   });
 };
@@ -2991,7 +3651,11 @@ Formulaires.historique = function (mid) {
     tous.length + " mouvement" + (tous.length > 1 ? "s" : "") +
     (tous.length > sien.length ? " • les " + sien.length + " derniers" : "") +
     "</small></div>" +
-    '<span class="etiquette or">' + solde + " pts</span></div>";
+    /* En mode collectif, le solde n'a plus cours : ce qui reste vrai, c'est
+       ce qu'on a apporté (28/09/2026). */
+    '<span class="etiquette or">' +
+    (pointsPersoActifs() ? solde + " pts" : contributionDe(cible.id) + " apportés") +
+    "</span></div>";
 
   const html = entete + (sien.length
     ? sien.map((e) =>
@@ -3101,11 +3765,19 @@ Formulaires.menuProfil = function () {
     '<span class="avatar">' + esc(moi.emoji || "🙂") + "</span>" +
     '<div class="ligne-corps"><b>' + esc(moi.prenom) + "</b><small>" +
     (estAdmin() ? "Administrateur" : "Membre") + " • " + esc(etat.famille.nom) + "</small></div>" +
-    (pointsActifs() ? '<span class="etiquette or">' + pointsDe(moi.id) + " pts</span>" : "") + "</div>" +
+    /* Ma bourse, ou ce que j'ai apporté quand il n'y a plus de bourse. */
+    (pointsPersoActifs() ? '<span class="etiquette or">' + pointsDe(moi.id) + " pts</span>"
+      : pointsActifs() ? '<span class="etiquette or">' + contributionDe(moi.id) + " apportés</span>"
+        : "") + "</div>" +
     '<p style="margin:.6rem 0 1rem">' + etatTexte + "</p>" + alerteCrypto +
-    (pointsActifs()
+    (pointsPersoActifs()
       ? '<button class="btn plein" data-action="aller" data-vue="points" style="margin-bottom:.5rem">🌟 Points & cadeaux</button>'
-      : "") +
+      : pointsActifs()
+        /* L'écran « Points & cadeaux » n'existe plus dans ce mode, mais le
+           détail de ce qu'on a gagné, si : c'est la réponse à « pourquoi
+           j'ai ce chiffre-là ? ». */
+        ? '<button class="btn plein" data-action="points-historique" style="margin-bottom:.5rem">🧾 Mon historique de points</button>'
+        : "") +
     '<button class="btn plein" data-action="aller" data-vue="recettes" style="margin-bottom:.5rem">📖 Mes recettes</button>' +
     (estAdmin()
       ? '<button class="btn plein" data-action="aller" data-vue="admin" style="margin-bottom:.5rem">⚙️ Administration</button>'
@@ -3422,6 +4094,9 @@ Formulaires.consulterRecette = function (rid) {
   }
 
   html += carteMacros(r);          // rien si l'option est décochée
+  /* Module « Les petits à table » : rien si le fichier n'est pas livré, rien
+     si la famille n'a coché aucune tranche (18/10/2026). */
+  html += (typeof cartePetits === "function" ? cartePetits(r) : "");
   html += '<div class="sous-titre" style="margin-top:.4rem"><h3>Ingrédients</h3>' +
     '<span class="etiquette">' + ings.length + "</span></div>";
   html += ings.length
@@ -3828,52 +4503,109 @@ function explicationProfils(r) {
    données restent, elles sont simplement rangées hors de vue, et un
    administrateur peut les faire revenir à tout moment. */
 
+/* LA BARRE DU BAS : CHOISIR, ET RANGER (18/10/2026, demande d'Amandine).
+
+   On pouvait masquer un onglet, jamais le déplacer. La fenêtre montre
+   maintenant un APERÇU de la barre qui se réorganise pendant qu'on touche —
+   c'est l'effet « widgets » demandé — et chaque ligne porte ses flèches.
+
+   Des flèches et non un glisser-déposer : il n'y en a nulle part ailleurs dans
+   l'application, c'est délicat au doigt sur une ligne étroite, et cela se teste
+   mal. L'accueil ne bouge pas et ne se masque pas. */
 Formulaires.onglets = function () {
   if (!estAdmin()) { toast("Seul un administrateur peut changer les onglets"); return; }
-  const caches = ongletsMasques();
+  /* On travaille sur une copie : rien n'est enregistré avant « Enregistrer ». */
+  let ordre = ongletsOrdonnes().filter((o) => !o.obligatoire).map((o) => o.vue);
+  let caches = ongletsMasques().slice();
 
   const html = '<div id="f-onglets">' +
-    '<p class="aide" style="margin-bottom:.9rem">Décochez ce que la famille n’utilise ' +
-    "pas. L’accueil reste toujours là : c’est le chemin de retour.</p>" +
-    '<div class="carte">' + ONGLETS.map((o) => {
-      const actif = o.obligatoire || caches.indexOf(o.vue) === -1;
-      return '<label class="ligne" style="cursor:pointer">' +
-        '<input type="checkbox" data-vue="' + o.vue + '"' +
-        (actif ? " checked" : "") + (o.obligatoire ? " disabled" : "") +
-        ' style="width:auto;flex:0 0 auto">' +
-        '<span style="font-size:1.3rem">' + o.emoji + "</span>" +
-        '<span class="ligne-corps"><b>' + esc(o.nom) + "</b>" +
-        (o.obligatoire ? "<small>toujours visible</small>" : "") + "</span></label>";
-    }).join("") + "</div>" +
+    '<p class="aide" style="margin-bottom:.7rem">Décochez ce que la famille n’utilise ' +
+    "pas, et rangez le reste avec les flèches. L’accueil reste en tête : c’est le " +
+    "chemin de retour.</p>" +
+    '<div id="apercu-barre"></div>' +
+    '<div class="carte" id="liste-onglets"></div>' +
     '<p class="aide" id="onglets-note"></p>' +
     '<div class="rangee-btn" style="margin-top:1rem">' +
     '<button class="btn" data-action="fermer">Annuler</button>' +
     '<button class="btn principal" data-role="ok">Enregistrer</button></div></div>';
 
-  ouvrirFeuille("Onglets visibles", html, (f) => {
+  ouvrirFeuille("La barre du bas", html, (f) => {
     const note = f.querySelector("#onglets-note");
-    const cases = () => Array.from(f.querySelectorAll("input[type=checkbox][data-vue]"));
+    const info = (v) => ONGLETS.find((o) => o.vue === v) || { nom: v, emoji: "•" };
+    /* Un onglet conditionnel éteint (les événements) n'est ni montré ni rangé :
+       on ne range pas ce qui n'existe pas. */
+    const rangeables = () => ordre.filter((v) => { const o = info(v); return !o.si || o.si(); });
+    const visibles = () => [ONGLETS.find((o) => o.obligatoire).vue]
+      .concat(rangeables().filter((v) => caches.indexOf(v) === -1));
+
     const maj = () => {
-      const off = cases().filter((c) => !c.checked).map((c) => c.dataset.vue);
-      note.innerHTML = off.length
-        ? "Masqués : <b>" + off.map((v) =>
-          esc((ONGLETS.find((o) => o.vue === v) || {}).nom || v)).join(", ") + "</b>. " +
-          "Leur contenu n’est pas supprimé."
-        : "Tous les onglets sont visibles.";
+      const off = rangeables().filter((v) => caches.indexOf(v) !== -1);
+      const n = visibles().length;
+      const bouts = [];
+      if (off.length) {
+        bouts.push("Masqués : <b>" + off.map((v) => esc(info(v).nom)).join(", ") +
+          "</b>. Leur contenu n’est pas supprimé.");
+      }
+      if (n > 7) {
+        bouts.push("<b>" + n + " onglets</b> : au-delà de sept, les noms se coupent sur " +
+          "un téléphone étroit.");
+      }
+      note.innerHTML = bouts.join("<br>") || "Tous les onglets sont visibles.";
     };
-    cases().forEach((c) => { c.onchange = maj; });
-    maj();
+
+    const dessiner = () => {
+      f.querySelector("#apercu-barre").innerHTML = '<div class="apercu-barre">' +
+        visibles().map((v) => { const o = info(v);
+          return "<span><b>" + o.emoji + "</b><i>" + esc(o.nom) + "</i></span>"; }).join("") +
+        "</div>";
+      const l = rangeables();
+      f.querySelector("#liste-onglets").innerHTML = l.map((v, k) => {
+        const o = info(v);
+        return '<div class="ligne">' +
+          '<input type="checkbox" data-vue="' + esc(v) + '"' +
+          (caches.indexOf(v) === -1 ? " checked" : "") + ' style="width:auto;flex:0 0 auto">' +
+          '<span style="font-size:1.3rem">' + o.emoji + "</span>" +
+          '<span class="ligne-corps"><b>' + esc(o.nom) + "</b></span>" +
+          '<button type="button" class="btn mini icone" data-bouger="-1" data-vue="' + esc(v) + '"' +
+          (k === 0 ? " disabled" : "") + ' aria-label="Monter">↑</button>' +
+          '<button type="button" class="btn mini icone" data-bouger="1" data-vue="' + esc(v) + '"' +
+          (k === l.length - 1 ? " disabled" : "") + ' aria-label="Descendre">↓</button></div>';
+      }).join("");
+      maj();
+    };
+
+    /* Un seul écouteur sur la carte : elle est redessinée à chaque geste. */
+    f.querySelector("#liste-onglets").onclick = (ev) => {
+      const b = ev.target.closest("[data-bouger]");
+      if (!b || b.disabled) return;
+      const v = b.dataset.vue, pas = Number(b.dataset.bouger);
+      const i = ordre.indexOf(v), j = i + pas;
+      if (i === -1 || j < 0 || j >= ordre.length) return;
+      ordre.splice(j, 0, ordre.splice(i, 1)[0]);
+      dessiner();
+    };
+    f.querySelector("#liste-onglets").onchange = (ev) => {
+      const c = ev.target.closest("input[type=checkbox][data-vue]");
+      if (!c) return;
+      const v = c.dataset.vue, k = caches.indexOf(v);
+      if (c.checked) { if (k !== -1) caches.splice(k, 1); }
+      else if (k === -1) caches.push(v);
+      dessiner();
+    };
+    dessiner();
 
     f.querySelector('[data-role="ok"]').onclick = () => {
-      const off = cases().filter((c) => !c.checked).map((c) => c.dataset.vue);
       if (!etat.reglages) etat.reglages = {};
-      etat.reglages.ongletsMasques = off;
+      etat.reglages.ongletsMasques = caches.slice();
+      etat.reglages.ordreOnglets = ordre.slice();
       /* Si on vient de masquer l'onglet ouvert, on ne laisse pas l'écran
          dans un état impossible : retour à l'accueil. */
-      if (off.indexOf(ui.vue) !== -1) ui.vue = "accueil";
+      if (caches.indexOf(ui.vue) !== -1) ui.vue = "accueil";
       fermerFeuille();
       sauver("reglages");
-      toast(off.length ? pluriel(off.length, "onglet masqué", "onglets masqués") : "Tous les onglets sont visibles");
+      toast(caches.length
+        ? pluriel(caches.length, "onglet masqué", "onglets masqués")
+        : "Barre du bas enregistrée");
     };
   });
 };
@@ -4175,7 +4907,8 @@ function postitsDeLaSemaine(k) {
   etat.taches.filter((t) => t.actif !== false && participantsValides(t).length).forEach((t) => {
     if (t.frequence === "jour" || t.frequence === "jours") {
       jours.forEach((d, j) => {
-        if (!prevueLe(t, d) || isoDate(d) < aujIso || fait(t, d)) return;
+        /* Reportée : elle figure sur le post-it du jour où elle se fera. */
+        if (!prevueLe(t, d) || reporteLe(t, d) || isoDate(d) < aujIso || fait(t, d)) return;
         noter(assigneDe(t, d), t, j);
       });
       return;
@@ -4192,13 +4925,15 @@ function postitsDeLaSemaine(k) {
   const postits = etat.membres.map((m) => m.id).concat([""]).filter((mid) => parQui.has(mid)).map((mid, n) => {
     const m = membre(mid);
     const liste = [...parQui.get(mid).values()].sort((a, b) => rang(a) - rang(b) ||
+      String(a.t.heure || "99:99").localeCompare(String(b.t.heure || "99:99")) ||
       etat.taches.indexOf(a.t) - etat.taches.indexOf(b.t));
     const aGagner = pointsActifs()
       ? liste.reduce((s, x) => s + (Number(x.t.points) || 0) * (x.jours.length || 1), 0) : 0;
     return '<div class="postit" style="--postit:' + COULEURS_POSTIT[n % COULEURS_POSTIT.length] + '">' +
       '<div class="postit-qui">' + esc(m ? (m.emoji || "🙂") + " " + m.prenom : "🤝 À se partager") + "</div>" +
       liste.map((x) => '<div class="postit-tache"><div class="postit-nom">' +
-        esc((x.t.emoji || "🧹") + " " + x.t.nom) +
+        esc((x.t.emoji || "🧹") + " " + x.t.nom +
+          (heureTache(x.t) ? " · " + heureTache(x.t) : "")) +
         (pointsActifs() && x.t.points ? " <small>+" + esc(String(x.t.points)) + "</small>" : "") + "</div>" +
         '<div class="postit-cases">' + (x.jours.length
           ? x.jours.map((j) => '<span><i class="case"></i>' + JOURS[j].slice(0, 3) + "</span>").join("")
@@ -4258,6 +4993,11 @@ Formulaires.bilanSemaine = function (cleSem) {
   const dim = new Date(lundi); dim.setDate(dim.getDate() + 6);
   const fmt = { day: "numeric", month: "long" };
   const o = objectifActif();
+  /* « Qui a fait quoi » est un classement de la semaine : en mode collectif,
+     chacun ne voit que sa propre part, sinon on remet par la petite porte ce
+     qu'on vient de retirer par la grande (28/09/2026). */
+  const parts = pointsPersoActifs() ? b.classement
+    : b.classement.filter((x) => x.membre.id === moi.id);
 
   const chiffre = (n, mot, emoji) =>
     '<div style="flex:1;text-align:center">' +
@@ -4279,9 +5019,10 @@ Formulaires.bilanSemaine = function (cleSem) {
         chiffre(b.pointsGagnes, "points gagnés", "🌟") +
         "</div>" +
 
-        (b.classement.length
-          ? '<div class="sous-titre"><h3>Qui a fait quoi</h3></div>' +
-            '<div class="carte">' + b.classement.map((x) =>
+        (parts.length
+          ? '<div class="sous-titre"><h3>' +
+            (pointsPersoActifs() ? "Qui a fait quoi" : "Ce que vous avez apporté") + "</h3></div>" +
+            '<div class="carte">' + parts.map((x) =>
               '<div class="ligne">' + avatarDe(x.membre) +
               '<div class="ligne-corps"><b>' + esc(x.membre.prenom) + "</b></div>" +
               '<span class="etiquette or">+' + x.pts + " pts</span></div>").join("") +
